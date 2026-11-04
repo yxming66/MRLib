@@ -82,6 +82,20 @@ int8_t RmM3508Wheel::UpdateFeedback() {
   return ret;
 }
 
+int8_t RmM3508Wheel::UpdateFeedback(WheelFeedback& feedback) {
+  const int8_t ret = UpdateFeedback();
+  if (ret != DEVICE_OK) {
+    feedback = {};
+    return ret;
+  }
+
+  feedback.position_rad = state_.position_rad;
+  feedback.linear_velocity_mps = state_.linear_velocity_mps;
+  feedback.output_torque_nm = state_.torque_nm;
+  feedback.online = state_.online;
+  return DEVICE_OK;
+}
+
 int8_t RmM3508Wheel::UpdateCommand() {
   if (controller_ == nullptr) {
     return DEVICE_ERR_NULL;

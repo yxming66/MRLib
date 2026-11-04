@@ -21,15 +21,9 @@
 #include <array>
 
 #include "component/math/scalar.hpp"
+#include "robotics/chassis/types.hpp"
 
 namespace mr::robotics::chassis {
-
-struct PlanarVelocity {
-  // 车体系：+x 向前，+y 向左，+wz 逆时针（+z 向上）。
-  float vx_mps = 0.0f;
-  float vy_mps = 0.0f;
-  float wz_rad_s = 0.0f;
-};
 
 struct MecanumGeometry {
   // L 和 W 为车体中心到车轮接地点中心的距离。
@@ -122,14 +116,11 @@ class MecanumChassis {
   }
 
   static bool IsFinite(const PlanarVelocity& velocity) {
-    return mr::component::math::is_finite_scalar(velocity.vx_mps) &&
-           mr::component::math::is_finite_scalar(velocity.vy_mps) &&
-           mr::component::math::is_finite_scalar(velocity.wz_rad_s);
+    return mr::robotics::chassis::IsFinite(velocity);
   }
 
   static bool IsFinite(const WheelSpeeds& wheel_speeds) {
-    return mr::component::math::values_are_finite(wheel_speeds.data(),
-                                                  kWheelCount);
+    return mr::robotics::chassis::IsFinite(wheel_speeds);
   }
 
   MecanumGeometry geometry_{};

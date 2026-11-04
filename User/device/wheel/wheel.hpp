@@ -22,6 +22,7 @@
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/packages/controller/motor_controller.hpp"
 #include "device/motor_rm.h"
+#include "device/wheel/wheel_interface.hpp"
 
 namespace mr::wheel {
 
@@ -45,19 +46,20 @@ struct RmM3508WheelConfig {
   float radius_m = 0.0f;
 };
 
-class RmM3508Wheel final {
+class RmM3508Wheel final : public WheelDevice {
  public:
   explicit RmM3508Wheel(const RmM3508WheelConfig& config);
 
-  int8_t Register();
-  int8_t Enable();
-  int8_t Relax();
+  int8_t Register() override;
+  int8_t Enable() override;
+  int8_t Relax() override;
   int8_t Update();
   int8_t UpdateFeedback();
-  int8_t UpdateCommand();
-  int8_t SetTorque(float torque_nm);
+  int8_t UpdateFeedback(WheelFeedback& feedback) override;
+  int8_t UpdateCommand() override;
+  int8_t SetTorque(float torque_nm) override;
   int8_t SetPosition(float position_rad, float max_velocity_rad_s = 0.0f);
-  int8_t CommitCommand();
+  int8_t CommitCommand() override;
   bool HasPendingCommand() const;
   void ClearPendingCommand();
 

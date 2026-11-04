@@ -57,6 +57,20 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
 
 部分 `.c` 文件在原工程中按 C++ 编译，例如 `module/arm_simple.c` 和 `module/camera_yaw.c`，集成时需要显式设置源文件语言。原工程构建配置并未包含在本库中。
 
+### 主机构建与 CMake target
+
+仓库提供一个不依赖 STM32 HAL 的主机构建入口，用于验证纯算法和后续可复用组件：
+
+```powershell
+cmake -S . -B build/cmake-host -G Ninja -DMR_TESTLIB_BUILD_HOST_TESTS=ON
+cmake --build build/cmake-host
+ctest --test-dir build/cmake-host --output-on-failure
+```
+
+当前已有机械臂、统一底盘运动学和统一底盘模块主机测试。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)。
+
+库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
+
 ## 多人开发
 
 - 先开 Issue，确认负责人、改动范围和验收方式。

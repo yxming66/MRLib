@@ -8,6 +8,7 @@
 
 #include "component/math/scalar.hpp"
 #include "robotics/chassis/mecanum_chassis.hpp"
+#include "robotics/chassis/types.hpp"
 
 namespace mr::robotics::chassis {
 
@@ -121,14 +122,11 @@ class FrontOmniRearMecanumChassis {
   }
 
   static bool IsFinite(const PlanarVelocity& velocity) {
-    return mr::component::math::is_finite_scalar(velocity.vx_mps) &&
-           mr::component::math::is_finite_scalar(velocity.vy_mps) &&
-           mr::component::math::is_finite_scalar(velocity.wz_rad_s);
+    return mr::robotics::chassis::IsFinite(velocity);
   }
 
   static bool IsFinite(const WheelSpeeds& wheel_speeds) {
-    return mr::component::math::values_are_finite(wheel_speeds.data(),
-                                                  kWheelCount);
+    return mr::robotics::chassis::IsFinite(wheel_speeds);
   }
 
   FrontOmniRearMecanumGeometry geometry_{};
