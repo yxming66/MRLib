@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yxming66/MR_TestLib/blob/main/docs/project.schema.json",
+  "title": "MR_TestLib project configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "project"],
+  "properties": {
+    "version": { "const": 1 },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "library", "targets"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$",
+          "description": "Generated CMake executable target name."
+        },
+        "library": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?![A-Za-z]:)(?!\\\\)[^;\"$\\r\\n]+$",
+          "description": "Path to MR_TestLib, relative to the project directory."
+        },
+        "targets": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "mr_component_math",
+              "mr_component_filter",
+              "mr_component_controller",
+              "mr_component_trajectory",
+              "mr_robotics_core",
+              "mr_robotics_chassis",
+              "mr_device_wheel_interface",
+              "mr_module_chassis",
+              "mr_robotics_arm"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

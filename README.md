@@ -71,6 +71,20 @@ ctest --test-dir build/cmake-host --output-on-failure
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 
+### 新建项目
+
+Python 3.10+、CMake 3.22+ 和 C++17 编译器就绪后，可以生成一个只选择所需库 target 的普通 CMake 工程：
+
+```powershell
+py -3 tools/mrctl.py init build/demo --name robot_demo `
+  --library ../.. `
+  --targets mr_robotics_arm,mr_module_chassis
+py -3 tools/mrctl.py configure build/demo
+py -3 tools/mrctl.py build build/demo
+```
+
+工程配置保存在 `project.yaml`，生成器只写入不存在的 starter 文件；添加或删去库 target 后再次 configure 即可。完整配置格式、现有限制与 STM32 工程的接入边界见 [项目快速构建](docs/PROJECT_CONFIG.md)。这是 CMake 工程脚手架与主机接口检查，不代替板级 HAL、RTOS、启动文件和链接脚本。
+
 ## 多人开发
 
 - 先开 Issue，确认负责人、改动范围和验收方式。
@@ -85,7 +99,7 @@ ctest --test-dir build/cmake-host --output-on-failure
 
 2026-10-26 初始整理时，RC_02/User 为主体，合入 zzrobot/User 的 10 个机械臂及共享旋转数学差异文件，共 283 个文件。旧版 User_code 保留为参考快照。
 
-初始导入完成了文件哈希核对和机械臂主机回归测试；不代表整个库已通过固件编译或实机测试。CI 当前只覆盖机械臂主机测试。
+初始导入完成了文件哈希核对和机械臂主机回归测试；不代表整个库已通过固件编译或实机测试。当前 CI 运行机械臂、底盘运动学、底盘模块和项目 CLI 主机检查，不覆盖 STM32 固件及实机验证。
 
 [SOURCE_MANIFEST.csv](SOURCE_MANIFEST.csv) 和 [BASELINE_MANIFEST.csv](BASELINE_MANIFEST.csv) 是**初始导入快照**，后续开发以 Git 提交记录为准，不要求每次改动重算历史清单。详细记录见 [导入说明](docs/IMPORT_NOTES.md)。
 

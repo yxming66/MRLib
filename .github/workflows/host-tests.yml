@@ -10,17 +10,19 @@ permissions:
   contents: read
 
 jobs:
-  arm-host-tests:
-    name: Arm host tests
+  host-tests:
+    name: Host and project builder tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build arm host tests
-        run: |
-          mkdir -p build/host_tests
-          g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
-            User/robotics/arm/tests/arm_host_tests.cpp \
-            User/robotics/core/rotation.cpp User/robotics/core/transform.cpp \
-            -o build/host_tests/arm_host_tests
-      - name: Run arm host tests
-        run: ./build/host_tests/arm_host_tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Configure host tests
+        run: cmake -S . -B build/cmake-host -G Ninja -DMR_TESTLIB_BUILD_HOST_TESTS=ON
+      - name: Build host tests
+        run: cmake --build build/cmake-host --parallel
+      - name: Run library regression tests
+        run: ctest --test-dir build/cmake-host --output-on-failure
+      - name: Run new-project CLI tests
+        run: python tools/test_mrctl.py

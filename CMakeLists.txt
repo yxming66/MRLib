@@ -36,6 +36,25 @@ target_include_directories(mr_component_controller INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/User
 )
 
+add_library(mr_component_trajectory INTERFACE)
+add_library(mr::component_trajectory ALIAS mr_component_trajectory)
+target_link_libraries(mr_component_trajectory INTERFACE mr_component_math)
+target_compile_features(mr_component_trajectory INTERFACE cxx_std_17)
+target_include_directories(mr_component_trajectory INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/User
+)
+
+add_library(mr_robotics_core STATIC
+    User/robotics/core/rotation.cpp
+    User/robotics/core/transform.cpp
+)
+add_library(mr::robotics_core ALIAS mr_robotics_core)
+target_link_libraries(mr_robotics_core PUBLIC mr_component_math)
+target_compile_features(mr_robotics_core PUBLIC cxx_std_17)
+target_include_directories(mr_robotics_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/User
+)
+
 add_library(mr_robotics_chassis INTERFACE)
 add_library(mr::robotics_chassis ALIAS mr_robotics_chassis)
 target_link_libraries(mr_robotics_chassis INTERFACE mr_component_math)
@@ -65,14 +84,14 @@ target_compile_features(mr_module_chassis INTERFACE cxx_std_17)
 
 add_library(mr_robotics_arm INTERFACE)
 add_library(mr::robotics_arm ALIAS mr_robotics_arm)
-target_link_libraries(mr_robotics_arm INTERFACE mr_component_math)
+target_link_libraries(mr_robotics_arm INTERFACE
+    mr_component_math
+    mr_component_trajectory
+    mr_robotics_core
+)
 target_compile_features(mr_robotics_arm INTERFACE cxx_std_17)
 target_include_directories(mr_robotics_arm INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/User
-)
-target_sources(mr_robotics_arm INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/User/robotics/core/rotation.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/User/robotics/core/transform.cpp
 )
 
 if(MR_TESTLIB_BUILD_HOST_TESTS)

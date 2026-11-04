@@ -55,6 +55,9 @@
 
 namespace mr::component::math {
 
+// Default absolute pivot threshold shared by the linear solver and filters.
+constexpr Scalar kDefaultMinPivot = kDefaultEpsilon;
+
 template <int Rows, int Cols>
 class Matrix {
  public:
