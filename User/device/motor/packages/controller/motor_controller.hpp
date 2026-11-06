@@ -197,6 +197,7 @@ private:
     float target_torque_;
     float target_velocity_;
     float target_position_;
+    float position_torque_limit_;
     float target_mit_kp_;
     float target_mit_kd_;
     float target_mit_torque_ff_;

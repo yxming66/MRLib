@@ -124,6 +124,7 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
       target_torque_(0.0f),
       target_velocity_(0.0f),
       target_position_(0.0f),
+      position_torque_limit_(0.0f),
       target_mit_kp_(0.0f),
       target_mit_kd_(0.0f),
             target_mit_torque_ff_(0.0f),
@@ -263,6 +264,10 @@ int8_t MotorControllerT<MotorType>::UpdateCommandFromState(
         }
         float torque_cmd =
             position_pid_.Update(target_position_, state.position_rad, dt);
+        if (position_torque_limit_ > 0.0f) {
+            torque_cmd = scalar::abs_clip_scalar(torque_cmd,
+                                                 position_torque_limit_);
+        }
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
 
@@ -359,9 +364,13 @@ int8_t MotorControllerT<MotorType>::SetPosition(float position,
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetPositionTorque(float position,
                                                       float torque_limit) {
-    (void)torque_limit;
+    if (!scalar::is_finite_scalar(position) ||
+        !scalar::is_finite_scalar(torque_limit) || torque_limit < 0.0f) {
+        return DEVICE_ERR;
+    }
     target_position_ = position;
     target_velocity_ = 0.0f;
+    position_torque_limit_ = ClampLimit(torque_limit);
 
     if (!position_pid_ready_) {
         return DEVICE_ERR_UNSUPPORTED;
@@ -532,5 +541,22 @@ template class MotorControllerT<mr::motor::DmJ4340Motor>;
 template class MotorControllerT<mr::motor::LzRso3Motor>;
 template class MotorControllerT<mr::motor::RmM2006Motor>;
 template class MotorControllerT<mr::motor::RmM3508Motor>;
+template class MotorControllerT<mr::motor::DmJ10010Motor>;
+template class MotorControllerT<mr::motor::DmJ10010LMotor>;
+template class MotorControllerT<mr::motor::DmJ10422PMotor>;
+template class MotorControllerT<mr::motor::DmJ3507Motor>;
+template class MotorControllerT<mr::motor::DmJ6006Motor>;
+template class MotorControllerT<mr::motor::DmJ6248PMotor>;
+template class MotorControllerT<mr::motor::DmJ8006Motor>;
+template class MotorControllerT<mr::motor::DmJ8009Motor>;
+template class MotorControllerT<mr::motor::DmJ8009PMotor>;
+template class MotorControllerT<mr::motor::DmH3510Motor>;
+template class MotorControllerT<mr::motor::LzRso0Motor>;
+template class MotorControllerT<mr::motor::LzRso1Motor>;
+template class MotorControllerT<mr::motor::LzRso2Motor>;
+template class MotorControllerT<mr::motor::LzRso4Motor>;
+template class MotorControllerT<mr::motor::LzRso5Motor>;
+template class MotorControllerT<mr::motor::LzRso6Motor>;
+template class MotorControllerT<mr::motor::RmM6020Motor>;
 
 } // namespace mr::motor
