@@ -101,9 +101,6 @@ class kf {
 
   void Configure(const Config& config) {
     config_ = config;
-    if (!mr::component::math::is_positive_scalar(config_.min_pivot)) {
-      config_.min_pivot = mr::component::math::kDefaultMinPivot;
-    }
     Reset(config_.x0, config_.P0);
   }
 
@@ -117,10 +114,45 @@ class kf {
     K_ = matrix::zeros<StateDim, MeasureDim>();
     innovation_ = matrix::zeros<MeasureDim, 1>();
     innovation_covariance_ = matrix::zeros<MeasureDim, MeasureDim>();
-    valid_ = IsStateUsable(x_) && IsStateCovarianceUsable(P_);
+    valid_ = IsStateUsable(x_) && matrix::is_covariance(P0) &&
+             mr::component::math::is_positive_scalar(config_.min_pivot, 0.0f) &&
+             IsPredictModelUsable() && IsUpdateModelUsable();
   }
 
-  bool Predict() {
+  // Fixed-storage transaction: failure latches invalid but retains the last complete snapshot.
+  // EKF callbacks must not rely on rollback of mutations in their external context.
+  bool Predict() { return Predict(Control{}); }
+  bool Predict(const Control& control) {
+    kf candidate = *this;
+    if (!candidate.PredictImpl(control)) { valid_ = false; return false; }
+    *this = candidate; return true;
+  }
+  bool Update(const Measurement& measurement) {
+    kf candidate = *this;
+    if (!candidate.UpdateImpl(measurement)) { valid_ = false; return false; }
+    *this = candidate; return true;
+  }
+  bool Step(const Measurement& measurement) { return Step(Control{}, measurement); }
+  bool Step(const Control& control, const Measurement& measurement) {
+    kf candidate = *this;
+    if (!candidate.PredictImpl(control) || !candidate.UpdateImpl(measurement)) {
+      valid_ = false; return false;
+    }
+    *this = candidate; return true;
+  }
+
+  const Config& config() const { return config_; }
+  const State& state() const { return x_; }
+  const StateCovariance& covariance() const { return P_; }
+  const Gain& gain() const { return K_; }
+  const Measurement& innovation() const { return innovation_; }
+  const InnovationCovariance& innovation_covariance() const {
+    return innovation_covariance_;
+  }
+  bool valid() const { return valid_; }
+
+ private:
+  bool PredictImpl() {
     if (!valid_ || !IsPredictModelUsable()) {
       valid_ = false;
       return false;
@@ -132,7 +164,7 @@ class kf {
     return valid_;
   }
 
-  bool Predict(const Control& control) {
+  bool PredictImpl(const Control& control) {
     if (!valid_ || !IsPredictModelUsable() ||
         !mr::component::math::matrix::is_finite(control)) {
       valid_ = false;
@@ -145,7 +177,7 @@ class kf {
     return valid_;
   }
 
-  bool Update(const Measurement& measurement) {
+  bool UpdateImpl(const Measurement& measurement) {
     if (!valid_ || !IsUpdateModelUsable() ||
         !mr::component::math::matrix::is_finite(measurement)) {
       valid_ = false;
@@ -173,25 +205,6 @@ class kf {
     return valid_;
   }
 
-  bool Step(const Measurement& measurement) {
-    return Predict() && Update(measurement);
-  }
-
-  bool Step(const Control& control, const Measurement& measurement) {
-    return Predict(control) && Update(measurement);
-  }
-
-  const Config& config() const { return config_; }
-  const State& state() const { return x_; }
-  const StateCovariance& covariance() const { return P_; }
-  const Gain& gain() const { return K_; }
-  const Measurement& innovation() const { return innovation_; }
-  const InnovationCovariance& innovation_covariance() const {
-    return innovation_covariance_;
-  }
-  bool valid() const { return valid_; }
-
- private:
   template <int N>
   static Matrix<N, N> Symmetrized(const Matrix<N, N>& matrix) {
     return 0.5f * (matrix + matrix.transpose());
@@ -202,18 +215,18 @@ class kf {
   }
 
   static bool IsStateCovarianceUsable(const StateCovariance& covariance) {
-    return mr::component::math::matrix::is_finite(covariance);
+    return matrix::is_covariance(covariance);
   }
 
   bool IsPredictModelUsable() const {
     return mr::component::math::matrix::is_finite(config_.A) &&
            mr::component::math::matrix::is_finite(config_.B) &&
-           mr::component::math::matrix::is_finite(config_.Q);
+           matrix::is_covariance(config_.Q);
   }
 
   bool IsUpdateModelUsable() const {
     return mr::component::math::matrix::is_finite(config_.H) &&
-           mr::component::math::matrix::is_finite(config_.R);
+           matrix::is_covariance(config_.R);
   }
 
   void UpdatePredictedCovariance() {

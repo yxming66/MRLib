@@ -96,14 +96,15 @@ class linear_observer {
       return false;
     }
 
-    innovation_ = measurement - config_.C * x_;
+    const Measurement innovation = measurement - config_.C * x_;
     const State next_state = config_.A * x_ + config_.B * control +
-                             config_.L * innovation_;
-    if (!IsUsable(innovation_) || !IsUsable(next_state)) {
+                             config_.L * innovation;
+    if (!IsUsable(innovation) || !IsUsable(next_state)) {
       valid_ = false;
       return false;
     }
 
+    innovation_ = innovation;
     x_ = next_state;
     return valid_ = true;
   }

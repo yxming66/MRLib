@@ -228,6 +228,14 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     endif()
     add_test(NAME mr_component_c_host_tests COMMAND mr_component_c_host_tests)
 
+    add_executable(mr_numeric_host_tests tests/component/numeric_host_tests.cpp)
+    target_link_libraries(mr_numeric_host_tests PRIVATE mr_component_math)
+    set_target_properties(mr_numeric_host_tests PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_numeric_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_numeric_host_tests COMMAND mr_numeric_host_tests)
+
     add_executable(mr_component_cpp_host_tests
         tests/component/component_cpp_host_tests.cpp)
     target_link_libraries(mr_component_cpp_host_tests PRIVATE mr_component_math)

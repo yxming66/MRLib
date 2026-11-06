@@ -34,7 +34,7 @@
  *   A.block<R, C>(r, c)              // 提取子矩阵
  *
  * MATLAB 风格简写（位于 mr::component::math）：
- *   eye<N>(), zeros<R, C>(), ones<R, C>(), diag(v), inv(A)
+ *   eye<N>(), zeros<R, C>(), ones<R, C>(), diag(v), inv(A, &output)
  *   transpose(A), element_mul(A, B), element_div(A, B)
  *   solve(A, b, &x)                  // 对应 MATLAB 的 A \\ b
  *
@@ -383,76 +383,90 @@ Scalar determinant(const Matrix<N, N>& input,
   return static_cast<Scalar>(sign) * determinant_value;
 }
 
-template <int N>
-bool inverse(const Matrix<N, N>& input, Matrix<N, N>* output,
-             Scalar pivot_epsilon = kDefaultEpsilon) {
-  if (output == nullptr) return false;
-  Matrix<N, 2 * N> augmented;
-  for (int row = 0; row < N; ++row) {
-    for (int col = 0; col < N; ++col) {
-      augmented(row, col) = input(row, col);
-      augmented(row, N + col) = (row == col) ? 1.0f : 0.0f;
-    }
-  }
-
-  for (int pivot = 0; pivot < N; ++pivot) {
-    int pivot_row = pivot;
-    Scalar pivot_abs = abs_scalar(augmented(pivot, pivot));
-    for (int row = pivot + 1; row < N; ++row) {
-      const Scalar candidate = abs_scalar(augmented(row, pivot));
-      if (candidate > pivot_abs) {
-        pivot_abs = candidate;
-        pivot_row = row;
-      }
-    }
-    if (!is_finite_scalar(pivot_abs) || pivot_abs <= pivot_epsilon) {
-      *output = zeros<N, N>();
+// Partial-pivot elimination, with a fixed absolute pivot threshold. Inputs may alias output.
+// All failures clear output; no partially computed or non-finite result escapes.
+template <int N, int Cols>
+[[nodiscard]] bool solve(const Matrix<N, N>& coefficients, const Matrix<N, Cols>& rhs,
+                        Matrix<N, Cols>* solution,
+                        Scalar pivot_epsilon = kDefaultEpsilon) {
+  if (solution == nullptr) return false;
+  Matrix<N, N> work = coefficients;
+  Matrix<N, Cols> result = rhs;
+  *solution = zeros<N, Cols>();
+  if (!is_finite(work) || !is_finite(result) ||
+      !is_finite_scalar(pivot_epsilon) || pivot_epsilon <= 0) return false;
+  for (int k = 0; k < N; ++k) {
+    int best = k;
+    for (int r = k + 1; r < N; ++r)
+      if (abs_scalar(work(r, k)) > abs_scalar(work(best, k))) best = r;
+    if (!is_finite_scalar(work(best, k)) || abs_scalar(work(best, k)) <= pivot_epsilon)
       return false;
+    for (int c = k; c < N; ++c) {
+      const Scalar tmp = work(k, c); work(k, c) = work(best, c); work(best, c) = tmp;
     }
-    if (pivot_row != pivot) {
-      for (int col = 0; col < 2 * N; ++col) {
-        const Scalar value = augmented(pivot, col);
-        augmented(pivot, col) = augmented(pivot_row, col);
-        augmented(pivot_row, col) = value;
-      }
+    for (int c = 0; c < Cols; ++c) {
+      const Scalar tmp = result(k, c); result(k, c) = result(best, c); result(best, c) = tmp;
     }
-    const Scalar diagonal = augmented(pivot, pivot);
-    for (int col = 0; col < 2 * N; ++col) {
-      augmented(pivot, col) /= diagonal;
+    for (int r = k + 1; r < N; ++r) {
+      const Scalar factor = work(r, k) / work(k, k);
+      work(r, k) = 0;
+      for (int c = k + 1; c < N; ++c) work(r, c) -= factor * work(k, c);
+      for (int c = 0; c < Cols; ++c) result(r, c) -= factor * result(k, c);
     }
-    for (int row = 0; row < N; ++row) {
-      if (row == pivot) continue;
-      const Scalar factor = augmented(row, pivot);
-      for (int col = 0; col < 2 * N; ++col) {
-        augmented(row, col) -= factor * augmented(pivot, col);
-      }
-    }
+    if (!is_finite(work) || !is_finite(result)) return false;
   }
-
-  for (int row = 0; row < N; ++row) {
-    for (int col = 0; col < N; ++col) {
-      (*output)(row, col) = augmented(row, N + col);
+  for (int r = N - 1; r >= 0; --r)
+    for (int c = 0; c < Cols; ++c) {
+      for (int k = r + 1; k < N; ++k) result(r, c) -= work(r, k) * result(k, c);
+      result(r, c) /= work(r, r);
     }
-  }
-  if (!is_finite(*output)) {
-    *output = zeros<N, N>();
-    return false;
-  }
+  if (!is_finite(result)) return false;
+  *solution = result;
   return true;
 }
 
-template <int N, int Cols>
-bool solve(const Matrix<N, N>& coefficients, const Matrix<N, Cols>& rhs,
-           Matrix<N, Cols>* solution,
-           Scalar pivot_epsilon = kDefaultEpsilon) {
-  if (solution == nullptr) return false;
-  Matrix<N, N> inverse_matrix;
-  if (!inverse(coefficients, &inverse_matrix, pivot_epsilon)) {
-    *solution = zeros<N, Cols>();
-    return false;
+template <int N>
+[[nodiscard]] bool inverse(const Matrix<N, N>& input, Matrix<N, N>* output,
+                           Scalar pivot_epsilon = kDefaultEpsilon) {
+  return matrix::solve(input, identity<N>(), output, pivot_epsilon);
+}
+
+// Symmetric positive semidefinite covariance check using a pivoted Schur complement.
+// Tolerance permits floating point roundoff, not arbitrary negative variances.
+template <int N>
+bool is_covariance(const Matrix<N, N>& input, Scalar tolerance = kDefaultEpsilon) {
+  if (!is_finite(input) || !is_finite_scalar(tolerance) || tolerance <= 0) return false;
+  Scalar scale = 1;
+  for (int i = 0; i < N; ++i) scale = std::fmax(scale, abs_scalar(input(i, i)));
+  const Scalar tol = tolerance * scale;
+  if (!is_finite_scalar(tol)) return false;
+  for (int i = 0; i < N; ++i)
+    for (int j = 0; j < N; ++j)
+      if (abs_scalar(input(i, j) - input(j, i)) > tol) return false;
+  Matrix<N, N> work = input;
+  for (int k = 0; k < N; ++k) {
+    int best = k;
+    for (int i = k + 1; i < N; ++i) if (work(i, i) > work(best, best)) best = i;
+    for (int j = 0; j < N; ++j) {
+      const Scalar tmp = work(k, j); work(k, j) = work(best, j); work(best, j) = tmp;
+    }
+    for (int i = 0; i < N; ++i) {
+      const Scalar tmp = work(i, k); work(i, k) = work(i, best); work(i, best) = tmp;
+    }
+    if (work(k, k) < -tol) return false;
+    if (work(k, k) <= tol) {
+      for (int i = k; i < N; ++i)
+        for (int j = k; j < N; ++j) if (abs_scalar(work(i, j)) > tol) return false;
+      return true;
+    }
+    for (int i = k + 1; i < N; ++i)
+      for (int j = i; j < N; ++j) {
+        work(i, j) -= work(i, k) * (work(j, k) / work(k, k));
+        work(j, i) = work(i, j);
+      }
+    if (!is_finite(work)) return false;
   }
-  *solution = inverse_matrix * rhs;
-  return is_finite(*solution);
+  return true;
 }
 
 }  // namespace matrix
@@ -496,10 +510,9 @@ Matrix<Cols, Rows> transpose(const Matrix<Rows, Cols>& input) {
 }
 
 template <int N>
-Matrix<N, N> inv(const Matrix<N, N>& input) {
-  Matrix<N, N> output;
-  matrix::inverse(input, &output);
-  return output;
+[[nodiscard]] bool inv(const Matrix<N, N>& input, Matrix<N, N>* output,
+                       Scalar pivot_epsilon = kDefaultEpsilon) {
+  return matrix::inverse(input, output, pivot_epsilon);
 }
 
 template <int N, int Cols>
