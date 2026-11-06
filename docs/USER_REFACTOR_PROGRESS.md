@@ -263,3 +263,14 @@ GNU 15.2.0 下，通用 joint host test 在不提供任何 BSP stub 的情况下
 ### 验证与边界
 
 GNU 15.2.0 严格 C++17 下 `arm.cpp` 主机编译通过，且测试 include 路径中不再提供 `cmsis_os2.h`；**15/15 CTest** 通过，空白检查通过。具体三轴电机适配仍在 module 侧，下一步需评估迁至可选 project/device adapter；旧底盘 Controller 仍引用已删除的配置头。
+## 第十四批：移除失效的专用底盘 Controller（2026-11-06）
+
+### 完成项
+
+1. 删除 `module/chassis/mecanum.*` 与 `front_omni_rear_mecanum.*`。这两套 Controller 没有进入 CMake 或测试目标，且依赖已删除的 `module/chassis.h`、旧 `Chassis_Params_t`/`Chassis_CMD_t` 和项目级 CAN 刷新路径，无法作为库接口使用。
+2. 删除前已将其中仍具通用价值的轮速加速度规划、零指令位置保持迁移到 `wheel_strategies.hpp`，并由统一 `Chassis` 配置选择；高杆增益、随机旋转、云台跟随、遥控映射和具体 M3508 创建不再留在库核心。
+3. 清理后 `User` 和构建配置不再有指向已删除底盘总头或旧 Controller 的调用点；`SOURCE_MANIFEST.csv` 仍作为初始导入快照保留，不作为当前构建清单。
+
+### 验证与边界
+
+本批未改变统一 `Chassis` 的已测试接口；删除后完整 CTest 需要重新执行。底盘策略仍不包含静摩擦前馈、滤波和云台朝向保持，这些能力只有在出现明确的跨项目需求和独立接口后才进入库。
