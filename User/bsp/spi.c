@@ -150,14 +150,18 @@ int8_t BSP_SPI_TransmitReceive(BSP_SPI_t spi, uint8_t *txData, uint8_t *rxData,
 uint8_t BSP_SPI_MemReadByte(BSP_SPI_t spi, uint8_t reg) {
   if (spi >= BSP_SPI_NUM) return 0xFF;
   uint8_t tmp[2] = {reg | 0x80, 0x00};
-  BSP_SPI_TransmitReceive(spi, tmp, tmp, 2u, true);
+  /* The buffer is local, so a DMA transaction would outlive this function. */
+  if (BSP_SPI_TransmitReceive(spi, tmp, tmp, 2u, false) != BSP_OK) {
+    return 0xFFu;
+  }
   return tmp[1];
 }
 
 int8_t BSP_SPI_MemWriteByte(BSP_SPI_t spi, uint8_t reg, uint8_t data) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
   uint8_t tmp[2] = {reg & 0x7f, data};
-  return BSP_SPI_Transmit(spi, tmp, 2u, true);
+  /* The buffer is local, so a DMA transaction would outlive this function. */
+  return BSP_SPI_Transmit(spi, tmp, 2u, false);
 }
 
 int8_t BSP_SPI_MemRead(BSP_SPI_t spi, uint8_t reg, uint8_t *data, uint16_t size) {

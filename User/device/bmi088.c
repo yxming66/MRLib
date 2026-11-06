@@ -7,6 +7,7 @@
 
 #include <cmsis_os2.h>
 #include <gpio.h>
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -153,6 +154,8 @@ static uint8_t BMI_ReadSingle(BMI_Device_t dv, uint8_t reg) {
       BMI088_GYRO_NSS_SET();
       return buffer[0];
   }
+
+  return 0xFFu;
 }
 
 static void BMI_Read(BMI_Device_t dv, uint8_t reg, uint8_t *data, uint8_t len) {
@@ -266,7 +269,12 @@ int8_t BMI088_Init(BMI088_t *bmi088, const BMI088_Cali_t *cali) {
 }
 
 bool BMI088_GyroStable(AHRS_Gyro_t *gyro) {
-  return ((gyro->x < 0.03f) && (gyro->y < 0.03f) && (gyro->z < 0.03f));
+  if (gyro == NULL || !isfinite(gyro->x) || !isfinite(gyro->y) ||
+      !isfinite(gyro->z)) {
+    return false;
+  }
+  return ((fabsf(gyro->x) < 0.03f) && (fabsf(gyro->y) < 0.03f) &&
+          (fabsf(gyro->z) < 0.03f));
 }
 
 static bool BMI088_FlagsOk(uint32_t flags, uint32_t required_flags) {
@@ -406,7 +414,7 @@ int8_t BMI088_ParseGyro(BMI088_t *bmi088) {
   bmi088->gyro.y -= bmi088->cali->gyro_offset.y;
   bmi088->gyro.z -= bmi088->cali->gyro_offset.z;
 
-  return DEVICE_ERR_NULL;
+  return DEVICE_OK;
 }
 
 float BMI088_GetUpdateFreq(BMI088_t *bmi088) {

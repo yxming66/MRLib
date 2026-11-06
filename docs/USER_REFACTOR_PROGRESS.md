@@ -299,3 +299,16 @@ GNU 15.2.0 严格 C++17 下 `arm.cpp` 主机编译通过，且测试 include 路
 ### 验证与边界
 
 MRLINK 主机测试和完整 CTest 通过。该批没有改变线上帧格式，也没有处理 UART DMA TX 缓冲所有权、typed payload 的线协议编码或 ISR 错误回调延迟；这些仍需单独设计和验证。
+
+## 第十七批：修复 BMI088 与 SPI 短事务错误（2026-11-06）
+
+### 完成项
+
+1. `BMI088_ParseGyro` 成功解析后返回 `DEVICE_OK`，不再把有效陀螺数据报告为错误。
+2. `BMI088_GyroStable` 增加空指针/非有限值检查，并对三轴使用绝对值判断，负方向静止数据不再误判为不稳定。
+3. `BMI_ReadSingle` 增加不可达枚举分支的安全返回值。
+4. `BSP_SPI_MemReadByte`、`BSP_SPI_MemWriteByte` 改用阻塞 SPI 事务；它们使用局部缓冲，不能启动 DMA 后立即返回。
+
+### 边界
+
+多字节 `BSP_SPI_MemRead/MemWrite` 仍要求调用方保证 DMA 缓冲在完成回调前有效；BMI088 的 SPI 片选、DMA/cache 对齐和中断时序仍需 H7 板级验证。
