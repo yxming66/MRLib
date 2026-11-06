@@ -24,6 +24,7 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
                               const uint8_t **out_payload,
                               uint16_t *out_payload_len);
 static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info);
+static void Proto_ReportPendingDrops(MrLink_t *p);
 static MrLink_Config_t Proto_ApplyConfig(const MrLink_Config_t *cfg);
 
 /* Private functions -------------------------------------------------------- */
@@ -33,6 +34,20 @@ static void Proto_ReportError(MrLink_t *p, const MrLink_ErrorInfo_t *info) {
     return;
   }
   p->error_handler(info, p->error_ctx);
+}
+
+static void Proto_ReportPendingDrops(MrLink_t *p) {
+  if (p == NULL) return;
+  const uint32_t primask = MrLink_EnterCritical();
+  const uint32_t dropped = p->pending_rx_dropped;
+  p->pending_rx_dropped = 0u;
+  MrLink_ExitCritical(primask);
+  if (dropped == 0u) return;
+  const MrLink_ErrorInfo_t info = {
+      .code = MRLINK_ERROR_RX_DROPPED,
+      .dropped_bytes = (dropped > UINT16_MAX) ? UINT16_MAX : (uint16_t)dropped,
+  };
+  Proto_ReportError(p, &info);
 }
 
 static MrLink_Config_t Proto_ApplyConfig(const MrLink_Config_t *cfg) {
@@ -379,20 +394,7 @@ int8_t MrLink_Dispatch(MrLink_t *p) {
   }
 
   const uint32_t prev_frame_rx_ok = p->stats.frame_rx_ok;
-  uint32_t dropped = 0u;
-  {
-    const uint32_t primask = MrLink_EnterCritical();
-    dropped = p->pending_rx_dropped;
-    p->pending_rx_dropped = 0u;
-    MrLink_ExitCritical(primask);
-  }
-  if (dropped > 0u) {
-    const MrLink_ErrorInfo_t info = {
-        .code = MRLINK_ERROR_RX_DROPPED,
-        .dropped_bytes = (dropped > UINT16_MAX) ? UINT16_MAX : (uint16_t)dropped,
-    };
-    Proto_ReportError(p, &info);
-  }
+  Proto_ReportPendingDrops(p);
   uint32_t frames = 0u;
   uint32_t bytes = 0u;
   while (frames < MRLINK_DISPATCH_MAX_FRAMES && bytes < MRLINK_DISPATCH_MAX_BYTES) {
@@ -424,6 +426,7 @@ int8_t MrLink_Parse(MrLink_t *p, uint8_t *out_cmd,
       out_payload_len == NULL) {
     return MRLINK_ERR_NULL;
   }
+  Proto_ReportPendingDrops(p);
   return Proto_ProcessRx(p, true, out_cmd, out_payload, out_payload_len);
 }
 

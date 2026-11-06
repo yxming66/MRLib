@@ -498,7 +498,7 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 
 1. MRLink 初始化现在要求 RX 存储为最大帧长加一个保留槽，避免 SPSC 环形缓冲无法容纳最大帧；增加解析重入保护、Dispatch 帧/字节工作预算和一致的统计快照接口。
 2. PushBytes 只记录丢包，RX 丢包错误统一延迟到 Dispatch/Parse 所在任务上下文回调，避免在 ISR 中执行业务错误处理。新增容量边界、延迟错误和溢出回归。
-3. UART 通道为 DMA 发送复制帧并维护 busy 状态，完成/错误回调释放所有权；RX 支持一个槽位被小 scratch 分段读取，不再无声丢弃剩余数据。UART ISR 对未知句柄安全返回，注册接口支持显式注销。
+3. UART 通道为 DMA 发送复制帧并维护 busy 状态，完成/发送中止回调释放所有权；RX 支持一个槽位被小 scratch 分段读取，不再无声丢弃剩余数据。UART ISR 对未知句柄安全返回，注册接口支持显式注销。
 4. SPI 多字节寄存器访问改为同步完整事务，禁止把栈上寄存器地址交给 DMA 后立即启动下一次传输；补齐 SPI 参数检查和安全回调注销。MRLink backend storage 扩大以覆盖异步 UART 状态。
 
 验证：MinGW Makefiles 重新构建 MRLink 主机测试并通过；完整 25 项 CTest 在本批代码修改前后均通过。尚未进行目标 H7 的完整 HAL 链接、DMA cache 维护和实机 UART/SPI/FDCAN 验收；这些仍需在 board 工程中接入实际缓冲区、Cache 策略和中断优先级后验证。未修改外部 zzrobot/RC_02。

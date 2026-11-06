@@ -45,6 +45,9 @@ static uint32_t UartGetRxOverflowCount(const void *ctx);
 static uint32_t UartGetRxIrqCount(const void *ctx);
 static uint32_t UartGetRxIrqByteCount(const void *ctx);
 static uint32_t UartGetRxStartFailCount(const void *ctx);
+static void (*UartTxDoneTrampoline(BSP_UART_t uart))(void);
+static void (*UartErrorTrampoline(BSP_UART_t uart))(void);
+static void (*UartAbortTxTrampoline(BSP_UART_t uart))(void);
 
 static const MrLink_ChannelOps_t kUartOps = {
     .start_rx = UartStartRx,
@@ -194,7 +197,6 @@ static void UartRxErrorRecover(MrLink_UartBackend_t *backend) {
 }
 
 static void UartError(MrLink_UartBackend_t *backend) {
-  UartTxError(backend);
   UartRxErrorRecover(backend);
 }
 
@@ -204,6 +206,18 @@ static void UartTxDoneIr(void) { UartTxDone(s_uart_backends[BSP_UART_IR]); }
 static void UartErrorRc(void) { UartError(s_uart_backends[BSP_UART_RC]); }
 static void UartErrorPc(void) { UartError(s_uart_backends[BSP_UART_PC]); }
 static void UartErrorIr(void) { UartError(s_uart_backends[BSP_UART_IR]); }
+static void UartAbortTxRc(void) { UartTxError(s_uart_backends[BSP_UART_RC]); }
+static void UartAbortTxPc(void) { UartTxError(s_uart_backends[BSP_UART_PC]); }
+static void UartAbortTxIr(void) { UartTxError(s_uart_backends[BSP_UART_IR]); }
+
+static void (*UartAbortTxTrampoline(BSP_UART_t uart))(void) {
+  switch (uart) {
+    case BSP_UART_RC: return UartAbortTxRc;
+    case BSP_UART_PC: return UartAbortTxPc;
+    case BSP_UART_IR: return UartAbortTxIr;
+    default: return NULL;
+  }
+}
 
 static void (*UartTxDoneTrampoline(BSP_UART_t uart))(void) {
   switch (uart) {
@@ -250,6 +264,13 @@ int8_t MrLink_ChannelBackend_InitUart(
     return MRLINK_CHANNEL_ERR;
   }
 
+  if (UartRxTrampoline(config->uart) == NULL ||
+      UartTxDoneTrampoline(config->uart) == NULL ||
+      UartErrorTrampoline(config->uart) == NULL ||
+      UartAbortTxTrampoline(config->uart) == NULL) {
+    return MRLINK_CHANNEL_ERR_UNSUPPORTED;
+  }
+
   const int8_t ret = BSP_UART_RegisterRxEventCallback(
       config->uart, UartRxTrampoline(config->uart));
   if (ret != BSP_OK) {
@@ -273,13 +294,30 @@ int8_t MrLink_ChannelBackend_InitUart(
 
   s_uart_backends[config->uart] = backend;
 
+  int8_t status = BSP_UART_RegisterCallback(config->uart, BSP_UART_ERROR_CB,
+                                             UartErrorTrampoline(config->uart));
+  if (status == BSP_OK)
+    status = BSP_UART_RegisterCallback(config->uart, BSP_UART_TX_CPLT_CB,
+                                       UartTxDoneTrampoline(config->uart));
+  if (status == BSP_OK)
+    status = BSP_UART_RegisterCallback(config->uart, BSP_UART_ABORT_TX_CPLT_CB,
+                                       UartAbortTxTrampoline(config->uart));
+  if (status != BSP_OK) {
+    (void)BSP_UART_RegisterRxEventCallback(config->uart, NULL);
+    (void)BSP_UART_RegisterCallback(config->uart, BSP_UART_ERROR_CB, NULL);
+    (void)BSP_UART_RegisterCallback(config->uart, BSP_UART_TX_CPLT_CB, NULL);
+    (void)BSP_UART_RegisterCallback(config->uart, BSP_UART_ABORT_TX_CPLT_CB, NULL);
+    s_uart_backends[config->uart] = NULL;
+    memset(channel, 0, sizeof(*channel));
+    return status;
+  }
   MrLink_Channel_SetBackend(channel, MRLINK_CHANNEL_HW_UART, &kUartOps);
-  return BSP_UART_RegisterCallback(config->uart, BSP_UART_ERROR_CB,
-                                   UartErrorTrampoline(config->uart));
+  return BSP_OK;
 }
 
 static int8_t UartStartRx(void *ctx) {
   MrLink_UartBackend_t *backend = (MrLink_UartBackend_t *)ctx;
+  if (backend != NULL && backend->rx_active) return BSP_OK;
   return UartStartRxInternal(backend, true);
 }
 
@@ -392,7 +430,7 @@ static int8_t UartRegisterTxCallbacks(void *ctx,
     return ret;
   }
   return BSP_UART_RegisterCallback(backend->uart, BSP_UART_ABORT_TX_CPLT_CB,
-                                   error_trampoline);
+                                   UartAbortTxTrampoline(backend->uart));
 }
 
 static bool UartIsRxActive(void *ctx) {
