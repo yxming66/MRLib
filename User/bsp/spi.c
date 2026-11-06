@@ -22,6 +22,7 @@ static void (*SPI_Callback[BSP_SPI_NUM][BSP_SPI_CB_NUM])(void);
 
 /* Private function  -------------------------------------------------------- */
 static BSP_SPI_t SPI_Get(SPI_HandleTypeDef *hspi) {
+  if (hspi == NULL) return BSP_SPI_ERR;
   if (hspi->Instance == SPI2)
     return BSP_SPI_BMI088;
   else
@@ -105,13 +106,14 @@ SPI_HandleTypeDef *BSP_SPI_GetHandle(BSP_SPI_t spi) {
 
 int8_t BSP_SPI_RegisterCallback(BSP_SPI_t spi, BSP_SPI_Callback_t type,
                                 void (*callback)(void)) {
-  if (callback == NULL) return BSP_ERR_NULL;
+  if (spi >= BSP_SPI_NUM || type >= BSP_SPI_CB_NUM) return BSP_ERR;
   SPI_Callback[spi][type] = callback;
   return BSP_OK;
 }
 
 int8_t BSP_SPI_Transmit(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
+  if (data == NULL || size == 0u) return BSP_ERR_NULL;
   SPI_HandleTypeDef *hspi = BSP_SPI_GetHandle(spi);
   if (hspi == NULL) return BSP_ERR;
 
@@ -124,6 +126,7 @@ int8_t BSP_SPI_Transmit(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma) {
 
 int8_t BSP_SPI_Receive(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
+  if (data == NULL || size == 0u) return BSP_ERR_NULL;
   SPI_HandleTypeDef *hspi = BSP_SPI_GetHandle(spi);
   if (hspi == NULL) return BSP_ERR;
 
@@ -137,6 +140,7 @@ int8_t BSP_SPI_Receive(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma) {
 int8_t BSP_SPI_TransmitReceive(BSP_SPI_t spi, uint8_t *txData, uint8_t *rxData,
                                uint16_t size, bool dma) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
+  if ((txData == NULL || rxData == NULL) || size == 0u) return BSP_ERR_NULL;
   SPI_HandleTypeDef *hspi = BSP_SPI_GetHandle(spi);
   if (hspi == NULL) return BSP_ERR;
   
@@ -167,17 +171,25 @@ int8_t BSP_SPI_MemWriteByte(BSP_SPI_t spi, uint8_t reg, uint8_t data) {
 int8_t BSP_SPI_MemRead(BSP_SPI_t spi, uint8_t reg, uint8_t *data, uint16_t size) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
   if (data == NULL || size == 0) return BSP_ERR_NULL;
-  reg = reg | 0x80;
-  BSP_SPI_Transmit(spi, &reg, 1u, true);
-  return BSP_SPI_Receive(spi, data, size, true);
+  /* The register byte is a stack value; a DMA call would outlive it and the
+   * following receive would race the SPI peripheral.  Memory helpers are
+   * therefore deliberately synchronous.  Callers that need a DMA burst must
+   * keep CS asserted and use the lower-level async API with persistent buffers. */
+  reg = (uint8_t)(reg | 0x80u);
+  SPI_HandleTypeDef *hspi = BSP_SPI_GetHandle(spi);
+  if (hspi == NULL) return BSP_ERR_NULL;
+  if (HAL_SPI_Transmit(hspi, &reg, 1u, 20u) != HAL_OK) return BSP_ERR;
+  return (HAL_SPI_Receive(hspi, data, size, 20u) == HAL_OK) ? BSP_OK : BSP_ERR;
 }
 
 int8_t BSP_SPI_MemWrite(BSP_SPI_t spi, uint8_t reg, uint8_t *data, uint16_t size) {
   if (spi >= BSP_SPI_NUM) return BSP_ERR;
   if (data == NULL || size == 0) return BSP_ERR_NULL;
-  reg = reg & 0x7f;
-  BSP_SPI_Transmit(spi, &reg, 1u, true);
-  return BSP_SPI_Transmit(spi, data, size, true);
+  reg = (uint8_t)(reg & 0x7fu);
+  SPI_HandleTypeDef *hspi = BSP_SPI_GetHandle(spi);
+  if (hspi == NULL) return BSP_ERR_NULL;
+  if (HAL_SPI_Transmit(hspi, &reg, 1u, 20u) != HAL_OK) return BSP_ERR;
+  return (HAL_SPI_Transmit(hspi, data, size, 20u) == HAL_OK) ? BSP_OK : BSP_ERR;
 }
 
 /* USER FUNCTION BEGIN */

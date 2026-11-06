@@ -67,6 +67,14 @@ extern "C" {
 #define MRLINK_ERR_ARGS      (-6)   /**< 参数非法 / Invalid args */
 #define MRLINK_ERR_BUF_FULL  (-7)   /**< 内部流缓冲满 / Stream buf full */
 
+/** Maximum work performed by one MrLink_Dispatch call. */
+#ifndef MRLINK_DISPATCH_MAX_FRAMES
+#define MRLINK_DISPATCH_MAX_FRAMES (16u)
+#endif
+#ifndef MRLINK_DISPATCH_MAX_BYTES
+#define MRLINK_DISPATCH_MAX_BYTES (1024u)
+#endif
+
 /* Default frame header (project identifier "MR") */
 #define MRLINK_DEFAULT_HEADER_0 (0x4D)  /**< 'M' */
 #define MRLINK_DEFAULT_HEADER_1 (0x52)  /**< 'R' */
@@ -241,6 +249,8 @@ struct MrLink {
   MrLink_Stats_t stats;
   MrLink_ErrorHandler_t error_handler;
   void *error_ctx;
+  uint32_t pending_rx_dropped;
+  bool processing;
 #else
   union {
     uint32_t words[(MRLINK_INSTANCE_STORAGE_SIZE + 3u) / 4u];
@@ -258,7 +268,7 @@ struct MrLink {
  * @param proto        非 NULL / Non-NULL
  * @param cfg          NULL 则用默认 (max=64, crc=true)
  * @param rx_buf       外部 RX 流缓冲 (由 component/container/spsc_ringbuf 使用)，非 NULL
- * @param rx_buf_size  ≥ 4 (起码能装一帧最小)
+ * @param rx_buf_size  至少为最大帧长 + 1；SPSC 环形缓冲保留一个空槽
  * @param tx_buf       外部 TX 缓冲 (Build 写入)，非 NULL
  * @param tx_buf_size  ≥ 4 + max_payload_size (无 CRC) 或 ≥ 6 + max_payload_size (有 CRC)
  * @return MRLINK_OK / ERR_NULL / ERR_ARGS
@@ -389,6 +399,9 @@ int8_t MrLink_SetErrorHandler(MrLink_t *proto,
  * @brief  获取运行统计 / Get runtime stats.
  */
 const MrLink_Stats_t *MrLink_GetStats(const MrLink_t *proto);
+
+/** Copy a coherent statistics snapshot. Safe for task code observing an ISR-fed link. */
+int8_t MrLink_GetStatsSnapshot(const MrLink_t *proto, MrLink_Stats_t *out_stats);
 
 /**
  * @brief 进入短临界区 / Enter short critical section.

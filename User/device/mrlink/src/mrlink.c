@@ -83,6 +83,10 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
   if (avail == 0u) {
     return MRLINK_ERR;
   }
+  if (p->processing) {
+    return MRLINK_ERR;
+  }
+  p->processing = true;
 
   /* Peek 局部缓冲 (frame 上限 70 字节, 栈空间足够) */
   uint8_t buf[MRLINK_MAX_FRAME_SIZE];
@@ -236,8 +240,10 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
   }
 
   if (want_one_frame) {
+    p->processing = false;
     return found_one ? MRLINK_OK : MRLINK_ERR;
   }
+  p->processing = false;
   return MRLINK_OK;
 }
 
@@ -272,7 +278,8 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
   if (max_frame == 0u) {
     return MRLINK_ERR_ARGS;
   }
-  if (rx_buf_size < max_frame) {
+  /* SpscRingBuf reserves one slot to distinguish full from empty. */
+  if (rx_buf_size <= max_frame) {
     return MRLINK_ERR_ARGS;
   }
   if (tx_buf_size < max_frame) {
@@ -293,6 +300,8 @@ int8_t MrLink_Init(MrLink_t *p, const MrLink_Config_t *cfg,
   memset(&p->stats, 0, sizeof(p->stats));
   p->error_handler = NULL;
   p->error_ctx = NULL;
+  p->pending_rx_dropped = 0u;
+  p->processing = false;
 
   return MRLINK_OK;
 }
@@ -326,6 +335,8 @@ void MrLink_Reset(MrLink_t *p) {
   SpscRingBuf_Reset(&p->rx_rb);
   memset(p->handlers, 0, sizeof(p->handlers));
   memset(&p->stats, 0, sizeof(p->stats));
+  p->pending_rx_dropped = 0u;
+  p->processing = false;
 }
 
 /**
@@ -351,17 +362,13 @@ int8_t MrLink_PushBytes(MrLink_t *p, const uint8_t *data, uint16_t len) {
   }
 
   const uint16_t written = SpscRingBuf_Put(&p->rx_rb, data, len);
+  const uint16_t dropped = (uint16_t)(len - written);
+  const uint32_t primask = MrLink_EnterCritical();
   p->stats.feed_bytes_total += written;
-  p->stats.feed_bytes_dropped += (uint32_t)(len - written);
+  p->stats.feed_bytes_dropped += dropped;
   p->stats.feed_calls++;
-  if (written < len) {
-    const MrLink_ErrorInfo_t info = {
-        .code = MRLINK_ERROR_RX_DROPPED,
-        .available = written,
-        .dropped_bytes = (uint16_t)(len - written),
-    };
-    Proto_ReportError(p, &info);
-  }
+  p->pending_rx_dropped += dropped;
+  MrLink_ExitCritical(primask);
 
   return MRLINK_OK;
 }
@@ -372,12 +379,30 @@ int8_t MrLink_Dispatch(MrLink_t *p) {
   }
 
   const uint32_t prev_frame_rx_ok = p->stats.frame_rx_ok;
-  for (;;) {
+  uint32_t dropped = 0u;
+  {
+    const uint32_t primask = MrLink_EnterCritical();
+    dropped = p->pending_rx_dropped;
+    p->pending_rx_dropped = 0u;
+    MrLink_ExitCritical(primask);
+  }
+  if (dropped > 0u) {
+    const MrLink_ErrorInfo_t info = {
+        .code = MRLINK_ERROR_RX_DROPPED,
+        .dropped_bytes = (dropped > UINT16_MAX) ? UINT16_MAX : (uint16_t)dropped,
+    };
+    Proto_ReportError(p, &info);
+  }
+  uint32_t frames = 0u;
+  uint32_t bytes = 0u;
+  while (frames < MRLINK_DISPATCH_MAX_FRAMES && bytes < MRLINK_DISPATCH_MAX_BYTES) {
     const uint32_t before = p->stats.frame_rx_ok;
     const int8_t ret = Proto_ProcessRx(p, false, NULL, NULL, NULL);
     if (ret != MRLINK_OK || p->stats.frame_rx_ok == before) {
       break;
     }
+    frames++;
+    bytes += MRLINK_MAX_FRAME_SIZE;
   }
   return (p->stats.frame_rx_ok != prev_frame_rx_ok) ? MRLINK_OK : MRLINK_ERR;
 }
@@ -604,6 +629,16 @@ const MrLink_Stats_t *MrLink_GetStats(const MrLink_t *p) {
     return NULL;
   }
   return &p->stats;
+}
+
+int8_t MrLink_GetStatsSnapshot(const MrLink_t *p, MrLink_Stats_t *out_stats) {
+  if (p == NULL || out_stats == NULL) {
+    return MRLINK_ERR_NULL;
+  }
+  const uint32_t primask = MrLink_EnterCritical();
+  *out_stats = p->stats;
+  MrLink_ExitCritical(primask);
+  return MRLINK_OK;
 }
 
 uint32_t MrLink_EnterCritical(void) {

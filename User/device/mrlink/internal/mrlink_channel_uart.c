@@ -13,12 +13,16 @@ typedef struct {
   volatile bool rx_active;
   volatile uint8_t rx_write_idx;
   volatile uint8_t rx_read_idx;
+  volatile uint16_t rx_read_offset;
   volatile uint16_t *rx_len;
   MrLink_ChannelNotify_t rx_ready;
   void *rx_ready_ctx;
   MrLink_ChannelNotify_t tx_done;
   MrLink_ChannelNotify_t tx_error;
   void *tx_callback_ctx;
+  volatile bool tx_busy;
+  uint16_t tx_len;
+  uint8_t tx_buf[MRLINK_CHANNEL_TX_BUFFER_SIZE];
   uint32_t rx_overflow_count;
   uint32_t rx_irq_count;
   uint32_t rx_irq_byte_count;
@@ -85,6 +89,7 @@ static void UartDropPendingSlot(MrLink_UartBackend_t *backend, uint8_t idx) {
   backend->rx_len[idx] = 0u;
   if (backend->rx_read_idx == idx) {
     backend->rx_read_idx = (uint8_t)((idx + 1u) % backend->rx_slot_count);
+    backend->rx_read_offset = 0u;
   }
 }
 
@@ -150,13 +155,20 @@ static BSP_UART_RxEventCallback_t UartRxTrampoline(BSP_UART_t uart) {
 }
 
 static void UartTxDone(MrLink_UartBackend_t *backend) {
+  if (backend != NULL) {
+    backend->tx_busy = false;
+  }
   if (backend != NULL && backend->tx_done != NULL) {
     backend->tx_done(backend->tx_callback_ctx);
   }
 }
 
 static void UartTxError(MrLink_UartBackend_t *backend) {
-  if (backend != NULL && backend->tx_error != NULL) {
+  const bool was_busy = (backend != NULL) ? backend->tx_busy : false;
+  if (backend != NULL) {
+    backend->tx_busy = false;
+  }
+  if (was_busy && backend != NULL && backend->tx_error != NULL) {
     backend->tx_error(backend->tx_callback_ctx);
   }
 }
@@ -311,12 +323,19 @@ static uint16_t UartPopRx(void *ctx, uint8_t *dst, uint16_t dst_size) {
   const uint8_t idx = backend->rx_read_idx;
   len = backend->rx_len[idx];
   if (len > 0u) {
-    if (len > dst_size) {
-      len = dst_size;
+    const uint16_t remaining = (len > backend->rx_read_offset)
+                                   ? (uint16_t)(len - backend->rx_read_offset)
+                                   : 0u;
+    len = (remaining > dst_size) ? dst_size : remaining;
+    if (len > 0u) {
+      memcpy(dst, UartSlotPtr(backend, idx) + backend->rx_read_offset, len);
+      backend->rx_read_offset = (uint16_t)(backend->rx_read_offset + len);
     }
-    memcpy(dst, UartSlotPtr(backend, idx), len);
-    backend->rx_len[idx] = 0u;
-    backend->rx_read_idx = (uint8_t)((idx + 1u) % backend->rx_slot_count);
+    if (backend->rx_read_offset >= backend->rx_len[idx]) {
+      backend->rx_len[idx] = 0u;
+      backend->rx_read_offset = 0u;
+      backend->rx_read_idx = (uint8_t)((idx + 1u) % backend->rx_slot_count);
+    }
   }
   if (primask == 0u) {
     __enable_irq();
@@ -329,7 +348,18 @@ static int8_t UartSend(void *ctx, uint8_t *data, uint16_t len) {
   if (backend == NULL) {
     return MRLINK_CHANNEL_ERR_NULL;
   }
-  return BSP_UART_Transmit(backend->uart, data, len, true);
+  if ((data == NULL && len > 0u) || len == 0u ||
+      len > MRLINK_CHANNEL_TX_BUFFER_SIZE || backend->tx_busy) {
+    return MRLINK_CHANNEL_ERR;
+  }
+  memcpy(backend->tx_buf, data, len);
+  backend->tx_len = len;
+  backend->tx_busy = true;
+  const int8_t ret = BSP_UART_Transmit(backend->uart, backend->tx_buf, len, true);
+  if (ret != BSP_OK) {
+    backend->tx_busy = false;
+  }
+  return ret;
 }
 
 static int8_t UartRegisterTxCallbacks(void *ctx,
