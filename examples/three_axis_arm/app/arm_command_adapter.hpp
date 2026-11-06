@@ -4,7 +4,7 @@
 // Remote input integration and workspace policy belong here, not in the
 // generic robotics library.
 
-#include "module/arm/arm_control_types.h"
+#include "arm_control_types.h"
 #include "robotics/arm/core/command.hpp"
 
 namespace mr::arm {

@@ -89,37 +89,7 @@ typedef struct {
     ArmWorkspaceLimit_t workspace;
 } ArmCartesianRemoteParam_t;
 
-/*
- * 项目装配参数只保存总线地址和安装方向。
- * 电机协议、具体型号和控制接口由 C++ device/motor 在注册时选择，
- * 因此这些配置不再依赖旧的 motor_*.h 头文件。
- */
 typedef struct {
-    uint8_t can;
-    uint8_t motor_id;
-    uint8_t host_id;
-    uint8_t mode;
-    bool reverse;
-} Arm_LzMotorConfig_t;
-
-typedef struct {
-    uint8_t can;
-    uint16_t master_id;
-    uint16_t can_id;
-    bool reverse;
-} Arm_DmMotorConfig_t;
-
-typedef struct {
-    float warning_c;
-    float limit_c;
-    bool auto_relax_on_limit;
-} Arm_TemperatureProtectionConfig_t;
-
-typedef struct {
-    Arm_LzMotorConfig_t joint1_motor_param;
-    Arm_DmMotorConfig_t joint2_motor_param;
-    Arm_DmMotorConfig_t joint3_motor_param;
-    Arm_TemperatureProtectionConfig_t joint_temperature_protection[ARM_JOINT_COUNT];
     float joint_kp[ARM_JOINT_COUNT];
     float joint_kd[ARM_JOINT_COUNT];
     float gravity_comp_scale[ARM_JOINT_COUNT];
@@ -127,14 +97,6 @@ typedef struct {
     float joint_soft_limit_upper[ARM_JOINT_COUNT];
     ArmCartesianRemoteParam_t remote_cartesian;
 } Arm_Params_t;
-
-/* PC上位机接口 (预留) */
-typedef struct {
-    bool pc_control_enable;
-    uint8_t pc_ctrl_type;     /* 控制类型 */
-    ArmPose_t pc_target_pose; /* 目标位姿 */
-    ArmJointAngles_t pc_target_joints; /* 目标关节角度 */
-} Arm_PCInterface_t;
 
 #ifdef __cplusplus
 }

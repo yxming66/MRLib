@@ -1,4 +1,4 @@
-#include "module/arm/arm_command_adapter.hpp"
+#include "arm_command_adapter.hpp"
 
 #include <math.h>
 

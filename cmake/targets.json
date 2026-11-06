@@ -82,6 +82,24 @@
       ]
     },
     {
+      "name": "mr_device_joint_interface",
+      "alias": "mr::device_joint_interface",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "device/joint/joint_interface.hpp",
+      "dependencies": []
+    },
+    {
+      "name": "mr_module_arm",
+      "alias": "mr::module_arm",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "module/arm/arm.hpp",
+      "dependencies": ["mr_robotics_arm", "mr_device_joint_interface"]
+    },
+    {
       "name": "mr_robotics_arm",
       "alias": "mr::robotics_arm",
       "type": "INTERFACE",

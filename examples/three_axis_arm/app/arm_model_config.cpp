@@ -1,4 +1,4 @@
-#include "module/arm/arm_model_config.hpp"
+#include "arm_model_config.hpp"
 
 #include "component/math/matrix.hpp"
 #include "component/math/scalar.hpp"

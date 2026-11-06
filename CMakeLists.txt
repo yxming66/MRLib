@@ -166,18 +166,19 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         -Wall -Wextra -Wpedantic -pedantic-errors -Wno-comment
         -fno-exceptions -fno-rtti)
 
-    add_library(mr_arm_module_compile_check OBJECT
-        User/module/arm/arm.cpp
-        User/module/arm/arm_output_adapter.cpp)
-    target_include_directories(mr_arm_module_compile_check BEFORE PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
-    target_include_directories(mr_arm_module_compile_check PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/User")
-    set_target_properties(mr_arm_module_compile_check PROPERTIES
+    add_executable(mr_arm_module_host_tests
+        tests/module/arm_module_host_tests.cpp
+        examples/three_axis_arm/app/arm_model_config.cpp
+        examples/three_axis_arm/app/arm_command_adapter.cpp)
+    target_include_directories(mr_arm_module_host_tests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/examples/three_axis_arm/app")
+    target_link_libraries(mr_arm_module_host_tests PRIVATE mr_module_arm)
+    set_target_properties(mr_arm_module_host_tests PROPERTIES
         CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
-    target_compile_options(mr_arm_module_compile_check PRIVATE
-        -Wall -Wextra -Wpedantic -pedantic-errors -Wno-comment
+    target_compile_options(mr_arm_module_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors
         -fno-exceptions -fno-rtti)
+    add_test(NAME mr_arm_module_host_tests COMMAND mr_arm_module_host_tests)
 
     add_executable(mr_component_c_host_tests
         tests/component/scalar_c_host_tests.c

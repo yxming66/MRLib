@@ -1,121 +1,151 @@
 #pragma once
 
-// Runtime orchestration for the three-axis arm.
-// The public flow is: Init -> Update -> Control -> Commit.
-
-#include <stddef.h>
-#include <stdint.h>
-#include <array>
-
-#include "module/arm/arm_command_adapter.hpp"
-#include "module/arm/arm_control_types.h"
-#include "module/arm/arm_model_config.hpp"
+#include <optional>
 #include "module/arm/arm_output_adapter.hpp"
-#include "device/joint/joint_interface.hpp"
 #include "robotics/arm/control/arm_controller.hpp"
 
-namespace mr::arm {
+namespace mr::module::arm {
+enum class Lifecycle { kUninitialized, kReady, kEnabled, kFault };
 
-struct RuntimeDebugData {
-  bool initialized = false;
-  bool enabled = false;
-  bool feedback_valid = false;
-  bool command_accepted = false;
-  bool workspace_rejected = false;
-  bool last_commit_ok = false;
-  bool reached = false;
-  Arm_CtrlType_t ctrl_type = ARM_CTRL_REMOTE_CARTESIAN;
-  ArmControlFrame_t frame = ARM_CTRL_FRAME_WORLD;
-  mr::robotics::arm::Status status =
-      mr::robotics::arm::Status::kNotConfigured;
-  ArmPose_t current_pose{};
-  ArmPose_t target_pose{};
-  ArmJointAngles_t current_joints{};
-  ArmJointAngles_t target_joints{};
-  float joint_velocity[ARM_JOINT_COUNT]{};
-  float control_position[ARM_JOINT_COUNT]{};
-  float control_velocity[ARM_JOINT_COUNT]{};
-  float control_acceleration[ARM_JOINT_COUNT]{};
-  float control_torque_ff[ARM_JOINT_COUNT]{};
-  float joint_temperature_c[ARM_JOINT_COUNT]{};
-  bool joint_online[ARM_JOINT_COUNT]{};
-  bool joint_temperature_warning[ARM_JOINT_COUNT]{};
-  bool joint_temperature_over_limit[ARM_JOINT_COUNT]{};
-  bool joint_temperature_limit_latched[ARM_JOINT_COUNT]{};
-};
-
-class Runtime final {
+// Fixed storage; no motor factory, HAL, RTOS, remote mapping or robot preset.
+template <int N>
+class Arm final {
  public:
+  using Model = robotics::arm::ArmModel<N>;
+  using Command = robotics::arm::ArmCommand<N>;
+  using Output = robotics::arm::ArmOutput<N>;
+  using Controller = robotics::arm::control::ArmController<N>;
   struct Config {
-    const Arm_Params_t* parameters = nullptr;
-    // Optional app-owned actuators. If all slots are non-null, Runtime binds
-    // them and does not create concrete motor objects.
-    std::array<mr::IActuator*, ARM_JOINT_COUNT> actuators{};
+    Model model{};
+    robotics::arm::control::ArmControllerConfig<N> controller{};
+    typename ArmOutputAdapter<N>::Config output{};
   };
+  Arm() = default;
+  Arm(const Arm&) = delete;
+  Arm& operator=(const Arm&) = delete;
+  Arm(Arm&&) = delete;
+  Arm& operator=(Arm&&) = delete;
 
-  Runtime();
-  ~Runtime();
-
-  Runtime(const Runtime&) = delete;
-  Runtime& operator=(const Runtime&) = delete;
-
-  bool Init(const Config& config, float control_freq_hz);
-  void Update();
-  void SetCommand(const Arm_CMD_t& command);
-  void Control(float dt_s);
-  void Commit();
-
-  int8_t RelaxJoint(size_t index);
-  int8_t RelaxAll();
-  int8_t SetMotorZero(size_t index);
-
-  const RuntimeDebugData& debug() const { return debug_; }
-  RuntimeDebugData& debug() { return debug_; }
-  const ThreeAxisArmModel& model() const { return model_; }
-  const ThreeAxisJointState& feedback() const { return feedback_; }
-
-  mr::motor::LzRso3Motor* joint1_motor() {
-    return output_adapter_.Joint1Motor();
+  // Configuration/model are copied. Devices must outlive this instance.
+  // Init registers devices but never enables them. No implicit reconfiguration.
+  int8_t Init(const Config& config) {
+    if (lifecycle_ != Lifecycle::kUninitialized) return DEVICE_ERR_INITED;
+    if (!config.model.Validate() || !ArmOutputAdapter<N>::IsConfigValid(config.output))
+      return DEVICE_ERR;
+    model_ = config.model;
+    controller_.emplace(model_, config.controller);
+    if (!controller_->IsConfigured()) { controller_.reset(); return DEVICE_ERR; }
+    (void)output_.Bind(config.output);
+    const auto result = output_.Register();
+    if (result != DEVICE_OK) return Fault(result);
+    registered_ = true;
+    lifecycle_ = Lifecycle::kReady;
+    return DEVICE_OK;
   }
-  mr::motor::DmJ4340Motor* joint2_motor() {
-    return output_adapter_.Joint2Motor();
+  int8_t UpdateFeedback() {
+    if (lifecycle_ == Lifecycle::kUninitialized) return DEVICE_ERR_NULL;
+    pending_ = false;
+    output_.ClearPending();
+    const auto result = output_.UpdateFeedback(feedback_);
+    if (result != DEVICE_OK) return Fault(result);
+    feedback_ready_ = true;
+    return DEVICE_OK;
   }
-  mr::motor::DmJ4310PMotor* joint3_motor() {
-    return output_adapter_.Joint3Motor();
+  // Recovery: fresh valid feedback -> explicit Enable. A registration failure
+  // is permanent for this instance because IActuator has no unregister.
+  int8_t Enable() {
+    if (lifecycle_ == Lifecycle::kUninitialized) return DEVICE_ERR_NULL;
+    if (!registered_) return last_device_error_;
+    if (lifecycle_ == Lifecycle::kEnabled) return DEVICE_ERR_INITED;
+    if (!robotics::arm::IsJointStateUsable(feedback_) ||
+        !robotics::arm::safety::IsJointPositionSafe(model_, feedback_.position)) return DEVICE_ERR;
+    const auto result = output_.Enable();
+    if (result != DEVICE_OK) return Fault(result);
+    controller_->Reset(feedback_);
+    command_ = {};
+    command_.mode = robotics::arm::ControlMode::kHold;
+    lifecycle_ = Lifecycle::kEnabled;
+    last_device_error_ = DEVICE_OK;
+    return DEVICE_OK;
   }
-
+  int8_t Disable() {
+    if (lifecycle_ == Lifecycle::kUninitialized) return DEVICE_ERR_NULL;
+    pending_ = false;
+    feedback_ready_ = false;
+    command_ = {};
+    const auto result = output_.Relax();
+    if (result != DEVICE_OK) return Fault(result);
+    if (lifecycle_ != Lifecycle::kFault) lifecycle_ = Lifecycle::kReady;
+    return DEVICE_OK;
+  }
+  int8_t SetCommand(const Command& command) {
+    using robotics::arm::ControlMode;
+    if (lifecycle_ != Lifecycle::kEnabled) return DEVICE_ERR;
+    if (!robotics::arm::IsArmCommandFinite(command)) return DEVICE_ERR;
+    switch (command.mode) {
+      case ControlMode::kDisabled: return Disable();
+      case ControlMode::kHold:
+      case ControlMode::kMoveJoint:
+      case ControlMode::kMoveCartesian: break;
+      default: return DEVICE_ERR_UNSUPPORTED;
+    }
+    command_ = command;
+    return DEVICE_OK;
+  }
+  int8_t Step(float dt_s) {
+    if (lifecycle_ != Lifecycle::kEnabled) return DEVICE_ERR;
+    if (!feedback_ready_) return Fault(DEVICE_ERR);
+    feedback_ready_ = false;
+    pending_ = false;
+    output_.ClearPending();
+    last_output_ = controller_->Update(feedback_, command_, dt_s);
+    if (!robotics::arm::IsOk(last_output_.status)) return Fault(DEVICE_ERR);
+    const auto result = output_.Apply(last_output_.joint_command);
+    if (result != DEVICE_OK) return Fault(result);
+    pending_ = true;
+    return DEVICE_OK;
+  }
+  int8_t CommitOutput() {
+    if (lifecycle_ != Lifecycle::kEnabled || !pending_) return DEVICE_ERR;
+    pending_ = false;
+    const auto result = output_.Commit();
+    return result == DEVICE_OK ? DEVICE_OK : Fault(result);
+  }
+  int8_t SetZero(size_t index) {
+    if (lifecycle_ != Lifecycle::kReady || index >= N) return DEVICE_ERR;
+    const auto result = output_.SetZero(index);
+    feedback_.valid = false;
+    feedback_ready_ = false;
+    return result == DEVICE_OK ? DEVICE_OK : Fault(result);
+  }
+  Lifecycle lifecycle() const { return lifecycle_; }
+  int8_t last_device_error() const { return last_device_error_; }
+  int8_t last_relax_error() const { return last_relax_error_; }
+  const auto& feedback() const { return feedback_; }
+  const Output& output() const { return last_output_; }
+  const Model& model() const { return model_; }
  private:
-  using Controller = mr::robotics::arm::control::ArmController<ARM_JOINT_COUNT>;
-  using ArmOutput = mr::robotics::arm::ArmOutput<ARM_JOINT_COUNT>;
-
-  static float ClampDt(float dt_s, float control_freq_hz);
-  static void ClearTransientCommand(Arm_CMD_t* command);
-  static ArmPose_t ZeroPose();
-  static ArmJointAngles_t JointAnglesFromVector(
-      const ThreeAxisJointVector& values);
-
-  bool InitializeController(float control_freq_hz);
-  void ResetControllerIfNeeded();
-  void RefreshDebug(const ArmCommandAdapterResult* adapter_result,
-                    const ArmOutput* output);
-
-  ThreeAxisArmModel model_;
-  ThreeAxisControllerConfig controller_config_;
-  alignas(Controller) uint8_t controller_storage_[sizeof(Controller)];
-  Controller* controller_;
-  ArmCommandAdapter command_adapter_;
-  ArmOutputAdapter output_adapter_;
-  ThreeAxisJointState feedback_;
-  Arm_CMD_t command_{};
-  ArmOutput last_output_;
-  ArmControlFrame_t last_frame_ = ARM_CTRL_FRAME_WORLD;
-  Arm_CtrlType_t last_ctrl_type_ = ARM_CTRL_REMOTE_CARTESIAN;
-  bool last_enable_ = false;
-  bool initialized_ = false;
-  float control_freq_hz_ = 500.0f;
-  Config config_{};
-  const Arm_Params_t* parameters_ = nullptr;
-  RuntimeDebugData debug_{};
+  int8_t Fault(int8_t error) {
+    lifecycle_ = Lifecycle::kFault;
+    last_device_error_ = error;
+    pending_ = false;
+    feedback_.valid = false;
+    feedback_ready_ = false;
+    command_ = {};
+    last_relax_error_ = output_.Relax();
+    return error;
+  }
+  Model model_{};
+  std::optional<Controller> controller_{};
+  ArmOutputAdapter<N> output_{};
+  robotics::arm::JointState<N> feedback_{};
+  Command command_{};
+  Output last_output_{};
+  Lifecycle lifecycle_ = Lifecycle::kUninitialized;
+  int8_t last_device_error_ = DEVICE_OK;
+  int8_t last_relax_error_ = DEVICE_OK;
+  bool registered_ = false;
+  bool pending_ = false;
+  bool feedback_ready_ = false;
 };
-
-}  // namespace mr::arm
+}  // namespace mr::module::arm

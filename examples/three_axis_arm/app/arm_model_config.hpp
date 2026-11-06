@@ -3,7 +3,7 @@
 // Three-axis robot-specific data. This file is the only place where the
 // generic arm model is filled with this robot's geometry and limits.
 
-#include "module/arm/arm_control_types.h"
+#include "arm_control_types.h"
 #include "robotics/arm/control/arm_controller.hpp"
 #include "robotics/arm/model/arm_model.hpp"
 

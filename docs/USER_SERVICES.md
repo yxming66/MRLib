@@ -121,6 +121,8 @@ RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程�
 
 关节接口和状态定义位于 `device/joint/joint_interface.hpp`，通用映射/控制实现位于 `joint.hpp`，不依赖 motor 或 BSP。具体电机适配器及 `DmActuator`/`LzActuator` 等别名放在可选 `motor_actuator_adapter.hpp`；使用这些具体适配器的项目需显式包含此头文件。
 
-## 三轴机械臂模块装配边界
+## 通用机械臂模块装配边界
 
-`module/arm/Runtime` 仍是三轴项目模块，但不再从库内全局配置读取参数，也不在初始化时隐式调用 `BSP_CAN_Init()`。应用应构造 `Runtime::Config`，填入 `Arm_Params_t` 指针；这份参数对象必须比 Runtime 活得更久。然后调用 `runtime.Init(config, control_freq_hz)`；CAN 初始化由 board/app 负责。Runtime 是普通的显式实例，不再提供隐藏默认实例或 CMSIS 队列入口。项目任务自行读取队列并调用 `runtime.SetCommand(command)`，随后执行 `Update()`、`Control(dt_s)` 和 `Commit()`。
+`module/arm/arm.hpp` 提供 `mr::module::arm::Arm<N>`，通过 `Config` 复制 robotics 模型、规划参数和关节增益，绑定 app 持有的完整 `IActuator` 数组。初始化只注册；有效反馈后显式 Enable。每周期依次 UpdateFeedback、SetCommand、Step、CommitOutput；错误锁存为 Fault 并清除待发控制，修复后重新采样并显式 Enable。详细生命周期、坐标单位和迁移说明见 `User/module/arm/README.md`。
+
+旧三轴参数和遥控映射已迁到 `examples/three_axis_arm/app`；公共模块不包含具体电机、工厂后备路径、机器人几何或遥控策略。CMake 目标为 `mr_module_arm`，应用需提供自己的 board、设备、调度和输入超时策略。
