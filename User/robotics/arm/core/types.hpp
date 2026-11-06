@@ -20,14 +20,7 @@ using JointVector = mr::component::math::Matrix<DoF, 1>;
 // The homogeneous row is part of the arm pose contract.  Reject malformed
 // poses instead of silently repairing command or model data.
 inline bool IsTransformValid(const Transform& transform) {
-  if (!mr::component::math::matrix::is_finite(transform)) {
-    return false;
-  }
-  const Scalar epsilon = 1.0e-4f;
-  return mr::component::math::abs_scalar(transform(3, 0)) <= epsilon &&
-         mr::component::math::abs_scalar(transform(3, 1)) <= epsilon &&
-         mr::component::math::abs_scalar(transform(3, 2)) <= epsilon &&
-         mr::component::math::abs_scalar(transform(3, 3) - 1.0f) <= epsilon;
+  return mr::robotics::core::IsTransformValid(transform);
 }
 
 enum class JointCommandMode : uint8_t {
@@ -77,8 +70,7 @@ inline bool IsJointVectorFinite(const JointVector<DoF>& values) {
 
 template <int DoF>
 inline bool IsJointStateFinite(const JointState<DoF>& state) {
-  return IsJointVectorFinite(state.position) &&
-         IsJointVectorFinite(state.velocity) &&
+  return IsJointVectorFinite(state.position) && IsJointVectorFinite(state.velocity) &&
          IsJointVectorFinite(state.effort);
 }
 
@@ -89,8 +81,7 @@ inline bool IsJointStateUsable(const JointState<DoF>& state) {
 
 template <int DoF>
 inline bool IsJointCommandFinite(const JointCommand<DoF>& command) {
-  return IsJointVectorFinite(command.position) &&
-         IsJointVectorFinite(command.velocity) &&
+  return IsJointVectorFinite(command.position) && IsJointVectorFinite(command.velocity) &&
          IsJointVectorFinite(command.acceleration) &&
          IsJointVectorFinite(command.effort_feedforward);
 }

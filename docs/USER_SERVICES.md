@@ -129,3 +129,49 @@ DM/LZ 协议按电机输出轴的 rad、rad/s、Nm 通信，只换算机构附�
 ## 音乐播放与资源边界
 
 `Audio_Player` 接收音符输出回调和毫秒时间；`CloudMusic` 接收显式播放列表与控制事件。二者不包含 PWM、RTOS、DR16 或固定曲库。蜂鸣器设备仅保留硬件输出；原设备内播放状态机已删除。曲谱位于 `resources/music` 并按单曲编译，遥控手势和输出接入位于 `examples/music/app`。CMake 可分别链接 `mr_module_audio`、`mr_module_cloudmusic`；不会传递曲库。生命周期、错误、暂停和时间约定见 `User/module/cloudmusic/README.md`。
+
+## 矩阵、估计器与轨迹
+
+`matrix::solve(A,b,&x)` 直接执行带部分主元的消元，不先求逆；失败输出清零。
+`inverse` 与 `inv(A,&out)` 返回必须检查的 bool，旧 `inv(A)` 已移除。
+主元阈值为固定绝对正阈值，输入量级差异很大时应先无量纲化/缩放。
+KF/EKF 要求 Q/R/P0 为有限、对称半正定矩阵，创新协方差仍须可解。
+Predict/Update/Step 失败保留最后完整数值快照并令 valid=false，Reset 后恢复。
+EKF 外部 callback context 的副作用不能回滚；状态维度较大时评估栈副本预算。
+
+TrapezoidProfile 与 SCurveProfile 提供 Config、Configure、MinDuration、
+ConfigureForDuration、Sample；时间单位秒，速度/加速度/jerk 使用与 distance 对应的单位。
+二者为静止到静止轨迹，延长时长通过时间缩放保证上限。SynchronizedProfile
+以最慢轴时长配置全部轴，Axis 返回可空指针，失败配置不可采样旧数据。
+三次 Hermite 仅保证端点零速度，区间内端点加速度一般不为零。
+在线梯形允许目标突变后的必要过冲，每步速度变化受 a*dt 约束；仅在位置容差
+内且当前速度可合法单步制停时吸附目标。配置或 dt 非法不推进速度。旧 velocity_epsilon_floor 已移除，制停阈值由 a*dt 决定。
+
+## 串级控制、命令中心与存储
+
+旧 mpc.hpp/mpc 已更名 cascade.hpp/cascade：位置 P → 限速 → 速度参考斜率 →
+速度 P → 输出限幅，没有预测优化器。限幅 0 表示关闭，参数非负且有限，dt 为正秒数；
+StepOnce.valid=false 时输出为零、内部速度参考不推进。LQR 接收外部离线增益，
+使用前检查 Step.valid；不执行在线 Riccati 求解。
+
+Center 由单线程持有，禁止复制/移动，析构所有内嵌对象；外部 sink 指针、名称与
+资源须活过 Center。input 类型唯一；output 返回可检查 OutputRef，容量错误后锁存
+安全输出。普通更新失败/offline 的 input 不参与路由，publish 后检查 last_publish_ok。
+Freshest 要求所有路由输入提供同一 uint32 毫秒时钟的 timestamp_ms()，按最旧输入帧龄
+比较，时间间隔小于半个回绕周期；它不提供自动超时，过期规则放 input.online/condition。
+CMSIS sink 默认不 reset；显式 reset 只用于独占生产者任务，清空整个队列。
+
+C 环形队列保留 Cortex-M 单核 SPSC 同步：Put 只有一个生产者，Get/Peek/Drop 只有
+一个消费者；Init/Reset 需要停用两端。LatestSlot 在 PRIMASK 临界区复制，载荷越大
+中断延迟越长。两者不承诺桌面线程、多核、NMI 或 DMA 缓存一致性。C 句柄和 storage
+不能按值复制，C++ 包装禁止复制/移动；外部 storage 须覆盖全部访问生命周期。
+
+## 几何与机械臂
+
+旋转 Try* API 返回 bool，失败清零输出；值返回便利函数遇到非法输入返回 NaN。
+IsRotationValid/IsTransformValid 检查正交、det≈+1、齐次末行与有限性，不自动修复。
+零轴只在角度为零时有效；四元数零范数无效，非零四元数会归一化。
+PoseCoordinatesFromTransform/TransformFromPoseCoordinates 表示平移+旋转向量；
+旧 Twist 名称保留 deprecated 包装，不是 SE(3) exp/log。
+机械臂的坐标、单位、流式加速度、显式 IK 降级及正常/故障过渡边界见
+[arm 接口说明](../User/robotics/arm/README.md)。

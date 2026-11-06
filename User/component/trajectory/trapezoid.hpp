@@ -70,18 +70,17 @@ class TrapezoidProfile {
     const double v = config.max_velocity, a = config.max_acceleration;
     if (!is_finite_scalar(config.distance) || !is_finite_scalar(config.max_velocity) ||
         !is_finite_scalar(config.max_acceleration) || !is_finite_scalar(config.epsilon) ||
-        config.epsilon <= 0 || v < 0 || a < 0) return -1;
+        config.epsilon <= 0 || v < 0 || a < 0)
+      return -1;
     if (d <= config.epsilon) return 0;
     if (v <= 0 || a <= 0) return -1;
-    const double t = d <= v*v/a ? 2*std::sqrt(d/a) : d/v + v/a;
+    const double t = d <= v * v / a ? 2 * std::sqrt(d / a) : d / v + v / a;
     Scalar result = static_cast<Scalar>(t);
     if (result < t) result = std::nextafter(result, INFINITY);
     return is_finite_scalar(result) ? result : -1;
   }
 
-  bool Configure(const Config& config) {
-    return ConfigureForDuration(config, MinDuration(config));
-  }
+  bool Configure(const Config& config) { return ConfigureForDuration(config, MinDuration(config)); }
 
   bool ConfigureForDuration(const Config& config, Scalar duration) {
     reset();
@@ -92,15 +91,18 @@ class TrapezoidProfile {
     abs_distance_ = abs_scalar(distance_);
     duration_ = duration;
     epsilon_ = config.epsilon;
-    if (min_time == 0) { valid_ = true; return true; }
+    if (min_time == 0) {
+      valid_ = true;
+      return true;
+    }
     const double d = abs_distance_, a = config.max_acceleration, v = config.max_velocity;
-    const double ta = std::fmin(v/a, std::sqrt(d/a));
-    const double tc = std::fmax(0.0, d/(a*ta)-ta);
-    const double stretch = duration / (2*ta+tc);
-    accel_time_ = static_cast<Scalar>(ta*stretch);
-    cruise_time_ = static_cast<Scalar>(tc*stretch);
-    peak_velocity_ = static_cast<Scalar>(a*ta/stretch);
-    acceleration_ = static_cast<Scalar>(a/(stretch*stretch));
+    const double ta = std::fmin(v / a, std::sqrt(d / a));
+    const double tc = std::fmax(0.0, d / (a * ta) - ta);
+    const double stretch = duration / (2 * ta + tc);
+    accel_time_ = static_cast<Scalar>(ta * stretch);
+    cruise_time_ = static_cast<Scalar>(tc * stretch);
+    peak_velocity_ = static_cast<Scalar>(a * ta / stretch);
+    acceleration_ = static_cast<Scalar>(a / (stretch * stretch));
     valid_ = is_finite_scalar(acceleration_) && is_finite_scalar(peak_velocity_);
     return valid_;
   }
@@ -133,16 +135,13 @@ class TrapezoidProfile {
       acc_abs = acceleration_;
     } else if (t <= accel_time_ + cruise_time_) {
       const Scalar cruise_t = t - accel_time_;
-      pos_abs = 0.5f * acceleration_ * accel_time_ * accel_time_ +
-                peak_velocity_ * cruise_t;
+      pos_abs = 0.5f * acceleration_ * accel_time_ * accel_time_ + peak_velocity_ * cruise_t;
       vel_abs = peak_velocity_;
     } else if (t < duration_) {
       const Scalar decel_t = t - accel_time_ - cruise_time_;
       const Scalar before_decel =
-          0.5f * acceleration_ * accel_time_ * accel_time_ +
-          peak_velocity_ * cruise_time_;
-      pos_abs = before_decel + peak_velocity_ * decel_t -
-                0.5f * acceleration_ * decel_t * decel_t;
+          0.5f * acceleration_ * accel_time_ * accel_time_ + peak_velocity_ * cruise_time_;
+      pos_abs = before_decel + peak_velocity_ * decel_t - 0.5f * acceleration_ * decel_t * decel_t;
       vel_abs = peak_velocity_ - acceleration_ * decel_t;
       acc_abs = -acceleration_;
     }

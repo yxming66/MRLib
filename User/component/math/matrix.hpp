@@ -76,13 +76,9 @@ class Matrix {
   constexpr int rows() const { return Rows; }
   constexpr int cols() const { return Cols; }
 
-  Scalar& operator()(int row, int col) {
-    return data_[row * Cols + col];
-  }
+  Scalar& operator()(int row, int col) { return data_[row * Cols + col]; }
 
-  const Scalar& operator()(int row, int col) const {
-    return data_[row * Cols + col];
-  }
+  const Scalar& operator()(int row, int col) const { return data_[row * Cols + col]; }
 
   Scalar* operator[](int row) { return &data_[row * Cols]; }
   const Scalar* operator[](int row) const { return &data_[row * Cols]; }
@@ -98,8 +94,7 @@ class Matrix {
 
   template <int OtherRows, int OtherCols>
   Matrix& operator+=(const Matrix<OtherRows, OtherCols>& rhs) {
-    static_assert(Rows == OtherRows && Cols == OtherCols,
-                  "matrix += requires equal dimensions");
+    static_assert(Rows == OtherRows && Cols == OtherCols, "matrix += requires equal dimensions");
     if constexpr (Rows == OtherRows && Cols == OtherCols) {
       for (int i = 0; i < Rows * Cols; ++i) {
         data_[i] += rhs.data_[i];
@@ -110,8 +105,7 @@ class Matrix {
 
   template <int OtherRows, int OtherCols>
   Matrix& operator-=(const Matrix<OtherRows, OtherCols>& rhs) {
-    static_assert(Rows == OtherRows && Cols == OtherCols,
-                  "matrix -= requires equal dimensions");
+    static_assert(Rows == OtherRows && Cols == OtherCols, "matrix -= requires equal dimensions");
     if constexpr (Rows == OtherRows && Cols == OtherCols) {
       for (int i = 0; i < Rows * Cols; ++i) {
         data_[i] -= rhs.data_[i];
@@ -137,8 +131,7 @@ class Matrix {
   }
 
   template <int OtherCols>
-  Matrix<Rows, OtherCols> multiply(
-      const Matrix<Cols, OtherCols>& rhs) const {
+  Matrix<Rows, OtherCols> multiply(const Matrix<Cols, OtherCols>& rhs) const {
     Matrix<Rows, OtherCols> result;
     for (int row = 0; row < Rows; ++row) {
       for (int col = 0; col < OtherCols; ++col) {
@@ -163,8 +156,7 @@ class Matrix {
   }
 
   template <int BlockRows, int BlockCols>
-  Matrix<BlockRows, BlockCols> block(int start_row,
-                                     int start_col) const {
+  Matrix<BlockRows, BlockCols> block(int start_row, int start_col) const {
     Matrix<BlockRows, BlockCols> result;
     for (int row = 0; row < BlockRows; ++row) {
       for (int col = 0; col < BlockCols; ++col) {
@@ -174,13 +166,9 @@ class Matrix {
     return result;
   }
 
-  Matrix<1, Cols> row(int index) const {
-    return block<1, Cols>(index, 0);
-  }
+  Matrix<1, Cols> row(int index) const { return block<1, Cols>(index, 0); }
 
-  Matrix<Rows, 1> col(int index) const {
-    return block<Rows, 1>(0, index);
-  }
+  Matrix<Rows, 1> col(int index) const { return block<Rows, 1>(0, index); }
 
   Scalar trace() const {
     static_assert(Rows == Cols, "trace requires a square matrix");
@@ -201,22 +189,16 @@ class Matrix {
   Scalar data_[Rows * Cols];
 };
 
-template <int Rows, int Cols, int OtherRows,
-          int OtherCols>
-Matrix<Rows, Cols> operator+(Matrix<Rows, Cols> lhs,
-                             const Matrix<OtherRows, OtherCols>& rhs) {
-  static_assert(Rows == OtherRows && Cols == OtherCols,
-                "matrix + requires equal dimensions");
+template <int Rows, int Cols, int OtherRows, int OtherCols>
+Matrix<Rows, Cols> operator+(Matrix<Rows, Cols> lhs, const Matrix<OtherRows, OtherCols>& rhs) {
+  static_assert(Rows == OtherRows && Cols == OtherCols, "matrix + requires equal dimensions");
   if constexpr (Rows == OtherRows && Cols == OtherCols) lhs += rhs;
   return lhs;
 }
 
-template <int Rows, int Cols, int OtherRows,
-          int OtherCols>
-Matrix<Rows, Cols> operator-(Matrix<Rows, Cols> lhs,
-                             const Matrix<OtherRows, OtherCols>& rhs) {
-  static_assert(Rows == OtherRows && Cols == OtherCols,
-                "matrix - requires equal dimensions");
+template <int Rows, int Cols, int OtherRows, int OtherCols>
+Matrix<Rows, Cols> operator-(Matrix<Rows, Cols> lhs, const Matrix<OtherRows, OtherCols>& rhs) {
+  static_assert(Rows == OtherRows && Cols == OtherCols, "matrix - requires equal dimensions");
   if constexpr (Rows == OtherRows && Cols == OtherCols) lhs -= rhs;
   return lhs;
 }
@@ -239,21 +221,15 @@ Matrix<Rows, Cols> operator/(Matrix<Rows, Cols> matrix, Scalar scalar) {
   return matrix;
 }
 
-template <int Rows, int Cols, int OtherRows,
-          int OtherCols>
-Matrix<Rows, Cols> operator/(const Matrix<Rows, Cols>&,
-                             const Matrix<OtherRows, OtherCols>&) {
-  static_assert(Rows == 0,
-                "matrix / matrix is not supported; use inverse() or solve()");
+template <int Rows, int Cols, int OtherRows, int OtherCols>
+Matrix<Rows, Cols> operator/(const Matrix<Rows, Cols>&, const Matrix<OtherRows, OtherCols>&) {
+  static_assert(Rows == 0, "matrix / matrix is not supported; use inverse() or solve()");
   return Matrix<Rows, Cols>();
 }
 
-template <int Rows, int Inner, int OtherRows,
-          int Cols>
-Matrix<Rows, Cols> operator*(const Matrix<Rows, Inner>& lhs,
-                             const Matrix<OtherRows, Cols>& rhs) {
-  static_assert(Inner == OtherRows,
-                "matrix * requires lhs columns == rhs rows");
+template <int Rows, int Inner, int OtherRows, int Cols>
+Matrix<Rows, Cols> operator*(const Matrix<Rows, Inner>& lhs, const Matrix<OtherRows, Cols>& rhs) {
+  static_assert(Inner == OtherRows, "matrix * requires lhs columns == rhs rows");
   if constexpr (Inner == OtherRows) {
     return lhs.template multiply<Cols>(rhs);
   } else {
@@ -317,8 +293,7 @@ Scalar dot(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs) {
 }
 
 template <int Rows, int Cols>
-Matrix<Rows, Cols> hadamard(const Matrix<Rows, Cols>& lhs,
-                            const Matrix<Rows, Cols>& rhs) {
+Matrix<Rows, Cols> hadamard(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs) {
   Matrix<Rows, Cols> result;
   for (int row = 0; row < Rows; ++row) {
     for (int col = 0; col < Cols; ++col) {
@@ -329,8 +304,7 @@ Matrix<Rows, Cols> hadamard(const Matrix<Rows, Cols>& lhs,
 }
 
 template <int Rows, int Cols>
-Matrix<Rows, Cols> element_div(const Matrix<Rows, Cols>& lhs,
-                               const Matrix<Rows, Cols>& rhs) {
+Matrix<Rows, Cols> element_div(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs) {
   Matrix<Rows, Cols> result;
   for (int row = 0; row < Rows; ++row) {
     for (int col = 0; col < Cols; ++col) {
@@ -347,8 +321,7 @@ Matrix<Rows, Cols> symmetrize(const Matrix<Rows, Cols>& input) {
 }
 
 template <int N>
-Scalar determinant(const Matrix<N, N>& input,
-                  Scalar pivot_epsilon = kDefaultEpsilon) {
+Scalar determinant(const Matrix<N, N>& input, Scalar pivot_epsilon = kDefaultEpsilon) {
   Matrix<N, N> work = input;
   Scalar determinant_value = 1.0f;
   int sign = 1;
@@ -387,14 +360,14 @@ Scalar determinant(const Matrix<N, N>& input,
 // All failures clear output; no partially computed or non-finite result escapes.
 template <int N, int Cols>
 [[nodiscard]] bool solve(const Matrix<N, N>& coefficients, const Matrix<N, Cols>& rhs,
-                        Matrix<N, Cols>* solution,
-                        Scalar pivot_epsilon = kDefaultEpsilon) {
+                         Matrix<N, Cols>* solution, Scalar pivot_epsilon = kDefaultEpsilon) {
   if (solution == nullptr) return false;
   Matrix<N, N> work = coefficients;
   Matrix<N, Cols> result = rhs;
   *solution = zeros<N, Cols>();
-  if (!is_finite(work) || !is_finite(result) ||
-      !is_finite_scalar(pivot_epsilon) || pivot_epsilon <= 0) return false;
+  if (!is_finite(work) || !is_finite(result) || !is_finite_scalar(pivot_epsilon) ||
+      pivot_epsilon <= 0)
+    return false;
   for (int k = 0; k < N; ++k) {
     int best = k;
     for (int r = k + 1; r < N; ++r)
@@ -402,10 +375,14 @@ template <int N, int Cols>
     if (!is_finite_scalar(work(best, k)) || abs_scalar(work(best, k)) <= pivot_epsilon)
       return false;
     for (int c = k; c < N; ++c) {
-      const Scalar tmp = work(k, c); work(k, c) = work(best, c); work(best, c) = tmp;
+      const Scalar tmp = work(k, c);
+      work(k, c) = work(best, c);
+      work(best, c) = tmp;
     }
     for (int c = 0; c < Cols; ++c) {
-      const Scalar tmp = result(k, c); result(k, c) = result(best, c); result(best, c) = tmp;
+      const Scalar tmp = result(k, c);
+      result(k, c) = result(best, c);
+      result(best, c) = tmp;
     }
     for (int r = k + 1; r < N; ++r) {
       const Scalar factor = work(r, k) / work(k, k);
@@ -446,17 +423,23 @@ bool is_covariance(const Matrix<N, N>& input, Scalar tolerance = kDefaultEpsilon
   Matrix<N, N> work = input;
   for (int k = 0; k < N; ++k) {
     int best = k;
-    for (int i = k + 1; i < N; ++i) if (work(i, i) > work(best, best)) best = i;
+    for (int i = k + 1; i < N; ++i)
+      if (work(i, i) > work(best, best)) best = i;
     for (int j = 0; j < N; ++j) {
-      const Scalar tmp = work(k, j); work(k, j) = work(best, j); work(best, j) = tmp;
+      const Scalar tmp = work(k, j);
+      work(k, j) = work(best, j);
+      work(best, j) = tmp;
     }
     for (int i = 0; i < N; ++i) {
-      const Scalar tmp = work(i, k); work(i, k) = work(i, best); work(i, best) = tmp;
+      const Scalar tmp = work(i, k);
+      work(i, k) = work(i, best);
+      work(i, best) = tmp;
     }
     if (work(k, k) < -tol) return false;
     if (work(k, k) <= tol) {
       for (int i = k; i < N; ++i)
-        for (int j = k; j < N; ++j) if (abs_scalar(work(i, j)) > tol) return false;
+        for (int j = k; j < N; ++j)
+          if (abs_scalar(work(i, j)) > tol) return false;
       return true;
     }
     for (int i = k + 1; i < N; ++i)
@@ -493,14 +476,12 @@ Matrix<Rows, Rows> diag(const Matrix<Rows, 1>& values) {
 }
 
 template <int Rows, int Cols>
-Matrix<Rows, Cols> element_mul(const Matrix<Rows, Cols>& lhs,
-                               const Matrix<Rows, Cols>& rhs) {
+Matrix<Rows, Cols> element_mul(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs) {
   return matrix::hadamard(lhs, rhs);
 }
 
 template <int Rows, int Cols>
-Matrix<Rows, Cols> element_div(const Matrix<Rows, Cols>& lhs,
-                               const Matrix<Rows, Cols>& rhs) {
+Matrix<Rows, Cols> element_div(const Matrix<Rows, Cols>& lhs, const Matrix<Rows, Cols>& rhs) {
   return matrix::element_div(lhs, rhs);
 }
 
@@ -516,8 +497,7 @@ template <int N>
 }
 
 template <int N, int Cols>
-bool solve(const Matrix<N, N>& coefficients, const Matrix<N, Cols>& rhs,
-           Matrix<N, Cols>* solution,
+bool solve(const Matrix<N, N>& coefficients, const Matrix<N, Cols>& rhs, Matrix<N, Cols>* solution,
            Scalar pivot_epsilon = kDefaultEpsilon) {
   return matrix::solve(coefficients, rhs, solution, pivot_epsilon);
 }
@@ -535,8 +515,7 @@ inline Matrix<3, 3> hat(const Matrix<3, 1>& vector) {
   return result;
 }
 
-inline Matrix<3, 1> cross(const Matrix<3, 1>& lhs,
-                          const Matrix<3, 1>& rhs) {
+inline Matrix<3, 1> cross(const Matrix<3, 1>& lhs, const Matrix<3, 1>& rhs) {
   Matrix<3, 1> result;
   result(0, 0) = lhs(1, 0) * rhs(2, 0) - lhs(2, 0) * rhs(1, 0);
   result(1, 0) = lhs(2, 0) * rhs(0, 0) - lhs(0, 0) * rhs(2, 0);

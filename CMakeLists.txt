@@ -240,6 +240,21 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-rtti>")
     add_test(NAME mr_storage_host_tests COMMAND mr_storage_host_tests)
 
+    add_executable(mr_robotics_core_host_tests tests/component/robotics_core_host_tests.cpp)
+    target_link_libraries(mr_robotics_core_host_tests PRIVATE mr_robotics_core)
+    set_target_properties(mr_robotics_core_host_tests PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_robotics_core_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_robotics_core_host_tests COMMAND mr_robotics_core_host_tests)
+
+    add_library(mr_numeric_compile_check OBJECT tests/component/embedded_numeric_compile_check.cpp)
+    target_link_libraries(mr_numeric_compile_check PRIVATE mr_robotics_arm mr_component_controller)
+    set_target_properties(mr_numeric_compile_check PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_numeric_compile_check PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti)
+
     add_executable(mr_numeric_host_tests tests/component/numeric_host_tests.cpp)
     target_link_libraries(mr_numeric_host_tests PRIVATE mr_component_math)
     set_target_properties(mr_numeric_host_tests PROPERTIES

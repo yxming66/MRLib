@@ -86,8 +86,7 @@ class kf {
           x0(matrix::zeros<StateDim, 1>()),
           min_pivot(mr::component::math::kDefaultMinPivot),
           joseph_covariance_update(true) {
-      const uint16_t diag_count =
-          (StateDim < MeasureDim) ? StateDim : MeasureDim;
+      const uint16_t diag_count = (StateDim < MeasureDim) ? StateDim : MeasureDim;
       for (uint16_t i = 0; i < diag_count; ++i) {
         H[i][i] = 1.0f;
       }
@@ -124,21 +123,31 @@ class kf {
   bool Predict() { return Predict(Control{}); }
   bool Predict(const Control& control) {
     kf candidate = *this;
-    if (!candidate.PredictImpl(control)) { valid_ = false; return false; }
-    *this = candidate; return true;
+    if (!candidate.PredictImpl(control)) {
+      valid_ = false;
+      return false;
+    }
+    *this = candidate;
+    return true;
   }
   bool Update(const Measurement& measurement) {
     kf candidate = *this;
-    if (!candidate.UpdateImpl(measurement)) { valid_ = false; return false; }
-    *this = candidate; return true;
+    if (!candidate.UpdateImpl(measurement)) {
+      valid_ = false;
+      return false;
+    }
+    *this = candidate;
+    return true;
   }
   bool Step(const Measurement& measurement) { return Step(Control{}, measurement); }
   bool Step(const Control& control, const Measurement& measurement) {
     kf candidate = *this;
     if (!candidate.PredictImpl(control) || !candidate.UpdateImpl(measurement)) {
-      valid_ = false; return false;
+      valid_ = false;
+      return false;
     }
-    *this = candidate; return true;
+    *this = candidate;
+    return true;
   }
 
   const Config& config() const { return config_; }
@@ -146,9 +155,7 @@ class kf {
   const StateCovariance& covariance() const { return P_; }
   const Gain& gain() const { return K_; }
   const Measurement& innovation() const { return innovation_; }
-  const InnovationCovariance& innovation_covariance() const {
-    return innovation_covariance_;
-  }
+  const InnovationCovariance& innovation_covariance() const { return innovation_covariance_; }
   bool valid() const { return valid_; }
 
  private:
@@ -165,8 +172,7 @@ class kf {
   }
 
   bool PredictImpl(const Control& control) {
-    if (!valid_ || !IsPredictModelUsable() ||
-        !mr::component::math::matrix::is_finite(control)) {
+    if (!valid_ || !IsPredictModelUsable() || !mr::component::math::matrix::is_finite(control)) {
       valid_ = false;
       return false;
     }
@@ -178,20 +184,18 @@ class kf {
   }
 
   bool UpdateImpl(const Measurement& measurement) {
-    if (!valid_ || !IsUpdateModelUsable() ||
-        !mr::component::math::matrix::is_finite(measurement)) {
+    if (!valid_ || !IsUpdateModelUsable() || !mr::component::math::matrix::is_finite(measurement)) {
       valid_ = false;
       return false;
     }
 
     const Matrix<StateDim, MeasureDim> pht = P_ * config_.H.transpose();
     innovation_ = measurement - config_.H * x_;
-    innovation_covariance_ =
-        Symmetrized(config_.H * pht + config_.R);
+    innovation_covariance_ = Symmetrized(config_.H * pht + config_.R);
 
     Matrix<MeasureDim, StateDim> kt = matrix::zeros<MeasureDim, StateDim>();
-    if (!mr::component::math::solve<MeasureDim, StateDim>(
-            innovation_covariance_, pht.transpose(), &kt, config_.min_pivot)) {
+    if (!mr::component::math::solve<MeasureDim, StateDim>(innovation_covariance_, pht.transpose(),
+                                                          &kt, config_.min_pivot)) {
       valid_ = false;
       return false;
     }
@@ -220,13 +224,11 @@ class kf {
 
   bool IsPredictModelUsable() const {
     return mr::component::math::matrix::is_finite(config_.A) &&
-           mr::component::math::matrix::is_finite(config_.B) &&
-           matrix::is_covariance(config_.Q);
+           mr::component::math::matrix::is_finite(config_.B) && matrix::is_covariance(config_.Q);
   }
 
   bool IsUpdateModelUsable() const {
-    return mr::component::math::matrix::is_finite(config_.H) &&
-           matrix::is_covariance(config_.R);
+    return mr::component::math::matrix::is_finite(config_.H) && matrix::is_covariance(config_.R);
   }
 
   void UpdatePredictedCovariance() {
@@ -238,8 +240,7 @@ class kf {
     const StateCovariance ikh = identity - K_ * config_.H;
 
     if (config_.joseph_covariance_update) {
-      P_ = Symmetrized(ikh * P_ * ikh.transpose() +
-                       K_ * config_.R * K_.transpose());
+      P_ = Symmetrized(ikh * P_ * ikh.transpose() + K_ * config_.R * K_.transpose());
     } else {
       P_ = Symmetrized(ikh * P_);
     }
@@ -250,8 +251,7 @@ class kf {
   StateCovariance P_ = matrix::identity_rect<StateDim, StateDim>();
   Gain K_ = matrix::zeros<StateDim, MeasureDim>();
   Measurement innovation_ = matrix::zeros<MeasureDim, 1>();
-  InnovationCovariance innovation_covariance_ =
-      matrix::zeros<MeasureDim, MeasureDim>();
+  InnovationCovariance innovation_covariance_ = matrix::zeros<MeasureDim, MeasureDim>();
   bool valid_ = false;
 };
 

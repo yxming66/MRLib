@@ -50,15 +50,10 @@ class cascade {
   using Config = cascade_config;
   using Step = cascade_step;
 
-  static cascade Build(const Config& config) {
-    return cascade(config);
-  }
+  static cascade Build(const Config& config) { return cascade(config); }
 
-  static cascade Build(Scalar kp_position,
-                   Scalar kp_velocity,
-                   Scalar velocity_limit = kUnlimited,
-                   Scalar acceleration_limit = kUnlimited,
-                   Scalar output_limit = kUnlimited) {
+  static cascade Build(Scalar kp_position, Scalar kp_velocity, Scalar velocity_limit = kUnlimited,
+                       Scalar acceleration_limit = kUnlimited, Scalar output_limit = kUnlimited) {
     Config config{};
     config.kp_position = kp_position;
     config.kp_velocity = kp_velocity;
@@ -82,22 +77,17 @@ class cascade {
     last_ = {};
   }
 
-  Scalar Update(Scalar target_position,
-                Scalar position,
-                Scalar velocity,
-                Scalar dt_s) {
+  Scalar Update(Scalar target_position, Scalar position, Scalar velocity, Scalar dt_s) {
     return StepOnce(target_position, position, velocity, dt_s).output;
   }
 
-  Step StepOnce(Scalar target_position,
-                Scalar position,
-                Scalar velocity,
-                Scalar dt_s) {
+  Step StepOnce(Scalar target_position, Scalar position, Scalar velocity, Scalar dt_s) {
     last_ = {};
     if (!IsUsableScalar(target_position) || !IsUsableScalar(position) ||
         !IsUsableScalar(velocity) || !IsUsableScalar(dt_s) || dt_s <= 0 ||
         !Nonnegative(config_.kp_position) || !Nonnegative(config_.kp_velocity) ||
-        !Nonnegative(config_.velocity_limit.value) || !Nonnegative(config_.acceleration_limit.value) ||
+        !Nonnegative(config_.velocity_limit.value) ||
+        !Nonnegative(config_.acceleration_limit.value) ||
         !Nonnegative(config_.output_limit.value)) {
       return last_;
     }
@@ -109,8 +99,9 @@ class cascade {
     if (config_.acceleration_limit.enabled()) {
       const Scalar delta = config_.acceleration_limit.value * dt_s;
       if (!IsUsableScalar(delta)) return last_;
-      target_velocity = reference_velocity_ +
-          mr::component::math::clamp_scalar(target_velocity-reference_velocity_, -delta, delta);
+      target_velocity =
+          reference_velocity_ +
+          mr::component::math::clamp_scalar(target_velocity - reference_velocity_, -delta, delta);
     }
 
     Scalar output = config_.kp_velocity * (target_velocity - velocity);

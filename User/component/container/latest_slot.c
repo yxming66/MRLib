@@ -16,12 +16,11 @@ static void LatestSlot_ExitCritical(uint32_t primask) {
   }
 }
 
-static bool LatestSlot_IsValid(const LatestSlot_t *slot, uint16_t size) {
-  return slot != NULL && slot->storage != NULL && slot->size == size &&
-         size > 0u;
+static bool LatestSlot_IsValid(const LatestSlot_t* slot, uint16_t size) {
+  return slot != NULL && slot->storage != NULL && slot->size == size && size > 0u;
 }
 
-int8_t LatestSlot_Init(LatestSlot_t *slot, void *storage, uint16_t size) {
+int8_t LatestSlot_Init(LatestSlot_t* slot, void* storage, uint16_t size) {
   if (slot == NULL || storage == NULL) {
     return LATEST_SLOT_ERR_NULL;
   }
@@ -36,7 +35,7 @@ int8_t LatestSlot_Init(LatestSlot_t *slot, void *storage, uint16_t size) {
   return LATEST_SLOT_OK;
 }
 
-int8_t LatestSlot_Write(LatestSlot_t *slot, const void *value, uint16_t size) {
+int8_t LatestSlot_Write(LatestSlot_t* slot, const void* value, uint16_t size) {
   if (value == NULL) {
     return LATEST_SLOT_ERR_NULL;
   }
@@ -55,8 +54,8 @@ int8_t LatestSlot_Write(LatestSlot_t *slot, const void *value, uint16_t size) {
   return LATEST_SLOT_OK;
 }
 
-bool LatestSlot_ReadIfUpdated(const LatestSlot_t *slot, void *out,
-                              uint16_t size, uint32_t *last_seq) {
+bool LatestSlot_ReadIfUpdated(const LatestSlot_t* slot, void* out, uint16_t size,
+                              uint32_t* last_seq) {
   if (out == NULL || last_seq == NULL || !LatestSlot_IsValid(slot, size)) {
     return false;
   }
@@ -73,7 +72,7 @@ bool LatestSlot_ReadIfUpdated(const LatestSlot_t *slot, void *out,
   return true;
 }
 
-bool LatestSlot_ReadLatest(const LatestSlot_t *slot, void *out, uint16_t size) {
+bool LatestSlot_ReadLatest(const LatestSlot_t* slot, void* out, uint16_t size) {
   if (out == NULL || !LatestSlot_IsValid(slot, size)) {
     return false;
   }
@@ -88,9 +87,9 @@ bool LatestSlot_ReadLatest(const LatestSlot_t *slot, void *out, uint16_t size) {
   return true;
 }
 
-void LatestSlot_Reset(LatestSlot_t *slot) {
+void LatestSlot_Reset(LatestSlot_t* slot) {
   if (slot == NULL || slot->storage == NULL || slot->size == 0u) {
-    return;  
+    return;
   }
 
   const uint32_t primask = LatestSlot_EnterCritical();

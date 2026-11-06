@@ -14,7 +14,7 @@
  * 控制律:
  *   error = state - reference
  *   u = feedforward - K * error
- *  
+ *
  * api:
  * 固定 LQR 示例:
  *   using Lqr = mr::comp::cntlr::lqr<6, 2>;
@@ -69,8 +69,9 @@
 
 #pragma once
 
-#include <array>
 #include <stdint.h>
+
+#include <array>
 
 #include "component/controller/controller_types.hpp"
 
@@ -86,9 +87,7 @@ class lqr {
   using State = std::array<Scalar, StateDim>;
   using Control = std::array<Scalar, ControlDim>;
   using Gain = std::array<std::array<Scalar, StateDim>, ControlDim>;
-  using Coeff =
-      std::array<std::array<std::array<Scalar, PolyOrder>, StateDim>,
-                 ControlDim>;
+  using Coeff = std::array<std::array<std::array<Scalar, PolyOrder>, StateDim>, ControlDim>;
   using OutputLimit = std::array<SymmetricLimit, ControlDim>;
   using StateWrap = std::array<RangeWrap, StateDim>;
 
@@ -167,15 +166,11 @@ class lqr {
     return StepOnce(reference, state).output;
   }
 
-  Control Update(const State& reference,
-                 const State& state,
-                 const Control& feedforward) {
+  Control Update(const State& reference, const State& state, const Control& feedforward) {
     return StepOnce(reference, state, feedforward).output;
   }
 
-  Control UpdateError(const State& error) {
-    return StepError(error).output;
-  }
+  Control UpdateError(const State& error) { return StepError(error).output; }
 
   Control UpdateError(const State& error, const Control& feedforward) {
     return StepError(error, feedforward).output;
@@ -185,9 +180,7 @@ class lqr {
     return StepOnce(reference, state, ZeroControl());
   }
 
-  Step StepOnce(const State& reference,
-                const State& state,
-                const Control& feedforward) {
+  Step StepOnce(const State& reference, const State& state, const Control& feedforward) {
     State error{};
     if (!BuildError(reference, state, &error)) {
       last_ = {};
@@ -196,9 +189,7 @@ class lqr {
     return StepError(error, feedforward);
   }
 
-  Step StepError(const State& error) {
-    return StepError(error, ZeroControl());
-  }
+  Step StepError(const State& error) { return StepError(error, ZeroControl()); }
 
   Step StepError(const State& error, const Control& feedforward) {
     last_ = {};
@@ -216,12 +207,14 @@ class lqr {
         value -= gain_[output][state] * error[state];
       }
 
-      if (!IsUsableScalar(value)) { last_ = {}; return last_; }
+      if (!IsUsableScalar(value)) {
+        last_ = {};
+        return last_;
+      }
       last_.unsaturated_output[output] = value;
       last_.output[output] = config_.output_limit[output].Apply(value);
       last_.channel_saturated[output] =
-          mr::component::math::abs_scalar(last_.output[output] - value) >
-          kEpsilon;
+          mr::component::math::abs_scalar(last_.output[output] - value) > kEpsilon;
       last_.saturated = last_.saturated || last_.channel_saturated[output];
     }
 
@@ -256,11 +249,8 @@ class lqr {
     return true;
   }
 
-  bool BuildError(const State& reference,
-                  const State& state,
-                  State* error) const {
-    if (error == nullptr || !IsStateUsable(reference) ||
-        !IsStateUsable(state)) {
+  bool BuildError(const State& reference, const State& state, State* error) const {
+    if (error == nullptr || !IsStateUsable(reference) || !IsStateUsable(state)) {
       return false;
     }
 
@@ -274,11 +264,10 @@ class lqr {
     if (!config_.clamp_schedule) {
       return schedule;
     }
-    if (IsUsableScalar(config_.schedule_min) &&
-        IsUsableScalar(config_.schedule_max) &&
+    if (IsUsableScalar(config_.schedule_min) && IsUsableScalar(config_.schedule_max) &&
         config_.schedule_max > config_.schedule_min) {
-      return mr::component::math::clamp_scalar(
-          schedule, config_.schedule_min, config_.schedule_max);
+      return mr::component::math::clamp_scalar(schedule, config_.schedule_min,
+                                               config_.schedule_max);
     }
     return schedule;
   }
@@ -289,22 +278,22 @@ class lqr {
     for (auto wrap : config_.state_wrap)
       if (!IsUsableScalar(wrap.range) || wrap.range < 0) return false;
     return !config_.clamp_schedule ||
-        (IsUsableScalar(config_.schedule_min) && IsUsableScalar(config_.schedule_max) &&
-         config_.schedule_min <= config_.schedule_max);
+           (IsUsableScalar(config_.schedule_min) && IsUsableScalar(config_.schedule_max) &&
+            config_.schedule_min <= config_.schedule_max);
   }
   bool RecalculateGain(Scalar schedule) {
     for (uint16_t output = 0; output < ControlDim; ++output) {
       for (uint16_t state = 0; state < StateDim; ++state) {
-        gain_[output][state] =
-            EvalPolynomial(config_.coeff[output][state], schedule);
+        gain_[output][state] = EvalPolynomial(config_.coeff[output][state], schedule);
       }
     }
-    for (const auto& row : gain_) for (Scalar v : row) if (!IsUsableScalar(v)) return false;
+    for (const auto& row : gain_)
+      for (Scalar v : row)
+        if (!IsUsableScalar(v)) return false;
     return ConfigValid();
   }
 
-  static Scalar EvalPolynomial(const std::array<Scalar, PolyOrder>& coeff,
-                               Scalar schedule) {
+  static Scalar EvalPolynomial(const std::array<Scalar, PolyOrder>& coeff, Scalar schedule) {
     Scalar value = 0.0f;
     for (uint16_t i = 0; i < PolyOrder; ++i) {
       value = value * schedule + coeff[i];

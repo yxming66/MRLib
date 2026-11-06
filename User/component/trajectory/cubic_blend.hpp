@@ -40,13 +40,12 @@ struct CubicBlendSample {
   CubicBlendSample() : s(0.0f), ds(0.0f), dds(0.0f), finished(false) {}
 };
 
-inline CubicBlendSample sample_cubic_blend(
-    Scalar elapsed,
-    Scalar duration,
-    Scalar epsilon = kDefaultEpsilon) {
+inline CubicBlendSample sample_cubic_blend(Scalar elapsed, Scalar duration,
+                                           Scalar epsilon = kDefaultEpsilon) {
   CubicBlendSample sample;
   if (!is_finite_scalar(elapsed) || !is_finite_scalar(duration) || duration < 0 ||
-      !is_finite_scalar(epsilon) || epsilon <= 0) return sample;
+      !is_finite_scalar(epsilon) || epsilon <= 0)
+    return sample;
   sample.valid = true;
   if (duration <= epsilon) {
     sample.s = (elapsed >= 0.0f) ? 1.0f : 0.0f;
@@ -75,27 +74,24 @@ inline CubicBlendSample sample_cubic_blend(
   return sample;
 }
 
-inline Scalar cubic_blend_duration_from_limits(
-    Scalar distance,
-    Scalar max_velocity,
-    Scalar max_acceleration,
-    Scalar epsilon = kDefaultEpsilon) {
+inline Scalar cubic_blend_duration_from_limits(Scalar distance, Scalar max_velocity,
+                                               Scalar max_acceleration,
+                                               Scalar epsilon = kDefaultEpsilon) {
   if (!is_finite_scalar(epsilon) || epsilon <= 0 || !is_finite_scalar(distance) ||
-      !is_finite_scalar(max_velocity) || !is_finite_scalar(max_acceleration) ||
-      max_velocity < 0 || max_acceleration < 0) return -1;
+      !is_finite_scalar(max_velocity) || !is_finite_scalar(max_acceleration) || max_velocity < 0 ||
+      max_acceleration < 0)
+    return -1;
   const Scalar abs_distance = abs_scalar(distance);
   if (abs_distance <= epsilon) {
     return 0.0f;
   }
-  if (max_velocity <= epsilon || max_acceleration <= epsilon ||
-      !is_finite_scalar(abs_distance) || !is_finite_scalar(max_velocity) ||
-      !is_finite_scalar(max_acceleration)) {
+  if (max_velocity <= epsilon || max_acceleration <= epsilon || !is_finite_scalar(abs_distance) ||
+      !is_finite_scalar(max_velocity) || !is_finite_scalar(max_acceleration)) {
     return -1.0f;
   }
 
   const Scalar velocity_bound = 1.5f * abs_distance / max_velocity;
-  const Scalar acceleration_bound =
-      sqrtf(6.0f * abs_distance / max_acceleration);
+  const Scalar acceleration_bound = sqrtf(6.0f * abs_distance / max_acceleration);
   const Scalar result = (velocity_bound > acceleration_bound) ? velocity_bound : acceleration_bound;
   return is_finite_scalar(result) ? result : -1;
 }

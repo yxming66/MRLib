@@ -2,10 +2,10 @@
 
 #include <stdint.h>
 
+#include "../core/types.hpp"
 #include "component/math/scalar.hpp"
 #include "robotics/core/rotation.hpp"
 #include "robotics/core/transform.hpp"
-#include "../core/types.hpp"
 
 namespace mr::robotics::arm {
 
@@ -37,8 +37,7 @@ struct InertialParameters {
   InertialParameters()
       : mass_kg(0.0f),
         center_of_mass(mr::component::math::matrix::zeros<3, 1>()),
-        inertia_at_center_of_mass(
-            mr::component::math::matrix::zeros<3, 3>()) {}
+        inertia_at_center_of_mass(mr::component::math::matrix::zeros<3, 3>()) {}
 };
 
 struct JointModel {
@@ -86,58 +85,22 @@ inline bool IsJointLimitsValid(const JointLimits& limits) {
 
 inline bool ValidateJointModel(const JointModel& joint) {
   const Scalar axis_norm = joint.axis_in_joint_frame.norm();
-  if (!IsJointTypeValid(joint.type) ||
-      !IsTransformValid(joint.parent_to_joint) ||
+  if (!IsJointTypeValid(joint.type) || !IsTransformValid(joint.parent_to_joint) ||
       !mr::component::math::is_finite_scalar(joint.position_offset) ||
       !mr::component::math::is_finite_scalar(axis_norm) ||
-      axis_norm <= mr::component::math::kDefaultEpsilon ||
-      !IsJointLimitsValid(joint.limits)) {
+      axis_norm <= mr::component::math::kDefaultEpsilon || !IsJointLimitsValid(joint.limits)) {
     return false;
   }
 
   if (!mr::component::math::is_finite_scalar(joint.inertial.mass_kg) ||
       joint.inertial.mass_kg < 0.0f ||
       !mr::component::math::matrix::is_finite(joint.inertial.center_of_mass) ||
-      !mr::component::math::matrix::is_finite(
-          joint.inertial.inertia_at_center_of_mass)) {
+      !mr::component::math::matrix::is_finite(joint.inertial.inertia_at_center_of_mass)) {
     return false;
   }
 
-  const Rotation& inertia = joint.inertial.inertia_at_center_of_mass;
-  const Scalar symmetry_tolerance = 1.0e-6f;
-  Scalar inertia_scale = 1.0f;
-  for (int row = 0; row < 3; ++row) {
-    if (inertia[row][row] < 0.0f) {
-      return false;
-    }
-    if (inertia[row][row] > inertia_scale) {
-      inertia_scale = inertia[row][row];
-    }
-    for (int col = row + 1; col < 3; ++col) {
-      if (mr::component::math::abs_scalar(inertia[row][col] -
-                                           inertia[col][row]) >
-          symmetry_tolerance) {
-        return false;
-      }
-    }
-  }
-  const Scalar minor_tolerance = symmetry_tolerance * inertia_scale *
-                                 inertia_scale;
-  for (int first = 0; first < 3; ++first) {
-    for (int second = first + 1; second < 3; ++second) {
-      const Scalar principal_minor =
-          inertia[first][first] * inertia[second][second] -
-          inertia[first][second] * inertia[second][first];
-      if (principal_minor < -minor_tolerance) {
-        return false;
-      }
-    }
-  }
-  const Scalar determinant_tolerance = minor_tolerance * inertia_scale;
-  if (mr::component::math::matrix::determinant(inertia) <
-      -determinant_tolerance) {
+  if (!mr::component::math::matrix::is_covariance(joint.inertial.inertia_at_center_of_mass))
     return false;
-  }
 
   return true;
 }

@@ -16,11 +16,11 @@ template <int DoF>
 struct ArmCommand {
   ControlMode mode;
   JointVector<DoF> joint_target;
-  Transform pose_target;
+  Transform pose_target;  // T_world_tool: tool pose expressed in the model world frame.
   JointVector<DoF> effort_feedforward;
   bool position_only;
   // A streaming Cartesian target is updated every control cycle. It uses a
-  // bounded IK step instead of restarting a time-based Cartesian plan.
+  // bounded IK target with per-joint velocity/acceleration-limited tracking.
   bool streaming_cartesian;
 
   ArmCommand()
@@ -39,6 +39,7 @@ struct ArmOutput {
   Transform current_pose;
   bool reached;
   bool position_only_fallback;
+  Status primary_ik_status;  // Initial solve status, before an explicitly enabled fallback.
   bool near_singularity;
 
   ArmOutput()
@@ -47,6 +48,7 @@ struct ArmOutput {
         current_pose(mr::component::math::matrix::identity<4>()),
         reached(false),
         position_only_fallback(false),
+        primary_ik_status(Status::kNotConfigured),
         near_singularity(false) {}
 };
 

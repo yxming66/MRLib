@@ -3,11 +3,11 @@
 // Smooth Cartesian interpolation. Inverse kinematics is deliberately outside
 // this class; callers can feed each sampled pose to their chosen IK solver.
 
+#include "../core/types.hpp"
 #include "component/math/matrix.hpp"
 #include "component/math/scalar.hpp"
 #include "component/trajectory/cubic_blend.hpp"
 #include "robotics/core/transform.hpp"
-#include "../core/types.hpp"
 
 namespace mr::robotics::arm::planning {
 
@@ -30,6 +30,7 @@ struct CartesianPlanRequest {
 
 struct CartesianPlanSample {
   Transform pose;
+  // Geometric velocity at the tool origin, expressed in the model world frame.
   Twist6 twist;
   Scalar time_from_start_s;
   bool valid;
@@ -47,7 +48,7 @@ class CartesianPlanner {
  public:
   CartesianPlanner()
       : request_(),
-        relative_twist_(mr::component::math::matrix::zeros<6, 1>()),
+        relative_coordinates_(mr::component::math::matrix::zeros<6, 1>()),
         duration_s_(0.0f),
         valid_(false) {}
 
@@ -56,44 +57,32 @@ class CartesianPlanner {
     duration_s_ = 0.0f;
     request_ = request;
 
-    if (!IsTransformValid(request.start) ||
-        !IsTransformValid(request.goal) ||
-        !mr::component::math::is_positive_scalar(
-            request.max_linear_velocity_m_s) ||
-        !mr::component::math::is_positive_scalar(
-            request.max_angular_velocity_rad_s) ||
-        !mr::component::math::is_positive_scalar(
-            request.max_linear_acceleration_m_s2) ||
-        !mr::component::math::is_positive_scalar(
-            request.max_angular_acceleration_rad_s2)) {
+    if (!IsTransformValid(request.start) || !IsTransformValid(request.goal) ||
+        !mr::component::math::is_positive_scalar(request.max_linear_velocity_m_s) ||
+        !mr::component::math::is_positive_scalar(request.max_angular_velocity_rad_s) ||
+        !mr::component::math::is_positive_scalar(request.max_linear_acceleration_m_s2) ||
+        !mr::component::math::is_positive_scalar(request.max_angular_acceleration_rad_s2)) {
       return false;
     }
 
-    const Transform relative =
-        mr::robotics::core::InverseTransform(request.start) * request.goal;
-    relative_twist_ = mr::robotics::core::TwistFromTransform(relative);
-    if (!mr::component::math::matrix::is_finite(relative_twist_)) {
+    const Transform relative = mr::robotics::core::InverseTransform(request.start) * request.goal;
+    relative_coordinates_ = mr::robotics::core::PoseCoordinatesFromTransform(relative);
+    if (!mr::component::math::matrix::is_finite(relative_coordinates_)) {
       return false;
     }
 
-    const Scalar linear_distance =
-        relative_twist_.block<3, 1>(0, 0).norm();
-    const Scalar angular_distance =
-        relative_twist_.block<3, 1>(3, 0).norm();
-    const Scalar linear_duration =
-        mr::comp::traj::cubic_blend_duration_from_limits(
-            linear_distance, request.max_linear_velocity_m_s,
-            request.max_linear_acceleration_m_s2);
-    const Scalar angular_duration =
-        mr::comp::traj::cubic_blend_duration_from_limits(
-            angular_distance, request.max_angular_velocity_rad_s,
-            request.max_angular_acceleration_rad_s2);
+    const Scalar linear_distance = relative_coordinates_.block<3, 1>(0, 0).norm();
+    const Scalar angular_distance = relative_coordinates_.block<3, 1>(3, 0).norm();
+    const Scalar linear_duration = mr::comp::traj::cubic_blend_duration_from_limits(
+        linear_distance, request.max_linear_velocity_m_s, request.max_linear_acceleration_m_s2);
+    const Scalar angular_duration = mr::comp::traj::cubic_blend_duration_from_limits(
+        angular_distance, request.max_angular_velocity_rad_s,
+        request.max_angular_acceleration_rad_s2);
     if (linear_duration < 0.0f || angular_duration < 0.0f) {
       return false;
     }
 
-    duration_s_ = (linear_duration > angular_duration) ? linear_duration
-                                                        : angular_duration;
+    duration_s_ = (linear_duration > angular_duration) ? linear_duration : angular_duration;
     valid_ = mr::component::math::is_finite_scalar(duration_s_);
     if (!valid_) {
       duration_s_ = 0.0f;
@@ -119,9 +108,16 @@ class CartesianPlanner {
     const mr::comp::traj::CubicBlendSample blend =
         mr::comp::traj::sample_cubic_blend(elapsed_s, duration_s_);
     sample.pose = request_.start *
-                  mr::robotics::core::TransformFromTwist(
-                      relative_twist_ * blend.s);
-    sample.twist = relative_twist_ * blend.ds;
+                  mr::robotics::core::TransformFromPoseCoordinates(relative_coordinates_ * blend.s);
+    const Rotation start_rotation = mr::robotics::core::RotationOf(request_.start);
+    const Vec3 linear = start_rotation * relative_coordinates_.block<3, 1>(0, 0) * blend.ds;
+    const Vec3 angular = start_rotation * relative_coordinates_.block<3, 1>(3, 0) * blend.ds;
+    for (int i = 0; i < 3; ++i) {
+      sample.twist(i, 0) = linear(i, 0);
+      sample.twist(i + 3, 0) = angular(i, 0);
+    }
+    sample.valid = blend.valid && IsTransformValid(sample.pose) &&
+                   mr::component::math::matrix::is_finite(sample.twist);
     sample.finished = blend.finished;
     if (sample.finished) {
       sample.pose = request_.goal;
@@ -136,7 +132,7 @@ class CartesianPlanner {
 
  private:
   CartesianPlanRequest request_;
-  Twist6 relative_twist_;
+  mr::robotics::core::PoseCoordinates6 relative_coordinates_;
   Scalar duration_s_;
   bool valid_;
 };

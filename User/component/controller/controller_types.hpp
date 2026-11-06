@@ -46,9 +46,7 @@ struct SymmetricLimit {
   static constexpr SymmetricLimit Unlimited() { return {kUnlimited}; }
   static constexpr SymmetricLimit Abs(Scalar limit) { return {limit}; }
 
-  bool enabled() const {
-    return mr::component::math::is_finite_scalar(value) && value > 0.0f;
-  }
+  bool enabled() const { return mr::component::math::is_finite_scalar(value) && value > 0.0f; }
 
   Scalar Apply(Scalar input) const {
     if (!enabled()) {
@@ -64,9 +62,7 @@ struct RangeWrap {
   static constexpr RangeWrap Disabled() { return {kUnlimited}; }
   static constexpr RangeWrap Periodic(Scalar period) { return {period}; }
 
-  bool enabled() const {
-    return mr::component::math::is_finite_scalar(range) && range > 0.0f;
-  }
+  bool enabled() const { return mr::component::math::is_finite_scalar(range) && range > 0.0f; }
 
   Scalar Error(Scalar setpoint, Scalar feedback) const {
     const Scalar raw_error = setpoint - feedback;
@@ -109,14 +105,11 @@ inline Scalar SanitizeDt(Scalar dt_s, Scalar fallback = kDefaultDt) {
   return dt_s;
 }
 
-inline bool IsUsableScalar(Scalar value) {
-  return mr::component::math::is_finite_scalar(value);
-}
+inline bool IsUsableScalar(Scalar value) { return mr::component::math::is_finite_scalar(value); }
 
 class SlewRateLimiter {
  public:
-  static constexpr SlewRateLimiter Build(Scalar rate_limit_per_s,
-                                         Scalar initial_value = 0.0f) {
+  static constexpr SlewRateLimiter Build(Scalar rate_limit_per_s, Scalar initial_value = 0.0f) {
     return SlewRateLimiter(rate_limit_per_s, initial_value);
   }
 

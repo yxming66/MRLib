@@ -77,20 +77,12 @@ class ekf {
   using InnovationCovariance = Matrix<MeasureDim, MeasureDim>;
   using Gain = Matrix<StateDim, MeasureDim>;
 
-  using TransitionFunction =
-      bool (*)(const State& state,
-               const Control& control,
-               State* out,
-               void* context);
-  using TransitionJacobianFunction =
-      bool (*)(const State& state,
-               const Control& control,
-               StateTransition* out,
-               void* context);
-  using ObservationFunction =
-      bool (*)(const State& state, Measurement* out, void* context);
-  using ObservationJacobianFunction =
-      bool (*)(const State& state, Observation* out, void* context);
+  using TransitionFunction = bool (*)(const State& state, const Control& control, State* out,
+                                      void* context);
+  using TransitionJacobianFunction = bool (*)(const State& state, const Control& control,
+                                              StateTransition* out, void* context);
+  using ObservationFunction = bool (*)(const State& state, Measurement* out, void* context);
+  using ObservationJacobianFunction = bool (*)(const State& state, Observation* out, void* context);
 
   struct Config {
     TransitionFunction transition;
@@ -152,21 +144,31 @@ class ekf {
   bool Predict() { return Predict(Control{}); }
   bool Predict(const Control& control) {
     ekf candidate = *this;
-    if (!candidate.PredictImpl(control)) { valid_ = false; return false; }
-    *this = candidate; return true;
+    if (!candidate.PredictImpl(control)) {
+      valid_ = false;
+      return false;
+    }
+    *this = candidate;
+    return true;
   }
   bool Update(const Measurement& measurement) {
     ekf candidate = *this;
-    if (!candidate.UpdateImpl(measurement)) { valid_ = false; return false; }
-    *this = candidate; return true;
+    if (!candidate.UpdateImpl(measurement)) {
+      valid_ = false;
+      return false;
+    }
+    *this = candidate;
+    return true;
   }
   bool Step(const Measurement& measurement) { return Step(Control{}, measurement); }
   bool Step(const Control& control, const Measurement& measurement) {
     ekf candidate = *this;
     if (!candidate.PredictImpl(control) || !candidate.UpdateImpl(measurement)) {
-      valid_ = false; return false;
+      valid_ = false;
+      return false;
     }
-    *this = candidate; return true;
+    *this = candidate;
+    return true;
   }
 
   const Config& config() const { return config_; }
@@ -175,13 +177,9 @@ class ekf {
   const StateTransition& transition_jacobian() const { return F_; }
   const Observation& observation_jacobian() const { return H_; }
   const Gain& gain() const { return K_; }
-  const Measurement& predicted_measurement() const {
-    return predicted_measurement_;
-  }
+  const Measurement& predicted_measurement() const { return predicted_measurement_; }
   const Measurement& innovation() const { return innovation_; }
-  const InnovationCovariance& innovation_covariance() const {
-    return innovation_covariance_;
-  }
+  const InnovationCovariance& innovation_covariance() const { return innovation_covariance_; }
   bool valid() const { return valid_; }
 
  private:
@@ -191,23 +189,19 @@ class ekf {
   }
 
   bool PredictImpl(const Control& control) {
-    if (!valid_ || !IsPredictModelUsable() ||
-        !mr::component::math::matrix::is_finite(control)) {
+    if (!valid_ || !IsPredictModelUsable() || !mr::component::math::matrix::is_finite(control)) {
       valid_ = false;
       return false;
     }
 
     State predicted = matrix::zeros<StateDim, 1>();
-    StateTransition transition_jacobian =
-        matrix::zeros<StateDim, StateDim>();
+    StateTransition transition_jacobian = matrix::zeros<StateDim, StateDim>();
     if (!config_.transition(x_, control, &predicted, config_.context) ||
-        !config_.transition_jacobian(x_, control, &transition_jacobian,
-                                     config_.context)) {
+        !config_.transition_jacobian(x_, control, &transition_jacobian, config_.context)) {
       valid_ = false;
       return false;
     }
-    if (!IsStateUsable(predicted) ||
-        !mr::component::math::matrix::is_finite(transition_jacobian)) {
+    if (!IsStateUsable(predicted) || !mr::component::math::matrix::is_finite(transition_jacobian)) {
       valid_ = false;
       return false;
     }
@@ -220,18 +214,15 @@ class ekf {
   }
 
   bool UpdateImpl(const Measurement& measurement) {
-    if (!valid_ || !IsUpdateModelUsable() ||
-        !mr::component::math::matrix::is_finite(measurement)) {
+    if (!valid_ || !IsUpdateModelUsable() || !mr::component::math::matrix::is_finite(measurement)) {
       valid_ = false;
       return false;
     }
 
     Measurement predicted_measurement = matrix::zeros<MeasureDim, 1>();
-    Observation observation_jacobian =
-        matrix::zeros<MeasureDim, StateDim>();
+    Observation observation_jacobian = matrix::zeros<MeasureDim, StateDim>();
     if (!config_.observation(x_, &predicted_measurement, config_.context) ||
-        !config_.observation_jacobian(x_, &observation_jacobian,
-                                      config_.context)) {
+        !config_.observation_jacobian(x_, &observation_jacobian, config_.context)) {
       valid_ = false;
       return false;
     }
@@ -249,8 +240,8 @@ class ekf {
     innovation_covariance_ = Symmetrized(H_ * pht + config_.R);
 
     Matrix<MeasureDim, StateDim> kt = matrix::zeros<MeasureDim, StateDim>();
-    if (!mr::component::math::solve<MeasureDim, StateDim>(
-            innovation_covariance_, pht.transpose(), &kt, config_.min_pivot)) {
+    if (!mr::component::math::solve<MeasureDim, StateDim>(innovation_covariance_, pht.transpose(),
+                                                          &kt, config_.min_pivot)) {
       valid_ = false;
       return false;
     }
@@ -278,14 +269,12 @@ class ekf {
   }
 
   bool IsPredictModelUsable() const {
-    return config_.transition != nullptr &&
-           config_.transition_jacobian != nullptr &&
+    return config_.transition != nullptr && config_.transition_jacobian != nullptr &&
            matrix::is_covariance(config_.Q);
   }
 
   bool IsUpdateModelUsable() const {
-    return config_.observation != nullptr &&
-           config_.observation_jacobian != nullptr &&
+    return config_.observation != nullptr && config_.observation_jacobian != nullptr &&
            matrix::is_covariance(config_.R);
   }
 
@@ -294,8 +283,7 @@ class ekf {
     const StateCovariance ikh = identity - K_ * H_;
 
     if (config_.joseph_covariance_update) {
-      P_ = Symmetrized(ikh * P_ * ikh.transpose() +
-                       K_ * config_.R * K_.transpose());
+      P_ = Symmetrized(ikh * P_ * ikh.transpose() + K_ * config_.R * K_.transpose());
     } else {
       P_ = Symmetrized(ikh * P_);
     }
@@ -309,8 +297,7 @@ class ekf {
   Gain K_ = matrix::zeros<StateDim, MeasureDim>();
   Measurement predicted_measurement_ = matrix::zeros<MeasureDim, 1>();
   Measurement innovation_ = matrix::zeros<MeasureDim, 1>();
-  InnovationCovariance innovation_covariance_ =
-      matrix::zeros<MeasureDim, MeasureDim>();
+  InnovationCovariance innovation_covariance_ = matrix::zeros<MeasureDim, MeasureDim>();
   bool valid_ = false;
 };
 

@@ -1,14 +1,15 @@
 #pragma once
 
+#include "../core/types.hpp"
 #include "component/math/matrix.hpp"
 #include "component/math/scalar.hpp"
 #include "robotics/core/rotation.hpp"
 #include "robotics/core/transform.hpp"
-#include "../core/types.hpp"
 
 namespace mr::robotics::arm::kinematics {
 
 struct PoseError {
+  // World-frame [tool-origin position error; rotation-vector error], not SE(3) log.
   Twist6 twist;
   Scalar position_norm;
   Scalar orientation_norm;
@@ -21,19 +22,16 @@ struct PoseError {
         valid(false) {}
 };
 
-inline PoseError ComputePoseError(const Transform& target,
-                                  const Transform& current) {
+inline PoseError ComputePoseError(const Transform& target, const Transform& current) {
   PoseError result;
   if (!IsTransformValid(target) || !IsTransformValid(current)) {
     return result;
   }
 
   const Vec3 position_error =
-      mr::robotics::core::TranslationOf(target) -
-      mr::robotics::core::TranslationOf(current);
+      mr::robotics::core::TranslationOf(target) - mr::robotics::core::TranslationOf(current);
   const Rotation relative_rotation =
-      mr::robotics::core::RotationOf(target) *
-      mr::robotics::core::RotationOf(current).transpose();
+      mr::robotics::core::RotationOf(target) * mr::robotics::core::RotationOf(current).transpose();
   const mr::robotics::core::Vec4 axis_angle =
       mr::robotics::core::AxisAngleFromRotation(relative_rotation);
   const Vec3 orientation_error = axis_angle.block<3, 1>(0, 0) * axis_angle[3][0];

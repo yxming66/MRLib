@@ -27,13 +27,9 @@ using Scalar = mr::component::math::Scalar;
 constexpr Scalar kDefaultEpsilon = mr::component::math::kDefaultEpsilon;
 constexpr Scalar kDefaultFiniteLimit = mr::component::math::kFiniteLimit;
 
-inline Scalar abs_scalar(Scalar value) {
-  return mr::component::math::abs_scalar(value);
-}
+inline Scalar abs_scalar(Scalar value) { return mr::component::math::abs_scalar(value); }
 
-inline bool is_finite_scalar(Scalar value) {
-  return mr::component::math::is_finite_scalar(value);
-}
+inline bool is_finite_scalar(Scalar value) { return mr::component::math::is_finite_scalar(value); }
 
 inline Scalar clamp_scalar(Scalar value, Scalar lower, Scalar upper) {
   return mr::component::math::clamp_scalar(value, lower, upper);
@@ -47,11 +43,7 @@ struct ScalarMotionSample {
   bool finished;
 
   ScalarMotionSample()
-      : position(0.0f),
-        velocity(0.0f),
-        acceleration(0.0f),
-        valid(false),
-        finished(false) {}
+      : position(0.0f), velocity(0.0f), acceleration(0.0f), valid(false), finished(false) {}
 };
 
 }  // namespace mr::comp::traj

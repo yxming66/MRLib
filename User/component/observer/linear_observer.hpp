@@ -26,10 +26,8 @@ namespace matrix = ::mr::component::math::matrix;
 template <int StateDim, int MeasureDim, int ControlDim = 1>
 class linear_observer {
   static_assert(StateDim > 0, "linear_observer needs at least one state");
-  static_assert(MeasureDim > 0,
-                "linear_observer needs at least one measurement");
-  static_assert(ControlDim > 0,
-                "linear_observer ControlDim must be positive");
+  static_assert(MeasureDim > 0, "linear_observer needs at least one measurement");
+  static_assert(ControlDim > 0, "linear_observer ControlDim must be positive");
 
  public:
   using State = Matrix<StateDim, 1>;
@@ -53,17 +51,14 @@ class linear_observer {
           C(matrix::zeros<MeasureDim, StateDim>()),
           L(matrix::zeros<StateDim, MeasureDim>()),
           x0(matrix::zeros<StateDim, 1>()) {
-      const int diagonal_count =
-          (StateDim < MeasureDim) ? StateDim : MeasureDim;
+      const int diagonal_count = (StateDim < MeasureDim) ? StateDim : MeasureDim;
       for (int i = 0; i < diagonal_count; ++i) {
         C[i][i] = 1.0f;
       }
     }
   };
 
-  static linear_observer Build(const Config& config) {
-    return linear_observer(config);
-  }
+  static linear_observer Build(const Config& config) { return linear_observer(config); }
 
   linear_observer() { Configure(Config{}); }
   explicit linear_observer(const Config& config) { Configure(config); }
@@ -89,16 +84,14 @@ class linear_observer {
 
   // 执行一次观测器更新，并返回本次更新后的状态是否有效。
   bool Step(const Control& control, const Measurement& measurement) {
-    if (!valid_ || !IsModelUsable() ||
-        !mr::component::math::matrix::is_finite(control) ||
+    if (!valid_ || !IsModelUsable() || !mr::component::math::matrix::is_finite(control) ||
         !mr::component::math::matrix::is_finite(measurement)) {
       valid_ = false;
       return false;
     }
 
     const Measurement innovation = measurement - config_.C * x_;
-    const State next_state = config_.A * x_ + config_.B * control +
-                             config_.L * innovation;
+    const State next_state = config_.A * x_ + config_.B * control + config_.L * innovation;
     if (!IsUsable(innovation) || !IsUsable(next_state)) {
       valid_ = false;
       return false;

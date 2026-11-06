@@ -88,14 +88,12 @@ template <typename PriorityRule>
 Priority EvalPriority(PriorityRule& rule, const Context& ctx) {
   if constexpr (std::is_same_v<std::decay_t<PriorityRule>, Priority>) {
     return rule;
-  } else if constexpr (std::is_invocable_r_v<Priority, PriorityRule&,
-                                             const Context&>) {
+  } else if constexpr (std::is_invocable_r_v<Priority, PriorityRule&, const Context&>) {
     return rule(ctx);
   } else if constexpr (std::is_invocable_r_v<Priority, PriorityRule&>) {
     return rule();
   } else {
-    static_assert(AlwaysFalse<PriorityRule>::value,
-                  "priority rule must return cmd::Priority");
+    static_assert(AlwaysFalse<PriorityRule>::value, "priority rule must return cmd::Priority");
   }
 }
 
@@ -133,8 +131,7 @@ struct PopBack<T> {
 
 template <typename T, typename U, typename... Ts>
 struct PopBack<T, U, Ts...> {
-  using type = typename PrependType<
-      T, typename PopBack<U, Ts...>::type>::type;
+  using type = typename PrependType<T, typename PopBack<U, Ts...>::type>::type;
 };
 
 template <typename Pack>
@@ -146,8 +143,8 @@ struct RouteInputPack<TypePack<Inputs...>> {
   static bool Build(Route& route, Context& ctx, Cmd& out);
 };
 
-template <typename Builder, typename Condition, typename PriorityRule,
-          bool Locked, typename... Inputs>
+template <typename Builder, typename Condition, typename PriorityRule, bool Locked,
+          typename... Inputs>
 struct RouteSpec {
   Builder builder{};
   Condition condition{};
@@ -192,22 +189,21 @@ template <typename T, typename = void>
 struct HasUpdate : std::false_type {};
 
 template <typename T>
-struct HasUpdate<T, std::void_t<decltype(std::declval<T&>().update(
-                        std::declval<Context&>()))>> : std::true_type {};
+struct HasUpdate<T, std::void_t<decltype(std::declval<T&>().update(std::declval<Context&>()))>>
+    : std::true_type {};
 
 template <typename T, typename = void>
 struct HasOnline : std::false_type {};
 
 template <typename T>
-struct HasOnline<T, std::void_t<decltype(std::declval<const T&>().online())>>
-    : std::true_type {};
+struct HasOnline<T, std::void_t<decltype(std::declval<const T&>().online())>> : std::true_type {};
 
 template <typename T, typename Cmd, typename = void>
 struct HasPublish : std::false_type {};
 
 template <typename T, typename Cmd>
-struct HasPublish<T, Cmd, std::void_t<decltype(std::declval<T&>()(
-                             std::declval<const Cmd&>()))>> : std::true_type {};
+struct HasPublish<T, Cmd, std::void_t<decltype(std::declval<T&>()(std::declval<const Cmd&>()))>>
+    : std::true_type {};
 
 template <typename Builder, typename... Inputs>
 auto MakeRouteSpec(TypePack<Inputs...>) {
@@ -302,8 +298,7 @@ template <typename Input>
 class InputSlot final : public IInputSlot {
  public:
   template <typename... Args>
-  InputSlot(const char* input_name, Args&&... args)
-      : input_(std::forward<Args>(args)...) {
+  InputSlot(const char* input_name, Args&&... args) : input_(std::forward<Args>(args)...) {
     name = input_name;
     type = TypeKey<Input>::id();
   }
@@ -327,7 +322,10 @@ class InputSlot final : public IInputSlot {
 
   void* raw() override { return &input_; }
   bool timestamp(uint32_t* out) const override {
-    if constexpr (HasTimestamp<Input>::value) { *out = input_.timestamp_ms(); return true; }
+    if constexpr (HasTimestamp<Input>::value) {
+      *out = input_.timestamp_ms();
+      return true;
+    }
     return false;
   }
 
@@ -346,11 +344,10 @@ struct IRoute {
 template <typename Cmd, typename Spec>
 class RouteModel;
 
-template <typename Cmd, typename Builder, typename Condition,
-          typename PriorityRule, bool Locked, typename... Inputs>
-class RouteModel<Cmd,
-                 RouteSpec<Builder, Condition, PriorityRule, Locked,
-                           Inputs...>> final : public IRoute<Cmd> {
+template <typename Cmd, typename Builder, typename Condition, typename PriorityRule, bool Locked,
+          typename... Inputs>
+class RouteModel<Cmd, RouteSpec<Builder, Condition, PriorityRule, Locked, Inputs...>> final
+    : public IRoute<Cmd> {
  public:
   using Spec = RouteSpec<Builder, Condition, PriorityRule, Locked, Inputs...>;
 
@@ -380,9 +377,15 @@ class RouteModel<Cmd,
     auto collect = [&](auto* input) {
       using Input = std::remove_pointer_t<decltype(input)>;
       uint32_t stamp = 0;
-      if (!ctx.input_timestamp<Input>(&stamp)) { candidate.timestamp_valid = false; return; }
+      if (!ctx.input_timestamp<Input>(&stamp)) {
+        candidate.timestamp_valid = false;
+        return;
+      }
       const uint32_t age = ctx.now_ms() - stamp;
-      if (age > INT32_MAX) { candidate.timestamp_valid = false; return; }
+      if (age > INT32_MAX) {
+        candidate.timestamp_valid = false;
+        return;
+      }
       if (age > candidate.age_ms) candidate.age_ms = age;
     };
     (collect(static_cast<Inputs*>(nullptr)), ...);
@@ -396,8 +399,7 @@ class RouteModel<Cmd,
       return false;
     }
 
-    if constexpr (std::is_invocable_v<Builder&, const Inputs&..., Context&,
-                                      Cmd&>) {
+    if constexpr (std::is_invocable_v<Builder&, const Inputs&..., Context&, Cmd&>) {
       return InvokeBoolOrVoid(spec_.builder, *inputs..., ctx, out);
     } else if constexpr (std::is_invocable_v<Builder&, const Inputs&..., Cmd&>) {
       return InvokeBoolOrVoid(spec_.builder, *inputs..., out);
@@ -473,8 +475,7 @@ class SafetyRuleModel final : public ISafetyRule {
     } else if constexpr (std::is_invocable_r_v<bool, Rule&>) {
       return rule_();
     } else {
-      static_assert(AlwaysFalse<Rule>::value,
-                    "safety rule must return bool");
+      static_assert(AlwaysFalse<Rule>::value, "safety rule must return bool");
     }
   }
 
@@ -485,9 +486,7 @@ class SafetyRuleModel final : public ISafetyRule {
 template <typename Cmd, typename Sink, size_t MaxRoutesPerOutput>
 class OutputSlot final : public IOutputSlot {
  public:
-  OutputSlot(const char* output_name, Sink sink) : sink_(sink) {
-    name = output_name;
-  }
+  OutputSlot(const char* output_name, Sink sink) : sink_(sink) { name = output_name; }
 
   bool can_add_route() const { return route_count_ < MaxRoutesPerOutput; }
 
@@ -501,9 +500,7 @@ class OutputSlot final : public IOutputSlot {
 
   void set_safe(ISafe<Cmd>* safe) { safe_ = safe; }
   void set_hold(ISafe<Cmd>* hold) { hold_ = hold; }
-  void set_arbitration(HighestPriority arbitration) {
-    arbitration_ = arbitration;
-  }
+  void set_arbitration(HighestPriority arbitration) { arbitration_ = arbitration; }
 
   const Cmd& command() const { return command_; }
 
@@ -537,8 +534,7 @@ class OutputSlot final : public IOutputSlot {
       }
     }
 
-    if (winner.valid && !(conflict &&
-                          arbitration_.tie_break == TieBreak::RejectConflict)) {
+    if (winner.valid && !(conflict && arbitration_.tie_break == TieBreak::RejectConflict)) {
       command_ = winner.command;
       last_command_ = command_;
       last_winner_sequence_ = winner.sequence;
@@ -583,17 +579,14 @@ class OutputSlot final : public IOutputSlot {
   }
 
  private:
-  int Compare(const Candidate<Cmd>& candidate,
-              const Candidate<Cmd>& winner) const {
+  int Compare(const Candidate<Cmd>& candidate, const Candidate<Cmd>& winner) const {
     if (!winner.valid) {
       return 1;
     }
-    if (static_cast<uint8_t>(candidate.priority) >
-        static_cast<uint8_t>(winner.priority)) {
+    if (static_cast<uint8_t>(candidate.priority) > static_cast<uint8_t>(winner.priority)) {
       return 1;
     }
-    if (static_cast<uint8_t>(candidate.priority) <
-        static_cast<uint8_t>(winner.priority)) {
+    if (static_cast<uint8_t>(candidate.priority) < static_cast<uint8_t>(winner.priority)) {
       return -1;
     }
 
@@ -633,8 +626,8 @@ class OutputSlot final : public IOutputSlot {
 }  // namespace detail
 
 template <size_t MaxInputs = 8, size_t MaxOutputs = 8, size_t MaxRoutes = 32,
-          size_t MaxRoutesPerOutput = 8, size_t InputBytes = 64,
-          size_t OutputBytes = 256, size_t RouteBytes = 128>
+          size_t MaxRoutesPerOutput = 8, size_t InputBytes = 64, size_t OutputBytes = 256,
+          size_t RouteBytes = 128>
 class Center {
  public:
   static_assert(MaxInputs && MaxOutputs && MaxRoutes && MaxRoutesPerOutput,
@@ -644,7 +637,10 @@ class Center {
   Center(Center&&) = delete;
   Center& operator=(Center&&) = delete;
   ~Center() {
-    while (destructor_count_) { auto& d = destructors_[--destructor_count_]; d.destroy(d.object); }
+    while (destructor_count_) {
+      auto& d = destructors_[--destructor_count_];
+      d.destroy(d.object);
+    }
   }
   Center() {
     context_.find_input_ = &Center::FindInputThunk;
@@ -662,12 +658,13 @@ class Center {
   template <typename Input, typename... Args>
   Center& input(const char* name, Args&&... args) {
     using Slot = detail::InputSlot<Input>;
-    static_assert(sizeof(Slot) <= InputBytes,
-                  "input slot too large; increase Center InputBytes");
-    static_assert(alignof(Slot) <= alignof(InputStorage),
-                  "input slot alignment too large");
+    static_assert(sizeof(Slot) <= InputBytes, "input slot too large; increase Center InputBytes");
+    static_assert(alignof(Slot) <= alignof(InputStorage), "input slot alignment too large");
     for (size_t i = 0; i < input_count_; ++i)
-      if (inputs_[i]->type == TypeKey<Input>::id()) { overflow_ = true; return *this; }
+      if (inputs_[i]->type == TypeKey<Input>::id()) {
+        overflow_ = true;
+        return *this;
+      }
     if (input_count_ >= MaxInputs) {
       overflow_ = true;
       return *this;
@@ -682,19 +679,24 @@ class Center {
   template <typename Cmd, typename Sink>
   class OutputRef {
    public:
-    OutputRef(Center& center,
-              detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>* output)
+    OutputRef(Center& center, detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>* output)
         : center_(center), output_(output) {}
 
     template <typename SafeBuilder>
     OutputRef& safe(SafeBuilder builder = SafeBuilder{}) {
-      if (output_) { auto* p = center_.template make_safe<Cmd>(builder); if (p) output_->set_safe(p); }
+      if (output_) {
+        auto* p = center_.template make_safe<Cmd>(builder);
+        if (p) output_->set_safe(p);
+      }
       return *this;
     }
 
     template <typename HoldBuilder>
     OutputRef& hold(HoldBuilder builder = HoldBuilder{}) {
-      if (output_) { auto* p = center_.template make_safe<Cmd>(builder); if (p) output_->set_hold(p); }
+      if (output_) {
+        auto* p = center_.template make_safe<Cmd>(builder);
+        if (p) output_->set_hold(p);
+      }
       return *this;
     }
 
@@ -724,7 +726,10 @@ class Center {
     template <typename RouteSpec>
     void add_route(RouteSpec spec) {
       if (!output_) return;
-      if (!output_->can_add_route()) { center_.overflow_ = true; return; }
+      if (!output_->can_add_route()) {
+        center_.overflow_ = true;
+        return;
+      }
       auto* route = center_.template make_route<Cmd>(spec);
       if (route == nullptr || !output_->add_route(route)) {
         center_.overflow_ = true;
@@ -740,8 +745,7 @@ class Center {
     using Slot = detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>;
     static_assert(sizeof(Slot) <= OutputBytes,
                   "output slot too large; increase Center OutputBytes");
-    static_assert(alignof(Slot) <= alignof(OutputStorage),
-                  "output slot alignment too large");
+    static_assert(alignof(Slot) <= alignof(OutputStorage), "output slot alignment too large");
     if (output_count_ >= MaxOutputs) {
       overflow_ = true;
       return OutputRef<Cmd, Sink>(*this, nullptr);
@@ -771,8 +775,7 @@ class Center {
 
   Center& tick(uint32_t now_ms) {
     const float dt_s =
-        last_now_ms_valid_ ? static_cast<float>(now_ms - last_now_ms_) * 0.001f
-                           : 0.0f;
+        last_now_ms_valid_ ? static_cast<float>(now_ms - last_now_ms_) * 0.001f : 0.0f;
     last_now_ms_ = now_ms;
     last_now_ms_valid_ = true;
     context_.set_time(now_ms, dt_s);
@@ -828,10 +831,8 @@ class Center {
   template <typename Cmd, typename RouteSpec>
   detail::IRoute<Cmd>* make_route(RouteSpec spec) {
     using Route = detail::RouteModel<Cmd, RouteSpec>;
-    static_assert(sizeof(Route) <= RouteBytes,
-                  "route slot too large; increase Center RouteBytes");
-    static_assert(alignof(Route) <= alignof(RouteStorage),
-                  "route slot alignment too large");
+    static_assert(sizeof(Route) <= RouteBytes, "route slot too large; increase Center RouteBytes");
+    static_assert(alignof(Route) <= alignof(RouteStorage), "route slot alignment too large");
     if (route_count_ >= MaxRoutes) {
       overflow_ = true;
       return nullptr;
@@ -847,8 +848,7 @@ class Center {
     using Model = detail::SafeModel<Cmd, Builder>;
     static_assert(sizeof(Model) <= RouteBytes,
                   "safe/hold slot too large; increase Center RouteBytes");
-    static_assert(alignof(Model) <= alignof(RouteStorage),
-                  "safe/hold slot alignment too large");
+    static_assert(alignof(Model) <= alignof(RouteStorage), "safe/hold slot alignment too large");
     if (route_count_ >= MaxRoutes) {
       overflow_ = true;
       return nullptr;
@@ -862,10 +862,8 @@ class Center {
   template <typename SafetyRule>
   void add_safety(SafetyRule rule) {
     using Model = detail::SafetyRuleModel<SafetyRule>;
-    static_assert(sizeof(Model) <= RouteBytes,
-                  "safety rule too large; increase Center RouteBytes");
-    static_assert(alignof(Model) <= alignof(RouteStorage),
-                  "safety rule alignment too large");
+    static_assert(sizeof(Model) <= RouteBytes, "safety rule too large; increase Center RouteBytes");
+    static_assert(alignof(Model) <= alignof(RouteStorage), "safety rule alignment too large");
     if (safety_count_ >= MaxRoutes || route_count_ >= MaxRoutes) {
       overflow_ = true;
       return;
@@ -889,8 +887,12 @@ class Center {
     return nullptr;
   }
 
-  struct Destructor { void* object; void (*destroy)(void*); };
-  template <typename T> void remember(T* object) {
+  struct Destructor {
+    void* object;
+    void (*destroy)(void*);
+  };
+  template <typename T>
+  void remember(T* object) {
     destructors_[destructor_count_++] = {object, [](void* p) { static_cast<T*>(p)->~T(); }};
   }
   Destructor destructors_[MaxInputs + MaxOutputs + MaxRoutes]{};

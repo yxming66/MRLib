@@ -23,7 +23,7 @@
  *   - cascade: 位置—速度串级控制器
  */
 
+#include "component/controller/cascade.hpp"
 #include "component/controller/controller_types.hpp"
 #include "component/controller/lqr.hpp"
-#include "component/controller/cascade.hpp"
 #include "component/controller/pid.hpp"

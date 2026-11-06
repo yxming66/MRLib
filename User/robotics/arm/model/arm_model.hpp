@@ -2,9 +2,9 @@
 
 #include <stdint.h>
 
+#include "../core/types.hpp"
 #include "component/math/matrix.hpp"
 #include "component/math/scalar.hpp"
-#include "../core/types.hpp"
 #include "joint_model.hpp"
 
 namespace mr::robotics::arm {
@@ -22,10 +22,8 @@ class ArmModel {
     gravity_world_[2][0] = -9.81f;
   }
 
-  ArmModel(const JointModel (&joints)[DoF],
-           const Transform& base_to_world,
-           const Transform& tool_to_last_joint,
-           const Vec3& gravity_world)
+  ArmModel(const JointModel (&joints)[DoF], const Transform& base_to_world,
+           const Transform& tool_to_last_joint, const Vec3& gravity_world)
       : joints_(),
         base_to_world_(base_to_world),
         tool_to_last_joint_(tool_to_last_joint),
@@ -36,8 +34,7 @@ class ArmModel {
   }
 
   bool Validate() const {
-    if (!IsTransformValid(base_to_world_) ||
-        !IsTransformValid(tool_to_last_joint_) ||
+    if (!IsTransformValid(base_to_world_) || !IsTransformValid(tool_to_last_joint_) ||
         !mr::component::math::matrix::is_finite(gravity_world_)) {
       return false;
     }
@@ -49,25 +46,17 @@ class ArmModel {
     return true;
   }
 
-  bool IsValidIndex(int index) const {
-    return index >= 0 && index < DoF;
-  }
+  bool IsValidIndex(int index) const { return index >= 0 && index < DoF; }
 
-  const JointModel& Joint(int index) const {
-    return joints_[index];
-  }
+  const JointModel& Joint(int index) const { return joints_[index]; }
 
-  const Transform& BaseTransform() const {
-    return base_to_world_;
-  }
+  // T_world_base; transforms base coordinates into world coordinates.
+  const Transform& BaseTransform() const { return base_to_world_; }
 
-  const Transform& ToolTransform() const {
-    return tool_to_last_joint_;
-  }
+  // T_last_tool; transforms tool coordinates into the last link frame.
+  const Transform& ToolTransform() const { return tool_to_last_joint_; }
 
-  const Vec3& Gravity() const {
-    return gravity_world_;
-  }
+  const Vec3& Gravity() const { return gravity_world_; }
 
  private:
   JointModel joints_[DoF];

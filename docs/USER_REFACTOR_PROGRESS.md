@@ -481,3 +481,15 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 5. mpc.hpp/类型改名 cascade.hpp/cascade，准确表达位置—速度串级 P 控制；检查参数、dt 与溢出，失败不推进速度参考。LQR 明确接收外部离线增益，补齐增益、调度、输出限幅参数和计算结果检查。
 
 验证：24 项 CTest 全部通过。新增测试覆盖命令容量/不同输出类型溢出、失败引用、实际时间戳与回绕、offline、析构、发送失败、串级斜率和 LQR 溢出；存储测试覆盖反复环回/完整记录、LatestSlot 重置和序号回绕、PRIMASK 保留、CMSIS 队列尺寸和错误。CMSIS 主机 stub 只验证调用契约，实际并发仍需 Cortex-M 运行验收。
+
+## 第三十三批：几何有效性、机械臂流式约束与最终验证（2026-11-06）
+
+1. 公共 IsRotationValid/IsTransformValid 检查有限性、旋转正交、det≈+1 与齐次末行，模型、规划和 IK 统一使用。新增旋转/变换 Try* API，失败可检查并清零输出；值返回旋转便利函数不再用单位旋转掩盖非法输入，而是传播 NaN。四元数/轴归一化使用稳健范数，修正接近 π 的轴角符号与 RPY 万向锁恢复。
+2. 将平移+旋转向量打包准确命名 PoseCoordinates6；旧 TwistFromTransform/TransformFromTwist 保留 deprecated 包装，未改变插值成 SE(3) exp/log。CartesianPlanner 返回 world 坐标下工具原点线速度与角速度，修复旋转起点时速度仍在局部坐标的问题。
+3. FK 检查中间变换及溢出，值返回失败传播 NaN；TryForwardKinematics 失败清零。补充 TryComputeJacobian，禁止失败伪装为有效零雅可比；惯量半正定验证复用稳定检查。明确 T_world_base/T_last_tool、混合移动/转动关节单位、IK task_weights 和模型借用生命周期。
+4. ArmController 默认关闭完整位姿到仅位置 IK 降级，显式开启后报告 position_only_fallback 和首次 primary_ik_status；首次求解失败也保留诊断。流式 IK 目标经逐关节速度/加速度受限跟踪，按真实速度差输出加速度，Reset 以反馈速度建立基准。位置限位冲突直接报告失败，不静默裁剪流式位置。未初始化时失败禁止输出伪造保持位置；失败清除旧计划，避免恢复时使用过期计划时间。
+5. 在线轨迹量化后仍检查 a*dt 预算，删除与该预算冲突且不再需要的 velocity_epsilon_floor 参数。CMSIS sink 默认不 reset 队列，显式 reset 仅适合独占生产者任务；补充迁移文档并统一本次涉及代码的格式。
+
+最终验证：完整目标从修改后的源重新编译，25 项 CTest 全部通过；CLI/Schema 一致性通过。新增几何回归验证反射/缩放拒绝、巨大四元数归一化、接近零/π 轴角、万向锁、位姿坐标往返、旋转起点速度数值微分、IK 显式降级和流式目标反向时速度/加速度一致性。独立编译检查完整实例化 KF/EKF、多轴 S 曲线、LQR、命令路由和 ArmController<2/3/6>；该文件及 rotation.cpp/transform.cpp、使用实际 CMSIS 头的两份 C 容器源通过严格 Cortex-M7、C11/C++17 编译。
+
+本次第 3 项（基础组件与 robotics 正确性）的代码、接口和回归已完成。边界：故障保持/停机不承诺连续加速度的物理制动；非流式重规划仍为静止到静止，运动中换目标需应用先制动；笛卡尔插值上限不等于数值 IK 后的关节导数保证。估计器栈预算、实时性能、完整固件链接及硬件验收尚需目标工程验证。MRLink/BSP 后续收敛、YAML 自动装配和外部工程迁移不在本次完成范围；未修改外部 zzrobot/RC_02。
