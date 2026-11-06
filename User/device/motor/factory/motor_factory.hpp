@@ -5,7 +5,7 @@
  *
  * 快速用法：
  *   MotorInstanceConfig<MotorKind::RM> config{};
- *   config.can = BSP_CAN_1; config.id = 1;
+ *   config.can = BSP_CAN_1; config.id = 0x201;  // RM feedback CAN ID
  *   auto* motor = MotorFactory::Create<MotorKind::RM, MotorModel::M3508>(config);
  *   motor->Register();
  *

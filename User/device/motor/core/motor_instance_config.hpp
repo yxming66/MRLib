@@ -20,6 +20,8 @@ struct MotorInstanceConfig;
 template <>
 struct MotorInstanceConfig<MotorKind::RM> {
     BSP_CAN_t can = BSP_CAN_1;
+    // RM feedback CAN identifier (M2006/M3508: 0x201-0x208;
+    // GM6020: 0x205-0x20b). The command group/slot is derived with the model.
     uint16_t id = 0;
     bool reverse = false;
 

@@ -45,12 +45,17 @@ struct MotorControllerConfig {
     // 输出力矩的一阶低通截止频率 Hz。<=0 时禁用输出滤波。
     float output_lowpass_cutoff_hz;
 
+    // 控制周期使用的单调微秒时钟。为空时不读取硬件时钟，使用 sample_freq
+    // 推导的固定周期；板级工程应显式注入自己的 BSP 时钟。
+    mr::comp::ClockUsFn clock_us;
+
         constexpr MotorControllerConfig()
                 : velocity_pid(nullptr),
                     position_pid(nullptr),
                     sample_freq(0.0f),
                     feedback_lowpass_cutoff_hz(0.0f),
-                    output_lowpass_cutoff_hz(0.0f) {}
+                    output_lowpass_cutoff_hz(0.0f),
+                    clock_us(nullptr) {}
 
         constexpr MotorControllerConfig(const KPID_Params_t* velocity,
                                                                         const KPID_Params_t* position,
@@ -61,7 +66,8 @@ struct MotorControllerConfig {
                     position_pid(position),
                     sample_freq(sample),
                     feedback_lowpass_cutoff_hz(feedback_cutoff),
-                    output_lowpass_cutoff_hz(output_cutoff) {}
+                    output_lowpass_cutoff_hz(output_cutoff),
+                    clock_us(nullptr) {}
 
         constexpr MotorControllerConfig(const KPID_Params_t* velocity,
                                                                         const KPID_Params_t* position,
@@ -71,7 +77,20 @@ struct MotorControllerConfig {
                                                                         float feedback_cutoff,
                                                                         float output_cutoff)
                 : MotorControllerConfig(velocity, position, sample, feedback_cutoff,
-                                                                output_cutoff) {}
+                                        output_cutoff) {}
+
+        constexpr MotorControllerConfig(const KPID_Params_t* velocity,
+                                         const KPID_Params_t* position,
+                                         float sample,
+                                         float feedback_cutoff,
+                                         float output_cutoff,
+                                         mr::comp::ClockUsFn clock)
+                : velocity_pid(velocity),
+                  position_pid(position),
+                  sample_freq(sample),
+                  feedback_lowpass_cutoff_hz(feedback_cutoff),
+                  output_lowpass_cutoff_hz(output_cutoff),
+                  clock_us(clock) {}
 };
 
 template <typename MotorType>

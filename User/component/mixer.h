@@ -8,7 +8,15 @@
 extern "C" {
 #endif
 
-#include "user_math.h"
+#include <stddef.h>
+#include <stdint.h>
+
+/* Legacy mixer input; kept here until the mixer is migrated to robotics. */
+typedef struct {
+  float vx;
+  float vy;
+  float wz;
+} MoveVector_t;
 
 /* USER INCLUDE BEGIN */
 

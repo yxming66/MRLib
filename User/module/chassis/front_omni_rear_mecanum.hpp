@@ -10,6 +10,7 @@
 #include "debug_config.h"
 #include "device/wheel/wheel.hpp"
 #include "module/chassis.h"
+#include "component/mixer.h"
 #include "robotics/chassis/front_omni_rear_mecanum_chassis.hpp"
 
 namespace mr::module::chassis {

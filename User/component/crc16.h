@@ -6,7 +6,8 @@ extern "C" {
 
 #include <stdbool.h>
 
-#include "user_math.h"
+#include <stddef.h>
+#include <stdint.h>
 
 /* USER INCLUDE BEGIN */
 

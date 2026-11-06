@@ -36,6 +36,8 @@ struct MotorState {
     float position_max_delta_rad = 0.0f;
     uint32_t feedback_lost_count = 0;
     uint32_t last_feedback_tick = 0;
+    uint32_t feedback_sequence = 0;
+    bool feedback_valid = false;
     float velocity_rad_s = 0.0f;
     // 统一为输出端力矩，单位 N*m。
     float torque_nm = 0.0f;

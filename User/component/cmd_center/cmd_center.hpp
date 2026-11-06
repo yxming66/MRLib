@@ -209,6 +209,11 @@ template <typename T, typename Cmd>
 struct HasPublish<T, Cmd, std::void_t<decltype(std::declval<T&>()(
                              std::declval<const Cmd&>()))>> : std::true_type {};
 
+template <typename Builder, typename... Inputs>
+auto MakeRouteSpec(TypePack<Inputs...>) {
+  return RouteSpec<Builder, DefaultCondition, FixedPriority, false, Inputs...>{};
+}
+
 }  // namespace detail
 
 template <typename... InputAndBuilder>
@@ -217,10 +222,7 @@ auto from() {
                 "from<...>() expects at least one input type and one builder");
   using Builder = detail::LastTypeT<InputAndBuilder...>;
   using Inputs = typename detail::PopBack<InputAndBuilder...>::type;
-  return []<typename... InputTypes>(detail::TypePack<InputTypes...>) {
-    return detail::RouteSpec<Builder, detail::DefaultCondition,
-                             detail::FixedPriority, false, InputTypes...>{};
-  }(Inputs{});
+  return detail::MakeRouteSpec<Builder>(Inputs{});
 }
 
 template <typename Cmd>

@@ -1,5 +1,7 @@
 #include "device/motor/packages/soft_limit_learning/soft_limit_learning.hpp"
 
+#include "bsp/time.h"
+
 #include "component/math/range_limits.hpp"
 #include "component/math/scalar.hpp"
 
@@ -83,6 +85,7 @@ mr::component::math::RangeLimits<1> BuildRangeLimits(float lower_rad,
 
 mr::comp::timer::Config BuildObserveTimerConfig(float seek_timeout_s) {
     mr::comp::timer::Config timer_config{};
+    timer_config.clock_us = BSP_TIME_Get_us;
     if (seek_timeout_s > 0.0f) {
         timer_config.max_dt_us = mr::comp::timer::SecondsToUs(seek_timeout_s);
     }

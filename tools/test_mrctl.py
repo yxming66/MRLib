@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
-import tempfile
 import unittest
 
 
@@ -17,11 +17,35 @@ MRCTL = ROOT / "tools" / "mrctl.py"
 
 class ProjectCliTests(unittest.TestCase):
     def setUp(self) -> None:
-        (ROOT / "build").mkdir(exist_ok=True)
-        self.temp = tempfile.TemporaryDirectory(prefix="mrctl-test-", dir=ROOT / "build")
-        self.addCleanup(self.temp.cleanup)
-        self.project = Path(self.temp.name) / "robot"
+        self.test_workspace = ROOT / "build" / "mrctl-tests" / self._testMethodName
+        if self.test_workspace.exists():
+            shutil.rmtree(self.test_workspace)
+        self.test_workspace.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.test_workspace, True)
+        self.project = self.test_workspace / "robot"
         self.library = Path(os.path.relpath(ROOT, self.project)).as_posix()
+        build_root = Path(
+            os.environ.get("MR_TESTLIB_TEST_BUILD_ROOT", ROOT / "build" / "mrctl-builds")
+        )
+        # Keep generated object paths short enough for Windows toolchains.
+        test_id = {
+            "test_host_project_compiles_only_selected_public_headers": "headers",
+            "test_init_never_overwrites_existing_application_files": "init",
+            "test_only_selected_target_dependencies_are_built": "deps",
+            "test_target_schema_matches_the_cli": "schema",
+            "test_unknown_targets_are_rejected": "unknown",
+        }[self._testMethodName]
+        self.build = build_root.resolve() / test_id
+        if self.build.exists():
+            shutil.rmtree(self.build)
+        self.build.mkdir(parents=True)
+        self.addCleanup(shutil.rmtree, self.build, True)
+
+    def configure_project(self) -> subprocess.CompletedProcess[str]:
+        return self.invoke("configure", str(self.project), "--build-dir", str(self.build))
+
+    def build_project(self) -> subprocess.CompletedProcess[str]:
+        return self.invoke("build", str(self.project), "--build-dir", str(self.build))
 
     def invoke(self, *arguments: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
@@ -45,21 +69,21 @@ class ProjectCliTests(unittest.TestCase):
             "--library",
             self.library,
             "--targets",
-            "mr_robotics_arm,mr_module_chassis,mr_component_math,"
-            "mr_component_filter,mr_component_controller,mr_component_trajectory,"
-            "mr_robotics_core,mr_robotics_chassis,mr_device_wheel_interface",
+            "mr_robotics_arm,mr_module_chassis",
         )
 
     def test_host_project_compiles_only_selected_public_headers(self) -> None:
         self.init()
-        build = self.project / "build"
-        self.invoke("configure", str(self.project))
-        probe = build / "mrctl_compile_check.cpp"
+        configured = self.configure_project()
+        self.assertIn("resolved dependencies:", configured.stdout)
+        self.assertIn("mr_component_math", configured.stdout)
+        probe = self.build / "mrctl_compile_check.cpp"
         selected_headers = probe.read_text(encoding="utf-8")
         self.assertIn('#include "robotics/arm/arm.hpp"', selected_headers)
         self.assertIn('#include "module/chassis/chassis.hpp"', selected_headers)
         self.assertIn('#include "component/filter/filter.hpp"', selected_headers)
-        self.invoke("build", str(self.project))
+        self.assertIn('#include "component/math/scalar.hpp"', selected_headers)
+        self.build_project()
 
         # Changing selection updates the build-only probe without touching app files.
         (self.project / "project.yaml").write_text(
@@ -68,16 +92,36 @@ class ProjectCliTests(unittest.TestCase):
             "  targets:\n    - mr_component_filter\n",
             encoding="utf-8",
         )
-        self.invoke("configure", str(self.project))
+        self.configure_project()
         self.assertEqual(
             probe.read_text(encoding="utf-8"),
+            '#include "component/math/scalar.hpp"\n'
             '#include "component/filter/filter.hpp"\n'
             "void mr_project_selected_headers_compile_check() {}\n",
         )
-        self.invoke("build", str(self.project))
-        cache = (build / "CMakeCache.txt").read_text(encoding="utf-8")
+        self.build_project()
+        cache = (self.build / "CMakeCache.txt").read_text(encoding="utf-8")
         self.assertIn("MR_TESTLIB_PROJECT_TARGETS:STRING=mr::component_filter", cache)
         self.assertTrue((self.project / "src" / "main.cpp").is_file())
+
+    def test_only_selected_target_dependencies_are_built(self) -> None:
+        self.invoke(
+            "init",
+            str(self.project),
+            "--name",
+            "robot_filter_only",
+            "--library",
+            self.library,
+            "--targets",
+            "mr_component_filter",
+        )
+        self.configure_project()
+        probe = (self.build / "mrctl_compile_check.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "component/math/scalar.hpp"', probe)
+        self.assertIn('#include "component/filter/filter.hpp"', probe)
+        self.build_project()
+        self.assertFalse(list(self.build.rglob("libmr_robotics_core.a")))
+        self.assertFalse(list(self.build.rglob("mr_robotics_core.lib")))
 
     def test_target_schema_matches_the_cli(self) -> None:
         import importlib.util
@@ -89,7 +133,18 @@ class ProjectCliTests(unittest.TestCase):
         specification.loader.exec_module(module)
         schema = json.loads((ROOT / "docs" / "project.schema.json").read_text())
         enum = schema["properties"]["project"]["properties"]["targets"]["items"]["enum"]
-        self.assertEqual(set(enum), set(module.TARGET_HEADERS))
+        self.assertEqual(set(enum), set(module.TARGET_CATALOG))
+        self.assertEqual(
+            module.resolve_targets(["mr_module_chassis"]),
+            [
+                "mr_component_math",
+                "mr_robotics_chassis",
+                "mr_component_filter",
+                "mr_component_controller",
+                "mr_device_wheel_interface",
+                "mr_module_chassis",
+            ],
+        )
 
     def test_init_never_overwrites_existing_application_files(self) -> None:
         (self.project / "src").mkdir(parents=True)

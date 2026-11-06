@@ -7,7 +7,7 @@ extern "C" {
 /* Includes ----------------------------------------------------------------- */
 #include <cmsis_os2.h>
 
-#include "component/user_math.h"
+#include "cmsis_compiler.h"
 #include "device.h"
 
 /* USER INCLUDE BEGIN */
@@ -21,7 +21,7 @@ extern "C" {
 /* Exported constants ------------------------------------------------------- */
 /* Exported macro ----------------------------------------------------------- */
 /* Exported types ----------------------------------------------------------- */
-typedef struct __packed {
+typedef struct __PACKED {
   uint16_t ch_r_x : 11;
   uint16_t ch_r_y : 11;
   uint16_t ch_l_x : 11;

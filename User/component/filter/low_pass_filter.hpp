@@ -1,31 +1,5 @@
 #pragma once
 
-// 低通滤波器接口。使用方式：用采样频率和截止频率 Build，随后每个周期调用
-// Update(raw_value) 获取滤波结果。
-
-/*
- * 二阶低通滤波器。
- *
- * 用于滤除高频噪声，同时保留低频运动趋势：
- *
- *   auto filter = mr::comp::filter::low_pass::Build(
- *       30.0f,    // 截止频率 Hz
- *       1000.0f   // 采样频率 Hz
- *   );
- *
- *   filter.Reset(initial_value);
- *   float y = filter.Update(sample);
- *
- * 如果循环周期不固定，每次更新时传入本次实际间隔 dt_s，单位为秒：
- *
- *   float y = filter.Update(sample, dt_s);
- *
- * cutoff_freq_hz <= 0 或 cutoff_freq_hz >= 奈奎斯特频率时，滤波器旁路，
- * 直接返回输入值。
- */
-
-#include <cmath>
-
 #include "component/filter/filter_types.hpp"
 
 namespace mr::comp::filter {
@@ -35,96 +9,72 @@ struct low_pass_config {
   Scalar cutoff_freq_hz = 0.0f;
 };
 
+/* Fixed Update uses the configured frequency. Update(sample, dt) retunes only
+ * when the effective frequency changes; fixed/variable calls may be mixed.
+ * Configure resets the state; setters retain it. Call Reset to seed the signal.
+ * Invalid configuration bypasses and reports MR_FILTER_INVALID; intentional
+ * disabled frequencies report MR_FILTER_DISABLED. Check status after retuning.
+ */
 class low_pass {
  public:
   using Config = low_pass_config;
-
   static low_pass Build(const Config& config) { return low_pass(config); }
-
   static low_pass Build(Scalar cutoff_freq_hz,
-                        Scalar sample_freq_hz = kDefaultSampleFreqHz) {
+                          Scalar sample_freq_hz = kDefaultSampleFreqHz) {
     Config config{};
     config.cutoff_freq_hz = cutoff_freq_hz;
     config.sample_freq_hz = sample_freq_hz;
     return low_pass(config);
   }
-
   low_pass() { Configure(Config{}); }
   explicit low_pass(const Config& config) { Configure(config); }
-
-  void Configure(const Config& config) {
+  bool Configure(const Config& config) {
     config_ = config;
-    coeff_ = MakeCoefficients(config_.cutoff_freq_hz, config_.sample_freq_hz);
     state_ = {};
+    return Reconfigure();
   }
-
-  void SetCutoff(Scalar cutoff_freq_hz) {
+  bool SetCutoff(Scalar cutoff_freq_hz) {
     config_.cutoff_freq_hz = cutoff_freq_hz;
-    coeff_ = MakeCoefficients(config_.cutoff_freq_hz, config_.sample_freq_hz);
+    return Reconfigure();
   }
-
-  void SetSampleFreq(Scalar sample_freq_hz) {
+  bool SetSampleFreq(Scalar sample_freq_hz) {
     config_.sample_freq_hz = sample_freq_hz;
-    coeff_ = MakeCoefficients(config_.cutoff_freq_hz, config_.sample_freq_hz);
+    return Reconfigure();
   }
-
   void Reset(Scalar output = 0.0f) { state_.Reset(coeff_, output); }
-
-  Scalar Update(Scalar sample) { return state_.Update(coeff_, sample); }
-
-  Scalar Update(Scalar sample, Scalar dt_s) {
-    const Scalar sample_freq_hz =
-        sample_freq_from_dt(dt_s, config_.sample_freq_hz);
-    const detail::biquad_coefficients coeff =
-        MakeCoefficients(config_.cutoff_freq_hz, sample_freq_hz);
-    return state_.Update(coeff, sample);
+  Scalar Update(Scalar sample) {
+    UseFrequency(config_.sample_freq_hz);
+    return state_.Update(coeff_, sample);
   }
-
+  Scalar Update(Scalar sample, Scalar dt_s) {
+    if (!is_usable_scalar(dt_s) || dt_s <= 0.0f) return state_.output();
+    UseFrequency(1.0f / dt_s);
+    return state_.Update(coeff_, sample);
+  }
   Scalar Apply(Scalar sample) { return Update(sample); }
   Scalar Apply(Scalar sample, Scalar dt_s) { return Update(sample, dt_s); }
-
   const Config& config() const { return config_; }
   Scalar output() const { return state_.output(); }
   bool bypassed() const { return coeff_.bypass; }
+  bool valid() const { return status_ != MR_FILTER_INVALID; }
+  MrFilterStatus status() const { return status_; }
 
  private:
-  static detail::biquad_coefficients MakeCoefficients(Scalar cutoff_freq_hz,
-                                                       Scalar sample_freq_hz) {
-    detail::biquad_coefficients coeff{};
-    sample_freq_hz = detail::sanitize_sample_freq(sample_freq_hz);
-    if (!detail::enabled_frequency(cutoff_freq_hz)) {
-      return coeff;
-    }
-
-    const Scalar nyquist = detail::nyquist_frequency(sample_freq_hz);
-    if (cutoff_freq_hz >= nyquist) {
-      return coeff;
-    }
-
-    const Scalar omega =
-        tanf(mr::component::math::kPi * cutoff_freq_hz / sample_freq_hz);
-    if (!is_usable_scalar(omega)) {
-      return coeff;
-    }
-
-    const Scalar omega_sq = mr::component::math::square_scalar(omega);
-    constexpr Scalar kSqrt2 = 1.41421356237309504880f;
-    const Scalar normalizer = 1.0f / (1.0f + kSqrt2 * omega + omega_sq);
-    if (!is_usable_scalar(normalizer)) {
-      return coeff;
-    }
-
-    coeff.b0 = omega_sq * normalizer;
-    coeff.b1 = 2.0f * coeff.b0;
-    coeff.b2 = coeff.b0;
-    coeff.a1 = 2.0f * (omega_sq - 1.0f) * normalizer;
-    coeff.a2 = (1.0f - kSqrt2 * omega + omega_sq) * normalizer;
-    coeff.bypass = false;
-    return coeff;
+  bool Reconfigure() {
+    Retune(config_.sample_freq_hz);
+    return valid();
   }
-
+  void UseFrequency(Scalar sample_freq_hz) {
+    if (sample_freq_hz != active_sample_freq_hz_) Retune(sample_freq_hz);
+  }
+  void Retune(Scalar sample_freq_hz) {
+    active_sample_freq_hz_ = sample_freq_hz;
+    status_ = MrBiquad_LowPass(&coeff_, sample_freq_hz, config_.cutoff_freq_hz);
+  }
   Config config_{};
-  detail::biquad_coefficients coeff_{};
+  Scalar active_sample_freq_hz_ = 0.0f;
+  MrFilterStatus status_ = MR_FILTER_INVALID;
+  detail::biquad_coefficients coeff_ = MrBiquad_Bypass();
   detail::biquad_state state_{};
 };
 

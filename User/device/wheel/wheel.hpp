@@ -5,7 +5,7 @@
  *
  * 快速用法：
  *   RmM3508WheelConfig config{};
- *   config.motor_param.can = BSP_CAN_1; config.motor_param.id = 1;
+ *   config.motor_param.can = BSP_CAN_1; config.motor_param.id = 0x201;
  *   config.radius_m = 0.076f;
  *   RmM3508Wheel wheel(config); wheel.Register();
  *
@@ -36,6 +36,8 @@ struct WheelState {
   bool temperature_over_limit = false;
   bool temperature_limit_latched = false;
   bool online = false;
+  uint32_t feedback_timestamp_ms = 0U;
+  uint32_t feedback_sequence = 0U;
 };
 
 struct RmM3508WheelConfig {

@@ -13,17 +13,158 @@ import sys
 from typing import Any
 
 
-TARGET_HEADERS = {
-    "mr_component_math": "component/math/scalar.hpp",
-    "mr_component_filter": "component/filter/filter.hpp",
-    "mr_component_controller": "component/controller/controller.hpp",
-    "mr_component_trajectory": "component/trajectory/trajectory_types.hpp",
-    "mr_robotics_core": "robotics/core/rotation.hpp",
-    "mr_robotics_chassis": "robotics/chassis/chassis_kinematics.hpp",
-    "mr_device_wheel_interface": "device/wheel/wheel_interface.hpp",
-    "mr_module_chassis": "module/chassis/chassis.hpp",
-    "mr_robotics_arm": "robotics/arm/arm.hpp",
-}
+ROOT = Path(__file__).resolve().parents[1]
+TARGET_CATALOG_PATH = ROOT / "cmake" / "targets.json"
+
+
+def load_target_catalog() -> dict[str, dict[str, Any]]:
+    """Load and validate the public build catalog shared with CMake."""
+    try:
+        document = json.loads(TARGET_CATALOG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"unable to read target catalog {TARGET_CATALOG_PATH}: {error}") from error
+    if not isinstance(document, dict) or document.get("version") != 1:
+        raise RuntimeError("target catalog must be a version 1 JSON object")
+    entries = document.get("targets")
+    if not isinstance(entries, list) or not entries:
+        raise RuntimeError("target catalog must contain a non-empty 'targets' list")
+
+    catalog: dict[str, dict[str, Any]] = {}
+    aliases: set[str] = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise RuntimeError("each target catalog entry must be an object")
+        required_fields = {
+            "name",
+            "alias",
+            "type",
+            "include_dirs",
+            "compile_features",
+            "header",
+            "dependencies",
+        }
+        optional_fields = {"sources", "build_by_default"}
+        missing_fields = required_fields - set(entry)
+        unknown_fields = set(entry) - required_fields - optional_fields
+        if missing_fields or unknown_fields:
+            raise RuntimeError(
+                f"invalid fields for target catalog entry: missing={sorted(missing_fields)}, "
+                f"unknown={sorted(unknown_fields)}"
+            )
+        name, alias, header = entry.get("name"), entry.get("alias"), entry.get("header")
+        if not isinstance(name, str) or not re.fullmatch(r"mr_[a-z0-9_]+", name):
+            raise RuntimeError(f"invalid target name in catalog: {name!r}")
+        if name in catalog:
+            raise RuntimeError(f"duplicate target name in catalog: {name}")
+        if not isinstance(alias, str) or not re.fullmatch(r"mr::[a-z0-9_]+", alias):
+            raise RuntimeError(f"invalid public alias for {name}: {alias!r}")
+        if alias in aliases:
+            raise RuntimeError(f"duplicate target alias in catalog: {alias}")
+        if (
+            not isinstance(header, str)
+            or not re.fullmatch(r"[A-Za-z0-9_./-]+", header)
+            or Path(header).is_absolute()
+            or PureWindowsPath(header).is_absolute()
+            or ".." in Path(header).parts
+            or ".." in PureWindowsPath(header).parts
+        ):
+            raise RuntimeError(f"invalid public header for {name}: {header!r}")
+        if not (ROOT / "User" / header).is_file():
+            raise RuntimeError(f"public header for {name} does not exist: User/{header}")
+        if entry.get("type") not in ("INTERFACE", "STATIC"):
+            raise RuntimeError(f"unsupported target type for {name}: {entry.get('type')!r}")
+        if "build_by_default" in entry and type(entry["build_by_default"]) is not bool:
+            raise RuntimeError(f"build_by_default for {name} must be true or false")
+        if entry.get("build_by_default") and entry["type"] != "STATIC":
+            raise RuntimeError(f"build_by_default only applies to static target {name}")
+        for key in ("include_dirs", "compile_features", "dependencies"):
+            values = entry.get(key)
+            if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+                raise RuntimeError(f"target {name} must define a string list '{key}'")
+            if len(values) != len(set(values)):
+                raise RuntimeError(f"target {name} repeats an item in '{key}'")
+        if any(
+            not re.fullmatch(r"(?:c|cxx)_std_[0-9]+", feature)
+            for feature in entry["compile_features"]
+        ):
+            raise RuntimeError(f"unsupported compile feature for {name}")
+        for include_dir in entry["include_dirs"]:
+            if (
+                not re.fullmatch(r"[A-Za-z0-9_./-]+", include_dir)
+                or Path(include_dir).is_absolute()
+                or PureWindowsPath(include_dir).is_absolute()
+                or ".." in Path(include_dir).parts
+                or ".." in PureWindowsPath(include_dir).parts
+            ):
+                raise RuntimeError(f"invalid include directory for {name}: {include_dir!r}")
+            if not (ROOT / include_dir).is_dir():
+                raise RuntimeError(f"include directory for {name} does not exist: {include_dir}")
+        if entry["type"] == "STATIC":
+            sources = entry.get("sources")
+            if not isinstance(sources, list) or not sources:
+                raise RuntimeError(f"static target {name} must define source files")
+            for source in sources:
+                if (
+                    not isinstance(source, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_./-]+", source)
+                    or Path(source).is_absolute()
+                    or PureWindowsPath(source).is_absolute()
+                    or ".." in Path(source).parts
+                    or ".." in PureWindowsPath(source).parts
+                ):
+                    raise RuntimeError(f"invalid source path for {name}: {source!r}")
+                if not (ROOT / source).is_file():
+                    raise RuntimeError(f"source for {name} does not exist: {source}")
+        elif "sources" in entry:
+            raise RuntimeError(f"interface target {name} must not define source files")
+        catalog[name] = entry
+        aliases.add(alias)
+
+    for name, entry in catalog.items():
+        for dependency in entry["dependencies"]:
+            if dependency not in catalog:
+                raise RuntimeError(f"target {name} depends on unknown target {dependency}")
+            if dependency == name:
+                raise RuntimeError(f"target {name} cannot depend on itself")
+    return catalog
+
+
+try:
+    TARGET_CATALOG = load_target_catalog()
+except RuntimeError as error:
+    raise SystemExit(str(error)) from error
+
+TARGET_HEADERS = {name: entry["header"] for name, entry in TARGET_CATALOG.items()}
+
+
+def resolve_targets(targets: list[str]) -> list[str]:
+    """Return selected targets and their transitive dependencies once each."""
+    resolved: list[str] = []
+    visiting: set[str] = set()
+    complete: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in complete:
+            return
+        if name in visiting:
+            raise ValueError(f"target catalog contains a dependency cycle at {name}")
+        visiting.add(name)
+        for dependency in TARGET_CATALOG[name]["dependencies"]:
+            visit(dependency)
+        visiting.remove(name)
+        complete.add(name)
+        resolved.append(name)
+
+    for target in targets:
+        visit(target)
+    return resolved
+
+
+for _target_name in TARGET_CATALOG:
+    try:
+        resolve_targets([_target_name])
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
 
 
 def parse_scalar(value: str) -> Any:
@@ -223,7 +364,14 @@ def configure(project_dir: Path, build_dir: Path) -> int:
     if not (library_dir / "CMakeLists.txt").is_file():
         raise SystemExit(f"project.library does not point to an MR_TestLib checkout: {library_dir}")
     build_dir.mkdir(parents=True, exist_ok=True)
-    probe = "".join(f'#include "{TARGET_HEADERS[target]}"\n' for target in project["targets"])
+    resolved_targets = resolve_targets(project["targets"])
+    selected = set(project["targets"])
+    dependencies = [target for target in resolved_targets if target not in selected]
+    if dependencies:
+        print("resolved dependencies: " + ", ".join(dependencies), flush=True)
+    probe = "".join(
+        f'#include "{TARGET_HEADERS[target]}"\n' for target in resolved_targets
+    )
     probe += "void mr_project_selected_headers_compile_check() {}\n"
     (build_dir / "mrctl_compile_check.cpp").write_text(probe, encoding="utf-8", newline="\n")
     command = ["cmake", "-S", str(project_dir), "-B", str(build_dir)]
@@ -238,8 +386,8 @@ def configure(project_dir: Path, build_dir: Path) -> int:
         generator = "Ninja"
     if generator:
         command += ["-G", generator]
-    targets = ";".join(f"mr::{target.removeprefix('mr_')}" for target in project["targets"])
-    headers = ";".join(TARGET_HEADERS[target] for target in project["targets"])
+    targets = ";".join(TARGET_CATALOG[target]["alias"] for target in project["targets"])
+    headers = ";".join(TARGET_HEADERS[target] for target in resolved_targets)
     command += [
         f"-DMR_TESTLIB_PROJECT_TARGETS:STRING={targets}",
         f"-DMR_TESTLIB_PROJECT_HEADERS:STRING={headers}",

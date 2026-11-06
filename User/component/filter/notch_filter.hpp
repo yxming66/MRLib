@@ -1,32 +1,5 @@
 #pragma once
 
-// 陷波滤波器接口。使用方式：用中心频率、带宽和采样频率 Build，随后每个周期
-// 调用 Update(raw_value) 抑制指定频段的振动。
-
-/*
- * 二阶陷波滤波器。
- *
- * 用于抑制窄频段振动或共振频率：
- *
- *   auto filter = mr::comp::filter::notch::Build(
- *       50.0f,    // 陷波中心频率 Hz
- *       5.0f,     // 带宽 Hz
- *       1000.0f   // 采样频率 Hz
- *   );
- *
- *   filter.Reset(initial_value);
- *   float y = filter.Update(sample);
- *
- * 如果循环周期不固定，每次更新时传入本次实际间隔 dt_s，单位为秒：
- *
- *   float y = filter.Update(sample, dt_s);
- *
- * notch_freq_hz <= 0、bandwidth_hz <= 0 或 notch_freq_hz >= 奈奎斯特频率时，
- * 滤波器旁路，直接返回输入值。
- */
-
-#include <cmath>
-
 #include "component/filter/filter_types.hpp"
 
 namespace mr::comp::filter {
@@ -37,104 +10,74 @@ struct notch_config {
   Scalar bandwidth_hz = 0.0f;
 };
 
+/* Fixed Update uses the configured frequency. Update(sample, dt) retunes only
+ * when the effective frequency changes; fixed/variable calls may be mixed.
+ * Configure resets the state; setters retain it. Call Reset to seed the signal.
+ * Invalid configuration bypasses and reports MR_FILTER_INVALID; intentional
+ * disabled frequencies report MR_FILTER_DISABLED. Check status after retuning.
+ */
 class notch {
  public:
   using Config = notch_config;
-
   static notch Build(const Config& config) { return notch(config); }
-
-  static notch Build(Scalar notch_freq_hz,
-                     Scalar bandwidth_hz,
-                     Scalar sample_freq_hz = kDefaultSampleFreqHz) {
+  static notch Build(Scalar notch_freq_hz, Scalar bandwidth_hz,
+                          Scalar sample_freq_hz = kDefaultSampleFreqHz) {
     Config config{};
     config.notch_freq_hz = notch_freq_hz;
     config.bandwidth_hz = bandwidth_hz;
     config.sample_freq_hz = sample_freq_hz;
     return notch(config);
   }
-
   notch() { Configure(Config{}); }
   explicit notch(const Config& config) { Configure(config); }
-
-  void Configure(const Config& config) {
+  bool Configure(const Config& config) {
     config_ = config;
-    coeff_ = MakeCoefficients(config_.notch_freq_hz, config_.bandwidth_hz,
-                              config_.sample_freq_hz);
     state_ = {};
+    return Reconfigure();
   }
-
-  void SetNotch(Scalar notch_freq_hz, Scalar bandwidth_hz) {
+  bool SetNotch(Scalar notch_freq_hz, Scalar bandwidth_hz) {
     config_.notch_freq_hz = notch_freq_hz;
     config_.bandwidth_hz = bandwidth_hz;
-    coeff_ = MakeCoefficients(config_.notch_freq_hz, config_.bandwidth_hz,
-                              config_.sample_freq_hz);
+    return Reconfigure();
   }
-
-  void SetSampleFreq(Scalar sample_freq_hz) {
+  bool SetSampleFreq(Scalar sample_freq_hz) {
     config_.sample_freq_hz = sample_freq_hz;
-    coeff_ = MakeCoefficients(config_.notch_freq_hz, config_.bandwidth_hz,
-                              config_.sample_freq_hz);
+    return Reconfigure();
   }
-
   void Reset(Scalar output = 0.0f) { state_.Reset(coeff_, output); }
-
-  Scalar Update(Scalar sample) { return state_.Update(coeff_, sample); }
-
-  Scalar Update(Scalar sample, Scalar dt_s) {
-    const Scalar sample_freq_hz =
-        sample_freq_from_dt(dt_s, config_.sample_freq_hz);
-    const detail::biquad_coefficients coeff = MakeCoefficients(
-        config_.notch_freq_hz, config_.bandwidth_hz, sample_freq_hz);
-    return state_.Update(coeff, sample);
+  Scalar Update(Scalar sample) {
+    UseFrequency(config_.sample_freq_hz);
+    return state_.Update(coeff_, sample);
   }
-
+  Scalar Update(Scalar sample, Scalar dt_s) {
+    if (!is_usable_scalar(dt_s) || dt_s <= 0.0f) return state_.output();
+    UseFrequency(1.0f / dt_s);
+    return state_.Update(coeff_, sample);
+  }
   Scalar Apply(Scalar sample) { return Update(sample); }
   Scalar Apply(Scalar sample, Scalar dt_s) { return Update(sample, dt_s); }
-
   const Config& config() const { return config_; }
   Scalar output() const { return state_.output(); }
   bool bypassed() const { return coeff_.bypass; }
+  bool valid() const { return status_ != MR_FILTER_INVALID; }
+  MrFilterStatus status() const { return status_; }
 
  private:
-  static detail::biquad_coefficients MakeCoefficients(Scalar notch_freq_hz,
-                                                       Scalar bandwidth_hz,
-                                                       Scalar sample_freq_hz) {
-    detail::biquad_coefficients coeff{};
-    sample_freq_hz = detail::sanitize_sample_freq(sample_freq_hz);
-    if (!detail::enabled_frequency(notch_freq_hz) ||
-        !detail::enabled_frequency(bandwidth_hz)) {
-      return coeff;
-    }
-
-    const Scalar nyquist = detail::nyquist_frequency(sample_freq_hz);
-    if (notch_freq_hz >= nyquist) {
-      return coeff;
-    }
-
-    const Scalar alpha =
-        tanf(mr::component::math::kPi * bandwidth_hz / sample_freq_hz);
-    const Scalar beta =
-        -cosf(mr::component::math::kTwoPi * notch_freq_hz / sample_freq_hz);
-    if (!is_usable_scalar(alpha) || !is_usable_scalar(beta)) {
-      return coeff;
-    }
-
-    const Scalar a0_inv = 1.0f / (alpha + 1.0f);
-    if (!is_usable_scalar(a0_inv)) {
-      return coeff;
-    }
-
-    coeff.b0 = a0_inv;
-    coeff.b1 = 2.0f * beta * a0_inv;
-    coeff.b2 = a0_inv;
-    coeff.a1 = coeff.b1;
-    coeff.a2 = (1.0f - alpha) * a0_inv;
-    coeff.bypass = false;
-    return coeff;
+  bool Reconfigure() {
+    Retune(config_.sample_freq_hz);
+    return valid();
   }
-
+  void UseFrequency(Scalar sample_freq_hz) {
+    if (sample_freq_hz != active_sample_freq_hz_) Retune(sample_freq_hz);
+  }
+  void Retune(Scalar sample_freq_hz) {
+    active_sample_freq_hz_ = sample_freq_hz;
+    status_ = MrBiquad_Notch(&coeff_, sample_freq_hz, config_.notch_freq_hz, config_.bandwidth_hz);
+  }
   Config config_{};
-  detail::biquad_coefficients coeff_{};
+  Scalar active_sample_freq_hz_ = 0.0f;
+  MrFilterStatus status_ = MR_FILTER_INVALID;
+  detail::biquad_coefficients coeff_ = MrBiquad_Bypass();
   detail::biquad_state state_{};
 };
 

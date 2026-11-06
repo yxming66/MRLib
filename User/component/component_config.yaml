@@ -21,17 +21,15 @@ limiter:
   dependencies: []
   enabled: true
 mixer:
-  dependencies:
-  - component/user_math.h
+  dependencies: []
   enabled: true
 pid:
   dependencies:
-  - component/filter
+  - component/controller
   enabled: true
 timer:
-  dependencies:
-  - bsp/time
+  dependencies: []
   enabled: true
-user_math:
+math:
   dependencies: []
   enabled: true

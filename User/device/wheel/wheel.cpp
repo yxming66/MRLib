@@ -93,6 +93,8 @@ int8_t RmM3508Wheel::UpdateFeedback(WheelFeedback& feedback) {
   feedback.linear_velocity_mps = state_.linear_velocity_mps;
   feedback.output_torque_nm = state_.torque_nm;
   feedback.online = state_.online;
+  feedback.timestamp_ms = state_.feedback_timestamp_ms;
+  feedback.sequence = state_.feedback_sequence;
   return DEVICE_OK;
 }
 
@@ -152,6 +154,8 @@ void RmM3508Wheel::RefreshState() {
   state_.temperature_over_limit = motor_state.temperature_over_limit;
   state_.temperature_limit_latched = motor_state.temperature_limit_latched;
   state_.online = motor_state.online;
+  state_.feedback_timestamp_ms = motor_state.last_feedback_tick;
+  state_.feedback_sequence = motor_state.feedback_sequence;
 }
 
 }  // namespace mr::wheel

@@ -7,7 +7,7 @@
 #include "device/motor_dm.h"
 #include "bsp/mm.h"
 #include "bsp/time.h"
-#include "component/user_math.h"
+#include "component/math/scalar.h"
 #include "string.h"
 #include "math.h"
 
@@ -102,15 +102,15 @@ static int8_t MOTOR_DM_ParseFeedbackFrame(MOTOR_DM_t *motor, const uint8_t *data
     float torque_current = UINT_TO_FLOAT(t_int, DM_T_MIN, DM_T_MAX, 12);
     const float rotor_total_angle = motor->param.reverse ? -rotor_angle : rotor_angle;
     while (rotor_angle < 0.0f) {
-        rotor_angle += M_2PI;
+        rotor_angle += MR_MATH_TWO_PI;
     }
-    while (rotor_angle >= M_2PI) {
-        rotor_angle -= M_2PI;
+    while (rotor_angle >= MR_MATH_TWO_PI) {
+        rotor_angle -= MR_MATH_TWO_PI;
     }
     if (motor->param.reverse) {
-        rotor_angle = M_2PI - rotor_angle;
-        if (rotor_angle >= M_2PI) {
-            rotor_angle -= M_2PI;
+        rotor_angle = MR_MATH_TWO_PI - rotor_angle;
+        if (rotor_angle >= MR_MATH_TWO_PI) {
+            rotor_angle -= MR_MATH_TWO_PI;
         }
         rotor_speed = -rotor_speed;
         torque_current = -torque_current;

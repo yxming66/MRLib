@@ -22,7 +22,6 @@
 #include <cstring>
 
 #include "component/math/scalar.hpp"
-#include "component/user_math.h"
 #include "device/motor/motor.hpp"
 #include "device/joint/joint_mapping.hpp"
 

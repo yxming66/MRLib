@@ -13,7 +13,7 @@
 #include "bsp/time.h"
 #include "bsp/gpio.h"
 #include "bsp/spi.h"
-#include "component/user_math.h"
+#include "component/math/scalar.h"
 
 /* USER INCLUDE BEGIN */
 
@@ -398,9 +398,9 @@ int8_t BMI088_ParseGyro(BMI088_t *bmi088) {
   bmi088->gyro.y /= 32.768f;
   bmi088->gyro.z /= 32.768f;
 
-  bmi088->gyro.x *= M_DEG2RAD_MULT;
-  bmi088->gyro.y *= M_DEG2RAD_MULT;
-  bmi088->gyro.z *= M_DEG2RAD_MULT;
+  bmi088->gyro.x *= MR_MATH_DEG_TO_RAD;
+  bmi088->gyro.y *= MR_MATH_DEG_TO_RAD;
+  bmi088->gyro.z *= MR_MATH_DEG_TO_RAD;
 
   bmi088->gyro.x -= bmi088->cali->gyro_offset.x;
   bmi088->gyro.y -= bmi088->cali->gyro_offset.y;

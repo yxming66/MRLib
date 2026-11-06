@@ -1,106 +1,68 @@
-/*
-  Modified from
-  https://github.com/PX4/Firmware/blob/master/src/lib/pid/pid.h
-*/
-
 #pragma once
+
+/* Transitional entry points for the former PX4-inspired C PID.
+ * New C code may use controller/pid_core.h directly. PID_Init copies parameters;
+ * changing an old parameter table requires reinitialization.
+ */
+#include <stdint.h>
+#include "component/controller/pid_core.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdint.h>
-
-#include "filter.h"
-#include "user_math.h"
-
-/* USER INCLUDE BEGIN */
-
-/* USER INCLUDE END */
-
-/* USER DEFINE BEGIN */
-
-/* USER DEFINE END */
-
-/* PID模式 */
 typedef enum {
-  KPID_MODE_NO_D = 0, /* 不使用微分项，PI控制器 */
-  KPID_MODE_CALC_D, /* 根据反馈的值计算离散微分，忽略PID_Calc中的fb_dot */
-  KPID_MODE_SET_D /* 直接提供微分值，PID_Calc中的fb_dot将被使用，(Gyros) */
+  KPID_MODE_NO_D = 0,
+  KPID_MODE_CALC_D,
+  KPID_MODE_SET_D
 } KPID_Mode_t;
-
-/* PID参数 */
 typedef struct {
-  float k;             /* 控制器增益，设置为1用于并行模式 */
-  float p;             /* 比例项增益，设置为1用于标准形式 */
-  float i;             /* 积分项增益 */
-  float d;             /* 微分项增益 */
-  float i_limit;       /* 积分项上限 */
-  float out_limit;     /* 输出绝对值限制 */
-  float d_cutoff_freq; /* D项低通截止频率 */
-  float range;         /* 计算循环误差时使用，大于0时启用 */
+  float k, p, i, d;
+  float i_limit;       /* Legacy integral STATE limit; 0 is unlimited. */
+  float out_limit;     /* Output limit; 0 is unlimited. */
+  float d_cutoff_freq; /* Hz; <= 0 disables the derivative filter. */
+  float range;         /* Full error period; 0 disables wrapping. */
 } KPID_Params_t;
-
-/* PID主结构体 */
 typedef struct {
-  KPID_Mode_t mode;
-  const KPID_Params_t *param;
-
-  float dt_min; /* 最小PID_Calc调用间隔 */
-  float i;      /* 积分 */
-
-  struct {
-    float err;  /* 上次误差 */
-    float k_fb; /* 上次反馈值 */
-    float out;  /* 上次输出 */
-  } last;
-
-  LowPassFilter2p_t dfilter; /* D项低通滤波器 */
+  MrPid core;
+  float i; /* Read-only diagnostic mirror of integral state. */
+  struct { float err, k_fb, out; } last; /* Read-only diagnostics. */
 } KPID_t;
 
-/**
- * @brief 初始化PID
- *
- * @param pid PID结构体
- * @param mode PID模式
- * @param sample_freq 采样频率
- * @param param PID参数
- * @return int8_t 0对应没有错误
- */
+/* The only legacy parameter conversion; shared with C++ device adapters. */
+static inline bool PID_ConfigFromLegacy(MrPidConfig *out, KPID_Mode_t mode,
+                                         float sample_hz, const KPID_Params_t *params) {
+  if (out == NULL) return false;
+  MrPidConfig config = MrPid_DefaultConfig();
+  config.control_freq_hz = 0; // Failure leaves an explicitly invalid config.
+  *out = config;
+  if (params == NULL || !mr_math_is_finite_scalar(params->i_limit) || params->i_limit < 0)
+    return false;
+  const MrPidGains gains = {params->k, params->p, params->i, params->d};
+  config.gains = gains;
+  config.output_limit = params->out_limit;
+  config.integral_output_limit = fabsf(params->i) * params->i_limit;
+  config.error_period = params->range;
+  config.derivative_cutoff_hz = params->d_cutoff_freq;
+  config.control_freq_hz = sample_hz;
+  switch (mode) {
+    case KPID_MODE_NO_D: config.derivative_mode = MR_PID_D_NONE; break;
+    case KPID_MODE_CALC_D: config.derivative_mode = MR_PID_D_MEASUREMENT; break;
+    case KPID_MODE_SET_D: config.derivative_mode = MR_PID_D_EXTERNAL; break;
+    default: return false;
+  }
+  if (!MrPid_ConfigValid(&config)) return false;
+  *out = config;
+  return true;
+}
 int8_t PID_Init(KPID_t *pid, KPID_Mode_t mode, float sample_freq,
                 const KPID_Params_t *param);
-
-/**
- * @brief PID计算
- *
- * @param pid PID结构体
- * @param sp 设定值
- * @param fb 反馈值
- * @param fb_dot 反馈值微分
- * @param dt 间隔时间
- * @return float 计算的输出
+/* dt is actual seconds in [1 us, 1 s]; invalid input holds output, valid=false.
+ * External fb_dot is d(k * feedback)/dt, matching the old C/C++ convention.
  */
 float PID_Calc(KPID_t *pid, float sp, float fb, float fb_dot, float dt);
-
-/**
- * @brief 重置微分项
- *
- * @param pid PID结构体
- * @return int8_t 0对应没有错误
- */
 int8_t PID_ResetIntegral(KPID_t *pid);
-
-/**
- * @brief 重置PID
- *
- * @param pid PID结构体
- * @return int8_t 0对应没有错误
- */
 int8_t PID_Reset(KPID_t *pid);
-
-/* USER FUNCTION BEGIN */
-
-/* USER FUNCTION END */
 
 #ifdef __cplusplus
 }

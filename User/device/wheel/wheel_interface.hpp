@@ -10,14 +10,18 @@ struct WheelFeedback {
   float linear_velocity_mps = 0.0f;
   float output_torque_nm = 0.0f;
   bool online = false;
+  uint32_t timestamp_ms = 0U;
+  uint32_t sequence = 0U;
 };
 
 /**
  * Hardware-independent wheel drive contract.
  *
  * Implementations own motor direction, gear ratio, wheel radius and the
- * conversion from output torque in N·m to the physical motor command. This
- * interface uses fixed ownership: modules keep non-owning pointers and never
+ * conversion from output torque in N·m to the physical motor command. Feedback
+ * time is the same monotonic millisecond clock supplied to the owning module;
+ * sequence identifies the received bus frame and need not change every control
+ * cycle. This interface uses fixed ownership: modules keep non-owning pointers and never
  * allocate or delete wheel devices.
  */
 class WheelDevice {

@@ -9,7 +9,7 @@
 #include "bsp/can.h"
 #include "bsp/mm.h"
 #include "bsp/time.h"
-#include "component/user_math.h"
+#include "component/math/scalar.h"
 
 /* USER INCLUDE BEGIN */
 
@@ -187,10 +187,10 @@ static int16_t MOTOR_RM_GetLSB(MOTOR_RM_Module_t module) {
 
 static float MOTOR_RM_WrapAnglePositive(float angle) {
     while (angle < 0.0f) {
-        angle += M_2PI;
+        angle += MR_MATH_TWO_PI;
     }
-    while (angle >= M_2PI) {
-        angle -= M_2PI;
+    while (angle >= MR_MATH_TWO_PI) {
+        angle -= MR_MATH_TWO_PI;
     }
     return angle;
 }
@@ -254,7 +254,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
     float ratio = MOTOR_RM_GetRatio(motor->param.module);
 
     uint64_t now_time = BSP_TIME_Get();
-    float rotor_angle = raw_angle / (float)MOTOR_ENC_RES * M_2PI;
+    float rotor_angle = raw_angle / (float)MOTOR_ENC_RES * MR_MATH_TWO_PI;
     float rotor_speed = raw_speed;
     float torque_current = raw_current * lsb / (float)MOTOR_CUR_RES;
 
@@ -269,7 +269,7 @@ static void Motor_RM_Decode(MOTOR_RM_t *motor, BSP_CAN_Message_t *msg) {
         motor->gearbox_total_raw_count += delta;
         motor->gearbox_round_count = motor->gearbox_total_raw_count / MOTOR_ENC_RES;
         motor->last_raw_angle = raw_angle;
-        motor->gearbox_total_angle = ((float)motor->gearbox_total_raw_count / (float)MOTOR_ENC_RES) * M_2PI / ratio;
+        motor->gearbox_total_angle = ((float)motor->gearbox_total_raw_count / (float)MOTOR_ENC_RES) * MR_MATH_TWO_PI / ratio;
         // 输出轴多圈绝对值
         motor->feedback.rotor_total_angle = motor->gearbox_total_angle;
         motor->feedback.rotor_single_angle = MOTOR_RM_WrapAnglePositive(motor->gearbox_total_angle);

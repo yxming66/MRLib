@@ -1,241 +1,116 @@
-/**
- ******************************************************************************
- * @file    scalar.hpp
- * @brief   Scalar math utilities for embedded control systems.
- *          标量数学工具函数库
- * @author  XuMing Yuan
- ******************************************************************************
+/** @file scalar.hpp
+ *  C++ entry points for the shared C scalar core.
+ *  Original scalar utilities: XuMing Yuan.
  */
-
 #pragma once
 
-// 标量数学工具。使用方式：直接调用 clamp、wrap、abs_clip 等无状态函数；函数
-// 不保存上下文，适合在控制周期和轨迹计算中内联使用。
-
 #include <cmath>
-#include <stddef.h>
-#include <stdint.h>
+#include "component/math/scalar.h"
 
 namespace mr::component::math {
 
 using Scalar = float;
-
-constexpr Scalar kDefaultEpsilon = 1.0e-6f;
-constexpr Scalar kFiniteLimit = 1.0e30f;
-constexpr Scalar kPi = 3.14159265358979323846f;
-constexpr Scalar kHalfPi = 0.5f * kPi;
-constexpr Scalar kTwoPi = 2.0f * kPi;
+constexpr Scalar kDefaultEpsilon = MR_MATH_DEFAULT_EPSILON;
+constexpr Scalar kFiniteLimit = MR_MATH_FINITE_LIMIT;
+constexpr Scalar kPi = MR_MATH_PI;
+constexpr Scalar kHalfPi = MR_MATH_HALF_PI;
+constexpr Scalar kTwoPi = MR_MATH_TWO_PI;
 
 inline Scalar abs_scalar(Scalar value) {
-  return fabsf(value);
+  return mr_math_abs_scalar(value);
 }
 
 inline bool is_finite_scalar(Scalar value) {
-  return (value == value) && (abs_scalar(value) <= kFiniteLimit);
+  return mr_math_is_finite_scalar(value);
 }
 
 inline bool is_positive_scalar(Scalar value,
                                Scalar epsilon = kDefaultEpsilon) {
-  return is_finite_scalar(value) && value > epsilon;
+  return mr_math_is_positive_scalar(value, epsilon);
 }
 
 inline Scalar clamp_scalar(Scalar value, Scalar lower, Scalar upper) {
-  if (value < lower) {
-    return lower;
-  }
-  if (value > upper) {
-    return upper;
-  }
-  return value;
+  return mr_math_clamp_scalar(value, lower, upper);
 }
 
 inline Scalar abs_clip_scalar(Scalar value, Scalar limit) {
-  const Scalar positive_limit = abs_scalar(limit);
-  return clamp_scalar(value, -positive_limit, positive_limit);
+  return mr_math_abs_clip_scalar(value, limit);
 }
 
 inline Scalar positive_or_zero(Scalar value) {
-  return (is_finite_scalar(value) && value > 0.0f) ? value : 0.0f;
+  return mr_math_positive_or_zero(value);
 }
 
 inline Scalar positive_or(Scalar value, Scalar fallback) {
-  return (is_finite_scalar(value) && value > 0.0f) ? value : fallback;
+  return mr_math_positive_or(value, fallback);
 }
 
 inline Scalar square_scalar(Scalar value) {
-  return value * value;
+  return mr_math_square_scalar(value);
 }
 
 inline Scalar uint_to_float(uint32_t raw,
                             Scalar min_value,
                             Scalar max_value,
                             uint8_t bits) {
-  if (bits == 0U || bits >= 32U) {
-    return min_value;
-  }
-  const Scalar span = max_value - min_value;
-  const uint32_t raw_max = (1UL << bits) - 1UL;
-  const uint32_t bounded_raw = raw > raw_max ? raw_max : raw;
-  return (static_cast<Scalar>(bounded_raw) * span / static_cast<Scalar>(raw_max)) +
-         min_value;
+  return mr_math_uint_to_float(raw, min_value, max_value, bits);
 }
 
 inline Scalar sanitize_positive(Scalar value,
                                 Scalar fallback,
                                 Scalar lower = kDefaultEpsilon,
                                 Scalar upper = kFiniteLimit) {
-  if (!is_finite_scalar(lower) || lower <= 0.0f) {
-    lower = kDefaultEpsilon;
-  }
-  if (lower > kFiniteLimit) {
-    lower = kFiniteLimit;
-  }
-  if (!is_finite_scalar(upper) || upper < lower) {
-    upper = kFiniteLimit;
-  }
-  if (upper < lower) {
-    upper = lower;
-  }
-  if (!is_finite_scalar(value) || value < lower) {
-    value = fallback;
-  }
-  if (!is_finite_scalar(value) || value < lower) {
-    value = lower;
-  }
-  return clamp_scalar(value, lower, upper);
+  return mr_math_sanitize_positive(value, fallback, lower, upper);
 }
 
 inline Scalar sanitize_dt(Scalar dt,
                           Scalar fallback,
                           Scalar min_dt,
                           Scalar max_dt) {
-  if (!is_finite_scalar(min_dt) || min_dt <= 0.0f) {
-    min_dt = kDefaultEpsilon;
-  }
-  if (!is_finite_scalar(max_dt) || max_dt < min_dt) {
-    max_dt = kFiniteLimit;
-  }
-  if (!is_finite_scalar(fallback) || fallback < min_dt) {
-    fallback = min_dt;
-  }
-  if (!is_finite_scalar(dt) || dt <= 0.0f) {
-    dt = fallback;
-  }
-  return clamp_scalar(dt, min_dt, max_dt);
+  return mr_math_sanitize_dt(dt, fallback, min_dt, max_dt);
 }
 
 inline Scalar wrap_to_range(Scalar value,
                             Scalar lower,
                             Scalar upper,
                             Scalar epsilon = kDefaultEpsilon) {
-  const Scalar width = upper - lower;
-  if (!is_finite_scalar(value) || !is_finite_scalar(lower) ||
-      !is_finite_scalar(upper) || width <= epsilon) {
-    return value;
-  }
-
-  Scalar wrapped = fmodf(value - lower, width);
-  if (wrapped < 0.0f) {
-    wrapped += width;
-  }
-  return lower + wrapped;
+  return mr_math_wrap_to_range(value, lower, upper, epsilon);
 }
 
 inline Scalar wrap_to_pi(Scalar angle) {
-  Scalar wrapped =
-      wrap_to_range(angle, -kPi, kPi, kDefaultEpsilon);
-  if (wrapped >= kPi) {
-    wrapped -= kTwoPi;
-  }
-  return wrapped;
+  return mr_math_wrap_to_pi(angle);
 }
 
 inline Scalar wrap_error(Scalar error, Scalar range) {
-  if (!is_finite_scalar(error) || !is_finite_scalar(range) ||
-      range <= kDefaultEpsilon) {
-    return error;
-  }
-
-  const Scalar half_range = 0.5f * range;
-  if (error >= -half_range && error <= half_range) {
-    return error;
-  }
-
-  Scalar wrapped = wrap_to_range(error + half_range, 0.0f, range);
-  wrapped -= half_range;
-  return (wrapped == -half_range && error > 0.0f) ? half_range : wrapped;
+  return mr_math_wrap_error(error, range);
 }
 
 inline Scalar angle_error(Scalar target, Scalar current) {
-  return wrap_to_pi(target - current);
+  return mr_math_angle_error(target, current);
 }
 
 inline Scalar move_towards(Scalar current, Scalar target, Scalar max_step) {
-  if (max_step <= 0.0f) {
-    return target;
-  }
-
-  const Scalar delta = target - current;
-  if (delta > max_step) {
-    return current + max_step;
-  }
-  if (delta < -max_step) {
-    return current - max_step;
-  }
-  return target;
+  return mr_math_move_towards(current, target, max_step);
 }
 
 inline Scalar apply_delta_limit(Scalar value,
                                 Scalar previous,
                                 Scalar max_delta) {
-  return previous + abs_clip_scalar(value - previous, max_delta);
+  return mr_math_apply_delta_limit(value, previous, max_delta);
 }
 
 inline Scalar max_abs_array(const Scalar* values, uint32_t count) {
-  if (values == nullptr) {
-    return 0.0f;
-  }
-
-  Scalar max_abs = 0.0f;
-  for (uint32_t i = 0U; i < count; ++i) {
-    const Scalar abs_value = abs_scalar(values[i]);
-    if (abs_value > max_abs) {
-      max_abs = abs_value;
-    }
-  }
-  return max_abs;
+  return mr_math_max_abs_array(values, count);
 }
 
 inline bool values_are_finite(const Scalar* values, uint32_t count) {
-  if (values == nullptr) {
-    return false;
-  }
-
-  for (uint32_t i = 0U; i < count; ++i) {
-    if (!is_finite_scalar(values[i])) {
-      return false;
-    }
-  }
-  return true;
+  return mr_math_values_are_finite(values, count);
 }
 
 inline bool scale_to_abs_limit(Scalar* values,
                                uint32_t count,
                                Scalar limit) {
-  if (values == nullptr || !is_finite_scalar(limit) || limit <= 0.0f) {
-    return false;
-  }
-
-  const Scalar max_abs = max_abs_array(values, count);
-  if (max_abs <= limit || max_abs <= 0.0f) {
-    return false;
-  }
-
-  const Scalar scale = limit / max_abs;
-  for (uint32_t i = 0U; i < count; ++i) {
-    values[i] *= scale;
-  }
-  return true;
+  return mr_math_scale_to_abs_limit(values, count, limit);
 }
 
 }  // namespace mr::component::math

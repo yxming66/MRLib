@@ -114,12 +114,9 @@ class linear_observer {
   bool valid() const { return valid_; }
 
  private:
-  static bool IsUsable(const State& state) {
-    return mr::component::math::matrix::is_finite(state);
-  }
-
-  static bool IsUsable(const Measurement& measurement) {
-    return mr::component::math::matrix::is_finite(measurement);
+  template <int Rows>
+  static bool IsUsable(const Matrix<Rows, 1>& vector) {
+    return matrix::is_finite(vector);
   }
 
   bool IsModelUsable() const {

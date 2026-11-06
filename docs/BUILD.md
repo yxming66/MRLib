@@ -11,7 +11,13 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-机械臂、底盘运动学和统一底盘模块均有主机回归测试。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块共 13 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer、RM/DM/LZ protocol 和 CAN transport；电机总线通过测试替身提供，不需要 STM32 HAL/RTOS。
+
+滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试不覆盖真实设备驱动、剩余旧专用控制器或 STM32 固件。
+
+PID 测试使用独立 PI 预期值验证积分输出限幅、饱和恢复和斜率限制；验证微分首帧、显式 dt、算术/滤波错误时保持控制历史，以及三种微分模式下旧 C 入口与 C++ 接口的一致性。底盘模块测试确认非法 PID/反馈超时配置在设备注册前被拒绝，反馈超时触发安全放松，uint32 毫秒时钟回绕可正确处理。
+
+RM 命令组测试检查 M2006/M3508/GM6020 的地址映射、四槽大端帧编码、不同帧组缓存隔离和非法节点/槽位拒绝。fake-CAN 协议测试编译真实 RM/DM/LZ 协议源与 `can_transport.cpp`，检查零电流 Relax、发送失败重试、失败命令缓存隔离、地址边界、非有限输入拒绝及 enable/disable 状态更新。测试替身不代表真实 BSP、固件或硬件行为已经验证。
 
 ## 新建主机项目
 
@@ -41,7 +47,7 @@ target_link_libraries(robot_firmware PRIVATE
 
 | Target | 用途 |
 | --- | --- |
-| `mr::component_math` | 纯 C++ 数学工具头文件 |
+| `mr::component_math` | 共用 C11 标量核心、薄 C++17 入口和其他 C++ 数学工具 |
 | `mr::component_filter` | 通用滤波器头文件 |
 | `mr::component_controller` | 通用控制器头文件 |
 | `mr::component_trajectory` | 轨迹规划组件 |
@@ -52,3 +58,7 @@ target_link_libraries(robot_firmware PRIVATE
 | `mr::robotics_arm` | 机械臂算法 |
 
 库 target 会传递 `User` 头文件路径和已声明的依赖。目标工程仍负责 HAL、RTOS、启动文件、链接脚本、BSP 与具体设备适配。
+
+本批新增的 timer、姿态估计与告警服务尚未登记为 CLI 可选 target；手工接入时显式添加所需实现。C++ 低通/陷波和告警为头文件实现；C 滤波 API 需编译 `User/component/filter/filter.c`，timer 需 `User/component/timer.cpp`，姿态估计需 `User/component/ahrs.c`，并设置 `User` 为 include 路径。详细接口、单位和迁移变化见 [基础服务接口](USER_SERVICES.md)。
+
+共享 PID 核心为 `component/controller/pid_core.h`，C11 和 C++17 均可使用，无需额外源文件；C++ `pid.hpp` 通过既有 `mr::component_controller` 使用。旧 `PID_Init/Calc/Reset` 入口需显式编译 `User/component/pid.c`；PID 自身不再需要链接 `filter.c`，滤波计算直接复用头文件核心。

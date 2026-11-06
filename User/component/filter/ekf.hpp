@@ -57,6 +57,9 @@
 
 namespace mr::comp::filter {
 
+using mr::component::math::Matrix;
+namespace matrix = ::mr::component::math::matrix;
+
 template <int StateDim, int MeasureDim, int ControlDim = 1>
 class ekf {
   static_assert(StateDim > 0, "ekf needs at least one state");

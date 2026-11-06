@@ -14,7 +14,7 @@
 #include "bsp/can.h"
 #include "bsp/mm.h"
 #include "bsp/time.h"
-#include "component/user_math.h"
+#include "component/math/scalar.h"
 
 /* Private define ----------------------------------------------------------- */
 // 灵足电机协议参数
@@ -262,15 +262,15 @@ static void MOTOR_LZ_Decode(MOTOR_LZ_t *motor, BSP_CAN_Message_t *msg) {
     float torque = MOTOR_LZ_RawToFloat(raw_torque,
                                        MOTOR_LZ_GetTorqueRangeNm(motor->param.module));
     while (angle < 0.0f) {
-        angle += M_2PI;
+        angle += MR_MATH_TWO_PI;
     }
-    while (angle >= M_2PI) {
-        angle -= M_2PI;
+    while (angle >= MR_MATH_TWO_PI) {
+        angle -= MR_MATH_TWO_PI;
     }
     if (motor->param.reverse) {
-        angle = M_2PI - angle;
-        if (angle >= M_2PI) {
-            angle -= M_2PI;
+        angle = MR_MATH_TWO_PI - angle;
+        if (angle >= MR_MATH_TWO_PI) {
+            angle -= MR_MATH_TWO_PI;
         }
         velocity = -velocity;
         torque = -torque;

@@ -4,17 +4,19 @@
  * 无动态内存的微秒级计时器。
  *
  * 快速用法：
- *   auto timer = mr::comp::timer::Build();
+ *   mr::comp::timer_config config{};
+ *   config.clock_us = MyMonotonicClockUs;
+ *   auto timer = mr::comp::timer::Build(config);
  *   if (timer.EveryUs(1000U)) {
  *     // 1 kHz 周期任务
  *   }
  *
  * Build 后首次调用 EveryUs 会建立计时基准；同一个 timer 实例应由一个任务独占。
- * 需要自定义时钟时填写 timer_config::clock_us。
+ * 必须填写 timer_config::clock_us；未绑定时钟时 ready() 为 false，计时不启动。
  */
 
 // 无动态内存的微秒级计时器工具。
-// 使用方式：mr::comp::timer timer{}; timer.Start(); 在周期任务中调用
+// 使用方式：注入 clock_us 后，在周期任务中调用
 // timer.EveryUs(period_us) 判断是否到期，或调用 timer.ElapsedUs() 读取经过时间。
 
 #include <stdint.h>
@@ -23,10 +25,8 @@ namespace mr::comp {
 
 using ClockUsFn = uint64_t (*)();
 
-uint64_t DefaultClockUs();
-
 struct timer_config {
-  ClockUsFn clock_us = DefaultClockUs;
+  ClockUsFn clock_us = nullptr;
   uint64_t first_dt_us = 0U;
   uint64_t min_dt_us = 0U;
   uint64_t max_dt_us = 0U;
@@ -41,8 +41,10 @@ class timer final {
   static timer Build(const Config& config) { return timer(config); }
   static timer Build(float first_dt_s,
                      float min_dt_s = 0.0f,
-                     float max_dt_s = 0.0f) {
+                     float max_dt_s = 0.0f,
+                     ClockUsFn clock_us = nullptr) {
     Config config{};
+    config.clock_us = clock_us;
     config.first_dt_us = SecondsToUs(first_dt_s);
     config.min_dt_us = SecondsToUs(min_dt_s);
     config.max_dt_us = SecondsToUs(max_dt_s);
@@ -92,6 +94,7 @@ class timer final {
   uint32_t dt_ms() const { return UsToMs(last_dt_us_); }
   float dt_s() const { return UsToSeconds(last_dt_us_); }
   bool started() const { return started_; }
+  bool ready() const { return config_.clock_us != nullptr; }
 
   static uint64_t SecondsToUs(float seconds);
   static float UsToSeconds(uint64_t us);

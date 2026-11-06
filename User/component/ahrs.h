@@ -9,7 +9,7 @@
 extern "C" {
 #endif
 
-#include "component/user_math.h"
+#include <stdint.h>
 
 /* USER INCLUDE BEGIN */
 

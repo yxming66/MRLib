@@ -40,6 +40,7 @@ struct ChassisConfig {
   ChassisVelocityLimit max_body_velocity{};
   float max_wheel_speed_mps = 0.0f;
   mr::comp::cntlr::pid_config wheel_velocity_pid{};
+  uint32_t feedback_timeout_ms = 20U;
 };
 
 struct ChassisFeedback {
@@ -60,7 +61,9 @@ struct ChassisOutput {
  * Generic four-wheel velocity-control module.
  *
  * Register selects a robotics kinematics model and binds caller-owned wheel
- * devices. The update sequence is UpdateFeedback -> SetCommand -> Step ->
+ * devices. UpdateFeedback receives the caller's monotonic millisecond clock,
+ * which must use the same epoch as the wheel bus timestamps. The update sequence
+ * is UpdateFeedback -> SetCommand -> Step ->
  * CommitOutput. No model selection is embedded in a task or board adapter.
  */
 class Chassis final {
@@ -119,7 +122,16 @@ class Chassis final {
     return ChassisStatus::kOk;
   }
 
-  ChassisStatus UpdateFeedback() {
+  // Compatibility path for callers that have not yet wired a board clock.
+  // It validates the sample but cannot enforce the timestamp timeout.
+  ChassisStatus UpdateFeedback() { return UpdateFeedbackInternal(0U, false); }
+
+  ChassisStatus UpdateFeedback(uint32_t now_ms) {
+    return UpdateFeedbackInternal(now_ms, true);
+  }
+
+ private:
+  ChassisStatus UpdateFeedbackInternal(uint32_t now_ms, bool enforce_age) {
     if (state_ != ChassisState::kEnabled || output_pending_) {
       return ChassisStatus::kInvalidState;
     }
@@ -129,6 +141,8 @@ class Chassis final {
       auto& wheel_feedback = feedback_.wheels[index];
       if (wheels_[index]->UpdateFeedback(wheel_feedback) != 0 ||
           !wheel_feedback.online ||
+          (enforce_age &&
+           now_ms - wheel_feedback.timestamp_ms > config_.feedback_timeout_ms) ||
           !mr::component::math::is_finite_scalar(
               wheel_feedback.linear_velocity_mps) ||
           !mr::component::math::is_finite_scalar(
@@ -154,6 +168,8 @@ class Chassis final {
     feedback_updated_ = true;
     return ChassisStatus::kOk;
   }
+
+ public:
 
   ChassisStatus SetCommand(
       const mr::robotics::chassis::PlanarVelocity& command) {
@@ -259,13 +275,12 @@ class Chassis final {
   const ChassisOutput& output() const { return output_; }
 
  private:
+
   static constexpr float kMinDtS = 1.0e-6f;
   static constexpr float kMaxDtS = 0.1f;
 
   static bool IsValidConfig(const ChassisConfig& config) {
     const auto& limit = config.max_body_velocity;
-    const auto& gains = config.wheel_velocity_pid.gains;
-    const float control_freq_hz = config.wheel_velocity_pid.control_freq_hz;
     return mr::component::math::is_finite_scalar(limit.vx_mps) &&
            limit.vx_mps > 0.0f &&
            mr::component::math::is_finite_scalar(limit.vy_mps) &&
@@ -275,13 +290,10 @@ class Chassis final {
            mr::component::math::is_finite_scalar(
                config.max_wheel_speed_mps) &&
            config.max_wheel_speed_mps > 0.0f &&
-           mr::component::math::is_finite_scalar(gains.k) &&
-           mr::component::math::is_finite_scalar(gains.p) &&
-           mr::component::math::is_finite_scalar(gains.i) &&
-           mr::component::math::is_finite_scalar(gains.d) &&
+           config.feedback_timeout_ms > 0U &&
+           config.feedback_timeout_ms <= INT32_MAX &&
            config.wheel_velocity_pid.output_limit.enabled() &&
-           mr::component::math::is_finite_scalar(control_freq_hz) &&
-           control_freq_hz > 0.0f;
+           mr::comp::cntlr::pid::IsConfigValid(config.wheel_velocity_pid);
   }
 
   void EnterFault() {

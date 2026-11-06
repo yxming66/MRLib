@@ -461,7 +461,7 @@ void FrontOmniRearMecanumController::LimitMoveVector() {
 }
 
 void FrontOmniRearMecanumController::UpdateBodyVelocityFeedback() {
-  ResetMoveVector(&feedback_.chassis_vel);
+  feedback_.chassis_vel = {};
 
   WheelSpeeds wheel_speeds{};
   for (uint8_t i = 0; i < kWheelCount; ++i) {

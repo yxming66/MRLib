@@ -17,13 +17,11 @@
 #include <stdint.h>
 
 #include "component/math/scalar.hpp"
-#include "component/math/matrix.hpp"
+#include "component/filter/biquad.h"
 
 namespace mr::comp::filter {
 
 using Scalar = mr::component::math::Scalar;
-using mr::component::math::Matrix;
-namespace matrix = ::mr::component::math::matrix;
 
 constexpr Scalar kDefaultSampleFreqHz = 1000.0f;
 constexpr Scalar kDefaultDtS = 1.0f / kDefaultSampleFreqHz;
@@ -85,79 +83,24 @@ inline Scalar nyquist_frequency(Scalar sample_freq_hz) {
   return 0.5f * sanitize_sample_freq(sample_freq_hz);
 }
 
-struct biquad_coefficients {
-  Scalar b0 = 1.0f;
-  Scalar b1 = 0.0f;
-  Scalar b2 = 0.0f;
-  Scalar a1 = 0.0f;
-  Scalar a2 = 0.0f;
-  bool bypass = true;
-};
+using biquad_coefficients = MrBiquadCoefficients;
 
 class biquad_state {
  public:
   void Reset(Scalar output = 0.0f) {
-    delay_1_ = output;
-    delay_2_ = output;
-    output_ = output;
-    initialized_ = true;
+    const auto bypass = MrBiquad_Bypass();
+    MrBiquad_Reset(&state_, &bypass, output);
   }
-
   void Reset(const biquad_coefficients& coeff, Scalar output) {
-    Scalar delay = output;
-    const Scalar gain = coeff.b0 + coeff.b1 + coeff.b2;
-    if (mr::component::math::abs_scalar(gain) >
-        mr::component::math::kDefaultEpsilon) {
-      delay = output / gain;
-    }
-    if (!is_usable_scalar(delay)) {
-      delay = output;
-    }
-
-    delay_1_ = delay;
-    delay_2_ = delay;
-    output_ = output;
-    initialized_ = true;
+    MrBiquad_Reset(&state_, &coeff, output);
   }
-
   Scalar Update(const biquad_coefficients& coeff, Scalar sample) {
-    if (!is_usable_scalar(sample)) {
-      return output_;
-    }
-    if (coeff.bypass) {
-      Reset(sample);
-      return output_;
-    }
-    if (!initialized_) {
-      Reset(coeff, sample);
-      return output_;
-    }
-
-    Scalar delay_0 = sample - delay_1_ * coeff.a1 - delay_2_ * coeff.a2;
-    if (!is_usable_scalar(delay_0)) {
-      delay_0 = sample;
-    }
-
-    const Scalar output =
-        delay_0 * coeff.b0 + delay_1_ * coeff.b1 + delay_2_ * coeff.b2;
-    if (!is_usable_scalar(output)) {
-      return output_;
-    }
-
-    delay_2_ = delay_1_;
-    delay_1_ = delay_0;
-    output_ = output;
-    return output_;
+    return MrBiquad_Update(&state_, &coeff, sample);
   }
-
-  Scalar output() const { return output_; }
-  bool initialized() const { return initialized_; }
-
+  Scalar output() const { return state_.output; }
+  bool initialized() const { return state_.initialized; }
  private:
-  Scalar delay_1_ = 0.0f;
-  Scalar delay_2_ = 0.0f;
-  Scalar output_ = 0.0f;
-  bool initialized_ = false;
+  MrBiquadState state_{};
 };
 
 }  // namespace detail

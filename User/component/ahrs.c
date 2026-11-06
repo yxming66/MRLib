@@ -4,10 +4,10 @@
 */
 
 #include "ahrs.h"
-
+#include <stddef.h>
 #include <string.h>
 
-#include "component/user_math.h"
+#include "component/math/scalar.h"
 
 /* USER INCLUDE BEGIN */
 
@@ -67,7 +67,7 @@ static int8_t AHRS_UpdateIMU(AHRS_t *ahrs, const AHRS_Accl_t *accl,
    * accelerometer normalisation) */
   if (!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
     /* Normalise accelerometer measurement */
-    recip_norm = InvSqrt(ax * ax + ay * ay + az * az);
+    recip_norm = mr_math_normalization_factor(ax * ax + ay * ay + az * az);
     ax *= recip_norm;
     ay *= recip_norm;
     az *= recip_norm;
@@ -97,7 +97,7 @@ static int8_t AHRS_UpdateIMU(AHRS_t *ahrs, const AHRS_Accl_t *accl,
          4.0f * q2q2 * ahrs->quat.q3 - _2q2 * ay;
 
     /* normalise step magnitude */
-    recip_norm = InvSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+    recip_norm = mr_math_normalization_factor(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
 
     s0 *= recip_norm;
     s1 *= recip_norm;
@@ -118,7 +118,7 @@ static int8_t AHRS_UpdateIMU(AHRS_t *ahrs, const AHRS_Accl_t *accl,
   ahrs->quat.q3 += q_dot4 * ahrs->inv_sample_freq;
 
   /* Normalise quaternion */
-  recip_norm = InvSqrt(ahrs->quat.q0 * ahrs->quat.q0 +
+  recip_norm = mr_math_normalization_factor(ahrs->quat.q0 * ahrs->quat.q0 +
                        ahrs->quat.q1 * ahrs->quat.q1 +
                        ahrs->quat.q2 * ahrs->quat.q2 +
                        ahrs->quat.q3 * ahrs->quat.q3);
@@ -157,19 +157,19 @@ int8_t AHRS_Init(AHRS_t *ahrs, const AHRS_Magn_t *magn, float sample_freq) {
       ahrs->quat.q2 = -0.00283267116f;
       ahrs->quat.q3 = 0.598749936f;
 
-    } else if ((yaw < (M_PI / 2.0f)) || (yaw > 0.0f)) {
+    } else if ((yaw < (MR_MATH_PI / 2.0f)) || (yaw > 0.0f)) {
       ahrs->quat.q0 = 0.997458339f;
       ahrs->quat.q1 = 0.000336312107f;
       ahrs->quat.q2 = -0.0057230792f;
       ahrs->quat.q3 = 0.0740156546;
 
-    } else if ((yaw < M_PI) || (yaw > (M_PI / 2.0f))) {
+    } else if ((yaw < MR_MATH_PI) || (yaw > (MR_MATH_PI / 2.0f))) {
       ahrs->quat.q0 = 0.800884545f;
       ahrs->quat.q1 = 0.00862364192f;
       ahrs->quat.q2 = -0.00283267116f;
       ahrs->quat.q3 = 0.598749936f;
 
-    } else if ((yaw < 90.0f) || (yaw > M_PI)) {
+    } else if ((yaw < 90.0f) || (yaw > MR_MATH_PI)) {
       ahrs->quat.q0 = 0.800884545f;
       ahrs->quat.q1 = 0.00862364192f;
       ahrs->quat.q2 = -0.00283267116f;
@@ -245,13 +245,13 @@ int8_t AHRS_Update(AHRS_t *ahrs, const AHRS_Accl_t *accl,
    * accelerometer normalisation) */
   if (!((ax == 0.0f) && (ay == 0.0f) && (az == 0.0f))) {
     /* Normalise accelerometer measurement */
-    recip_norm = InvSqrt(ax * ax + ay * ay + az * az);
+    recip_norm = mr_math_normalization_factor(ax * ax + ay * ay + az * az);
     ax *= recip_norm;
     ay *= recip_norm;
     az *= recip_norm;
 
     /* Normalise magnetometer measurement */
-    recip_norm = InvSqrt(mx * mx + my * my + mz * mz);
+    recip_norm = mr_math_normalization_factor(mx * mx + my * my + mz * mz);
     mx *= recip_norm;
     my *= recip_norm;
     mz *= recip_norm;
@@ -286,9 +286,7 @@ int8_t AHRS_Update(AHRS_t *ahrs, const AHRS_Accl_t *accl,
     hy = _2q0mx * ahrs->quat.q3 + my * q0q0 -
          _2q0mz * ahrs->quat.q1 + _2q1mx * ahrs->quat.q2 -
          my * q1q1 + my * q2q2 + _2q2 * mz * ahrs->quat.q3 - my * q3q3;
-    // _2bx = sqrtf(hx * hx + hy * hy);
-    // 改为invsqrt
-    _2bx = 1.f / InvSqrt(hx * hx + hy * hy);
+    _2bx = sqrtf(hx * hx + hy * hy);
     _2bz = -_2q0mx * ahrs->quat.q2 + _2q0my * ahrs->quat.q1 +
            mz * q0q0 + _2q1mx * ahrs->quat.q3 - mz * q1q1 +
            _2q2 * my * ahrs->quat.q3 - mz * q2q2 + mz * q3q3;
@@ -331,7 +329,7 @@ int8_t AHRS_Update(AHRS_t *ahrs, const AHRS_Accl_t *accl,
          _2bx * ahrs->quat.q1 *
              (_2bx * (q0q2 + q1q3) + _2bz * (0.5f - q1q1 - q2q2) - mz);
     /* normalise step magnitude */
-    recip_norm = InvSqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+    recip_norm = mr_math_normalization_factor(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
     s0 *= recip_norm;
     s1 *= recip_norm;
     s2 *= recip_norm;
@@ -351,7 +349,7 @@ int8_t AHRS_Update(AHRS_t *ahrs, const AHRS_Accl_t *accl,
   ahrs->quat.q3 += q_dot4 * ahrs->inv_sample_freq;
 
   /* Normalise quaternion */
-  recip_norm = InvSqrt(ahrs->quat.q0 * ahrs->quat.q0 +
+  recip_norm = mr_math_normalization_factor(ahrs->quat.q0 * ahrs->quat.q0 +
                        ahrs->quat.q1 * ahrs->quat.q1 +
                        ahrs->quat.q2 * ahrs->quat.q2 +
                        ahrs->quat.q3 * ahrs->quat.q3);
@@ -385,7 +383,7 @@ int8_t AHRS_GetEulr(AHRS_Eulr_t *eulr, const AHRS_t *ahrs) {
                              ahrs->quat.q3 * ahrs->quat.q1);
 
   if (fabsf(sinp) >= 1.0f)
-    eulr->rol = copysignf(M_PI / 2.0f, sinp);
+    eulr->rol = copysignf(MR_MATH_PI / 2.0f, sinp);
   else
     eulr->rol = asinf(sinp);
 
@@ -397,9 +395,9 @@ int8_t AHRS_GetEulr(AHRS_Eulr_t *eulr, const AHRS_t *ahrs) {
   eulr->yaw = atan2f(siny_cosp, cosy_cosp);
 
 #if 0
-  eulr->yaw *= M_RAD2DEG_MULT;
-  eulr->rol *= M_RAD2DEG_MULT;
-  eulr->pit *= M_RAD2DEG_MULT;
+  eulr->yaw *= MR_MATH_RAD_TO_DEG;
+  eulr->rol *= MR_MATH_RAD_TO_DEG;
+  eulr->pit *= MR_MATH_RAD_TO_DEG;
 #endif
 
   return 0;

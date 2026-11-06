@@ -151,6 +151,91 @@ void TestModelSelectionAndValidation() {
   }
 }
 
+void TestInvalidPidRejectedBeforeDeviceRegistration() {
+  std::array<FakeWheel, Chassis::kWheelCount> storage{};
+  std::array<WheelDevice*, Chassis::kWheelCount> devices{};
+  for (std::size_t i = 0; i < devices.size(); ++i) devices[i] = &storage[i];
+  Chassis chassis;
+  auto config = MakeConfig(ChassisModel::kMecanum);
+  config.wheel_velocity_pid.derivative_cutoff_hz = 250.0f;
+  Expect(chassis.Register(config, devices) == ChassisStatus::kInvalidConfiguration,
+         "invalid derivative filter must fail before device registration");
+  Expect(chassis.state() == ChassisState::kUnregistered,
+         "invalid PID must leave chassis unregistered");
+  for (const auto& wheel : storage)
+    Expect(!wheel.registered, "invalid PID must not touch wheel registration");
+  Expect(chassis.Register(MakeConfig(ChassisModel::kMecanum), devices) == ChassisStatus::kOk,
+         "valid configuration must be accepted after an invalid PID attempt");
+}
+
+void TestFeedbackTimestampFreshness() {
+  std::array<FakeWheel, Chassis::kWheelCount> storage{};
+  std::array<WheelDevice*, Chassis::kWheelCount> devices{};
+  for (std::size_t index = 0; index < devices.size(); ++index) {
+    devices[index] = &storage[index];
+    storage[index].feedback.timestamp_ms = 100U;
+  }
+
+  Chassis chassis;
+  auto config = MakeConfig(ChassisModel::kMecanum);
+  config.feedback_timeout_ms = 20U;
+  Expect(chassis.Register(config, devices) == ChassisStatus::kOk,
+         "valid feedback timeout should be accepted");
+  Expect(chassis.Enable() == ChassisStatus::kOk,
+         "chassis should enable before timestamp validation");
+  Expect(chassis.UpdateFeedback(120U) == ChassisStatus::kOk,
+         "feedback at the exact timeout boundary should be accepted");
+  Expect(chassis.feedback().valid,
+         "accepted timestamped feedback should be exposed as valid");
+
+  Expect(chassis.UpdateFeedback(121U) == ChassisStatus::kInvalidFeedback,
+         "feedback older than the configured timeout should be rejected");
+  Expect(chassis.state() == ChassisState::kFault,
+         "stale feedback should fault and relax the chassis");
+  for (const auto& wheel : storage) {
+    Expect(!wheel.enabled,
+           "stale feedback fault handling should relax every wheel");
+  }
+}
+
+void TestFeedbackTimestampWraparound() {
+  std::array<FakeWheel, Chassis::kWheelCount> storage{};
+  std::array<WheelDevice*, Chassis::kWheelCount> devices{};
+  for (std::size_t index = 0; index < devices.size(); ++index) {
+    devices[index] = &storage[index];
+    storage[index].feedback.timestamp_ms = UINT32_MAX - 5U;
+  }
+
+  Chassis chassis;
+  auto config = MakeConfig(ChassisModel::kMecanum);
+  config.feedback_timeout_ms = 20U;
+  Expect(chassis.Register(config, devices) == ChassisStatus::kOk,
+         "wraparound test configuration should register");
+  Expect(chassis.Enable() == ChassisStatus::kOk,
+         "wraparound test chassis should enable");
+  Expect(chassis.UpdateFeedback(10U) == ChassisStatus::kOk,
+         "unsigned elapsed-time comparison should handle clock wraparound");
+}
+
+void TestInvalidFeedbackTimeoutRejected() {
+  std::array<FakeWheel, Chassis::kWheelCount> storage{};
+  std::array<WheelDevice*, Chassis::kWheelCount> devices{};
+  for (std::size_t index = 0; index < devices.size(); ++index) {
+    devices[index] = &storage[index];
+  }
+
+  Chassis chassis;
+  auto config = MakeConfig(ChassisModel::kMecanum);
+  config.feedback_timeout_ms = 0U;
+  Expect(chassis.Register(config, devices) ==
+             ChassisStatus::kInvalidConfiguration,
+         "zero feedback timeout should be rejected");
+  for (const auto& wheel : storage) {
+    Expect(!wheel.registered,
+           "invalid feedback timeout must fail before device registration");
+  }
+}
+
 void TestEnableFailureRelaxesRegisteredDevices() {
   std::array<FakeWheel, Chassis::kWheelCount> storage{};
   std::array<WheelDevice*, Chassis::kWheelCount> devices{};
@@ -179,6 +264,10 @@ int main() {
   TestMecanumModuleFlow();
   TestModelSelectionAndValidation();
   TestEnableFailureRelaxesRegisteredDevices();
+  TestInvalidPidRejectedBeforeDeviceRegistration();
+  TestFeedbackTimestampFreshness();
+  TestFeedbackTimestampWraparound();
+  TestInvalidFeedbackTimeoutRejected();
   if (failures != 0) {
     std::printf("%d chassis module host test(s) failed\n", failures);
     return 1;

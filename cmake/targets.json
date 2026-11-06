@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "targets": [
+    {
+      "name": "mr_component_math",
+      "alias": "mr::component_math",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["c_std_11", "cxx_std_17"],
+      "header": "component/math/scalar.hpp",
+      "dependencies": []
+    },
+    {
+      "name": "mr_component_filter",
+      "alias": "mr::component_filter",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "component/filter/filter.hpp",
+      "dependencies": ["mr_component_math"]
+    },
+    {
+      "name": "mr_component_controller",
+      "alias": "mr::component_controller",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "component/controller/controller.hpp",
+      "dependencies": ["mr_component_filter", "mr_component_math"]
+    },
+    {
+      "name": "mr_component_trajectory",
+      "alias": "mr::component_trajectory",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "component/trajectory/trajectory_types.hpp",
+      "dependencies": ["mr_component_math"]
+    },
+    {
+      "name": "mr_robotics_core",
+      "alias": "mr::robotics_core",
+      "type": "STATIC",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "robotics/core/rotation.hpp",
+      "sources": [
+        "User/robotics/core/rotation.cpp",
+        "User/robotics/core/transform.cpp"
+      ],
+      "dependencies": ["mr_component_math"]
+    },
+    {
+      "name": "mr_robotics_chassis",
+      "alias": "mr::robotics_chassis",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "robotics/chassis/chassis_kinematics.hpp",
+      "dependencies": ["mr_component_math"]
+    },
+    {
+      "name": "mr_device_wheel_interface",
+      "alias": "mr::device_wheel_interface",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "device/wheel/wheel_interface.hpp",
+      "dependencies": []
+    },
+    {
+      "name": "mr_module_chassis",
+      "alias": "mr::module_chassis",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "module/chassis/chassis.hpp",
+      "dependencies": [
+        "mr_robotics_chassis",
+        "mr_component_controller",
+        "mr_device_wheel_interface"
+      ]
+    },
+    {
+      "name": "mr_robotics_arm",
+      "alias": "mr::robotics_arm",
+      "type": "INTERFACE",
+      "include_dirs": ["User"],
+      "compile_features": ["cxx_std_17"],
+      "header": "robotics/arm/arm.hpp",
+      "dependencies": [
+        "mr_component_math",
+        "mr_component_trajectory",
+        "mr_robotics_core"
+      ]
+    }
+  ]
+}
