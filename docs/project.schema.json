@@ -39,6 +39,10 @@
               "mr_robotics_chassis",
               "mr_device_wheel_interface",
               "mr_module_chassis",
+              "mr_device_joint_interface",
+              "mr_module_arm",
+              "mr_module_audio",
+              "mr_module_cloudmusic",
               "mr_robotics_arm"
             ]
           }

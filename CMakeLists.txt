@@ -180,6 +180,19 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         -fno-exceptions -fno-rtti)
     add_test(NAME mr_arm_module_host_tests COMMAND mr_arm_module_host_tests)
 
+    add_executable(mr_music_host_tests tests/module/music_host_tests.c
+        resources/music/nokia.c resources/music/rm.c)
+    target_include_directories(mr_music_host_tests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/resources/music"
+        "${CMAKE_CURRENT_LIST_DIR}/examples/music/app")
+    target_link_libraries(mr_music_host_tests PRIVATE mr_module_cloudmusic)
+    set_target_properties(mr_music_host_tests PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    target_compile_options(mr_music_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG)
+    target_compile_options(mr_arm_module_host_tests PRIVATE -UNDEBUG)
+    add_test(NAME mr_music_host_tests COMMAND mr_music_host_tests)
+
     add_executable(mr_component_c_host_tests
         tests/component/scalar_c_host_tests.c
         User/component/ahrs.c

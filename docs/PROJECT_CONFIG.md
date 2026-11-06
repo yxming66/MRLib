@@ -47,6 +47,10 @@ project:
 | `mr_device_wheel_interface` | 电机型号无关的轮子接口 | — |
 | `mr_module_chassis` | 统一底盘控制模块 | robotics chassis、controller、wheel interface |
 | `mr_robotics_arm` | 机械臂算法 | math、trajectory、robotics core |
+| `mr_device_joint_interface` | 通用关节/执行器接口 | — |
+| `mr_module_arm` | 外部装配的 `Arm<N>` | robotics arm、joint interface |
+| `mr_module_audio` | 非阻塞音符播放 | — |
+| `mr_module_cloudmusic` | 外部播放列表和控制事件 | module audio |
 
 配置使用普通 target 名称（如下划线格式）；CMake 公开稳定别名 `mr::component_math`、`mr::robotics_arm` 等。直接依赖表达模块需要的能力，其他依赖从 target 图传递。
 

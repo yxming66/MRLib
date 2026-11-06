@@ -11,7 +11,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块共 13 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer、RM/DM/LZ protocol 和 CAN transport；电机总线通过测试替身提供，不需要 STM32 HAL/RTOS。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块共 18 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer、RM/DM/LZ protocol 和 CAN transport；电机总线通过测试替身提供，不需要 STM32 HAL/RTOS。
 
 滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试不覆盖真实设备驱动、剩余旧专用控制器或 STM32 固件。
 
@@ -62,3 +62,14 @@ target_link_libraries(robot_firmware PRIVATE
 本批新增的 timer、姿态估计与告警服务尚未登记为 CLI 可选 target；手工接入时显式添加所需实现。C++ 低通/陷波和告警为头文件实现；C 滤波 API 需编译 `User/component/filter/filter.c`，timer 需 `User/component/timer.cpp`，姿态估计需 `User/component/ahrs.c`，并设置 `User` 为 include 路径。详细接口、单位和迁移变化见 [基础服务接口](USER_SERVICES.md)。
 
 共享 PID 核心为 `component/controller/pid_core.h`，C11 和 C++17 均可使用，无需额外源文件；C++ `pid.hpp` 通过既有 `mr::component_controller` 使用。旧 `PID_Init/Calc/Reset` 入口需显式编译 `User/component/pid.c`；PID 自身不再需要链接 `filter.c`，滤波计算直接复用头文件核心。
+
+本次模块边界调整新增公共目标：
+
+| Target | 用途 |
+| --- | --- |
+| `mr::device_joint_interface` | 通用执行器与关节接口 |
+| `mr::module_arm` | 外部装配的固定关节数 `Arm<N>` |
+| `mr::module_audio` | C11 音符播放状态机，无设备依赖 |
+| `mr::module_cloudmusic` | 外部播放列表与曲目控制，依赖 module_audio |
+
+新增机械臂模块和音乐主机回归；三轴装配示例也参与测试编译。曲谱无需加入公共依赖，应用显式添加 `resources/music` 中的单曲源文件，见 `examples/music/README.md`。

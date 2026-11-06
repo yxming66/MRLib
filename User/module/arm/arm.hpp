@@ -57,7 +57,7 @@ class Arm final {
     if (lifecycle_ == Lifecycle::kUninitialized) return DEVICE_ERR_NULL;
     if (!registered_) return last_device_error_;
     if (lifecycle_ == Lifecycle::kEnabled) return DEVICE_ERR_INITED;
-    if (!robotics::arm::IsJointStateUsable(feedback_) ||
+    if (!feedback_ready_ || !robotics::arm::IsJointStateUsable(feedback_) ||
         !robotics::arm::safety::IsJointPositionSafe(model_, feedback_.position)) return DEVICE_ERR;
     const auto result = output_.Enable();
     if (result != DEVICE_OK) return Fault(result);

@@ -76,7 +76,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前已有 13 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
+当前已有 18 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 

@@ -50,6 +50,9 @@ template<int N> void CheckSize() {
   assert(arm.SetZero(0) != 0);
   assert(arm.Disable() == 0 && arm.SetZero(0) == 0);
   assert(arm.Enable() != 0); // Zeroing invalidates feedback.
+  assert(arm.UpdateFeedback() == 0 && arm.Enable() == 0);
+  assert(arm.Step(0.002f) == 0 && arm.CommitOutput() == 0);
+  assert(arm.Step(0.002f) != 0); // Each step requires a new device snapshot.
 }
 int main() {
   CheckSize<2>(); CheckSize<3>(); CheckSize<6>();

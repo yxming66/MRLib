@@ -91,7 +91,7 @@ float dt_s = timer.Update();
 
 请求过期后按启动时确定的最短时长保持，再关闭。低优先级请求不能提前打断保持期，高优先级可以升级；等级切换重新建立音调相位和保持期。同等级请求只刷新有效性，不重复延长最短保持。音调按实际经过时间交替，延迟调用不会逐个补播。项目负责音乐、校准提示与告警间的仲裁，并把输出送给 buzzer。
 
-旧任务中的按钮、遥控拨杆、固定标定值、加热 PID、整机线程表与全局变量已移除。`User/task/README.md` 说明项目边界；尚未解耦的 `module/cloudmusic` 不属于上述新告警服务。
+旧任务中的按钮、遥控拨杆、固定标定值、加热 PID、整机线程表与全局变量已移除。`User/task/README.md` 说明项目边界；音乐播放独立为 `module/audio/player.h` 与 `module/cloudmusic`，由 app 决定其与告警的输出优先级。
 
 ## 轮子反馈与底盘时效
 
@@ -126,3 +126,6 @@ RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程�
 `module/arm/arm.hpp` 提供 `mr::module::arm::Arm<N>`，通过 `Config` 复制 robotics 模型、规划参数和关节增益，绑定 app 持有的完整 `IActuator` 数组。初始化只注册；有效反馈后显式 Enable。每周期依次 UpdateFeedback、SetCommand、Step、CommitOutput；错误锁存为 Fault 并清除待发控制，修复后重新采样并显式 Enable。详细生命周期、坐标单位和迁移说明见 `User/module/arm/README.md`。
 
 旧三轴参数和遥控映射已迁到 `examples/three_axis_arm/app`；公共模块不包含具体电机、工厂后备路径、机器人几何或遥控策略。CMake 目标为 `mr_module_arm`，应用需提供自己的 board、设备、调度和输入超时策略。
+## 音乐播放与资源边界
+
+`Audio_Player` 接收音符输出回调和毫秒时间；`CloudMusic` 接收显式播放列表与控制事件。二者不包含 PWM、RTOS、DR16 或固定曲库。蜂鸣器设备仅保留硬件输出；原设备内播放状态机已删除。曲谱位于 `resources/music` 并按单曲编译，遥控手势和输出接入位于 `examples/music/app`。CMake 可分别链接 `mr_module_audio`、`mr_module_cloudmusic`；不会传递曲库。生命周期、错误、暂停和时间约定见 `User/module/cloudmusic/README.md`。
