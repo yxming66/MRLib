@@ -167,7 +167,8 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         -fno-exceptions -fno-rtti)
 
     add_library(mr_arm_module_compile_check OBJECT
-        User/module/arm/arm.cpp)
+        User/module/arm/arm.cpp
+        User/module/arm/arm_output_adapter.cpp)
     target_include_directories(mr_arm_module_compile_check BEFORE PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
     target_include_directories(mr_arm_module_compile_check PRIVATE

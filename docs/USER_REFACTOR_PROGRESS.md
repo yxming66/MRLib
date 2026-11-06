@@ -324,3 +324,16 @@ MRLINK 主机测试和完整 CTest 通过。该批没有改变线上帧格式，
 ### 边界
 
 电机协议仍直接依赖当前 BSP CAN 兼容层，RM 分组输出和 DM/LZ 物理量还需要权威协议资料与假总线 golden vector 验证；本批没有删除旧 C 电机实现。
+
+## 第十九批：机械臂输出绑定外部执行器（2026-11-06）
+
+### 完成项
+
+1. `ArmOutputAdapter` 新增 `Bind(std::array<mr::IActuator*, 3>, parameters)`，模块可以直接使用 app/device 拥有的执行器，不再要求模块内部创建电机。
+2. `Runtime::Config` 新增可选的外部执行器数组；全部槽位有效时走绑定路径，未提供时暂保留旧三轴工厂路径用于迁移。
+3. 统一 Register、Enable、Update、Relax、SetMIT/SetTorque、Commit 和 SetZero 的执行器遍历，模块层不再在控制流程中按关节下标调用具体电机类型。
+4. 保留旧电机适配器只作为兼容装配，并把其状态转换到同一 `MotorState` 快照；外部通用执行器使用最小 `ActuatorState` 契约。
+
+### 验证与边界
+
+严格 C++17、无异常/RTTI 下，`arm.cpp` 与 `arm_output_adapter.cpp` 均通过主机编译检查，且已加入机械臂 module compile-check 目标。旧 `Arm_Params_t` 仍包含三种厂商参数以维持迁移兼容；下一步应在项目装配示例中使用外部执行器数组，并逐步删除旧工厂分支。

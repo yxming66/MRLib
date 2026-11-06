@@ -1,12 +1,16 @@
 #pragma once
 
 // Fixed-size actuator boundary for the three arm joints. The generic arm
-// controller stops at joint coordinates; this class is the only arm-module
-// code that knows the concrete motor protocols.
+// controller stops at joint coordinates; normal assembly binds IActuator
+// objects supplied by the app. The legacy Initialize path is the only place
+// that still knows the historical concrete motor protocols.
 
+#include <array>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "device/joint/joint_interface.hpp"
+#include "device/joint/motor_actuator_adapter.hpp"
 #include "device/motor/core/motor_aliases.hpp"
 #include "device/motor/core/motor_state.hpp"
 #include "device/motor/motor.hpp"
@@ -28,6 +32,8 @@ class ArmOutputAdapter final {
   ArmOutputAdapter& operator=(const ArmOutputAdapter&) = delete;
 
   bool Initialize(const Arm_Params_t& parameters);
+  bool Bind(const std::array<mr::IActuator*, ARM_JOINT_COUNT>& actuators,
+            const Arm_Params_t& parameters);
   bool IsInitialized() const { return initialized_; }
 
   int8_t Register();
@@ -53,6 +59,8 @@ class ArmOutputAdapter final {
 
   int8_t FirstFailure(int8_t current, int8_t next) const;
   int8_t ApplyJoint(size_t index, const ThreeAxisJointCommand& command);
+  void LoadControlParameters(const Arm_Params_t& parameters);
+  void RefreshMotorState(size_t index);
 
   mr::motor::LzRso3Motor* joint1_motor_;
   mr::motor::DmJ4340Motor* joint2_motor_;
@@ -60,6 +68,11 @@ class ArmOutputAdapter final {
   float kp_[ARM_JOINT_COUNT];
   float kd_[ARM_JOINT_COUNT];
   float gravity_scale_[ARM_JOINT_COUNT];
+  std::array<mr::IActuator*, ARM_JOINT_COUNT> actuators_{};
+  std::array<mr::motor::MotorState, ARM_JOINT_COUNT> motor_states_{};
+  mr::LzActuator joint1_actuator_;
+  mr::DmJ4340Actuator joint2_actuator_;
+  mr::DmJ4310PActuator joint3_actuator_;
   bool initialized_;
 };
 

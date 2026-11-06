@@ -102,7 +102,21 @@ bool Runtime::Init(const Config& config, float control_freq_hz) {
   config_ = config;
   parameters_ = config_.parameters;
 
-  if (!output_adapter_.Initialize(*parameters_) ||
+  bool output_ready = false;
+  bool has_external_actuators = true;
+  for (mr::IActuator* actuator : config.actuators) {
+    if (actuator == nullptr) {
+      has_external_actuators = false;
+      break;
+    }
+  }
+  if (has_external_actuators) {
+    output_ready = output_adapter_.Bind(config.actuators, *parameters_);
+  } else {
+    output_ready = output_adapter_.Initialize(*parameters_);
+  }
+
+  if (!output_ready ||
       output_adapter_.Register() != DEVICE_OK ||
       !InitializeController(control_freq_hz_)) {
     return false;

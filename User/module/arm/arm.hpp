@@ -5,11 +5,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <array>
 
 #include "module/arm/arm_command_adapter.hpp"
 #include "module/arm/arm_control_types.h"
 #include "module/arm/arm_model_config.hpp"
 #include "module/arm/arm_output_adapter.hpp"
+#include "device/joint/joint_interface.hpp"
 #include "robotics/arm/control/arm_controller.hpp"
 
 namespace mr::arm {
@@ -46,6 +48,9 @@ class Runtime final {
  public:
   struct Config {
     const Arm_Params_t* parameters = nullptr;
+    // Optional app-owned actuators. If all slots are non-null, Runtime binds
+    // them and does not create concrete motor objects.
+    std::array<mr::IActuator*, ARM_JOINT_COUNT> actuators{};
   };
 
   Runtime();
