@@ -43,6 +43,11 @@ public:
         UpdateTemperatureProtectionFlags();
     }
 
+    MotorT(const MotorT&) = delete;
+    MotorT& operator=(const MotorT&) = delete;
+    MotorT(MotorT&&) = delete;
+    MotorT& operator=(MotorT&&) = delete;
+
     int8_t Register() { return protocol_.Register(); }
     int8_t Enable() {
         UpdateTemperatureProtectionFlags();

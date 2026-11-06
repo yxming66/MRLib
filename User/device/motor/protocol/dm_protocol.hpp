@@ -19,7 +19,7 @@ template <MotorModel Model> class MotorProtocol<MotorKind::DM, Model> {
   int8_t Register(); int8_t Enable(); int8_t Disable(); int8_t Relax(); int8_t SetZero(); int8_t Update(); int8_t CommitCommand();
   bool HasPendingCommand() const { return pending_ != PendingCommandType::None; } void ClearPendingCommand(); int8_t SetTorque(float); int8_t SetVelocity(float); int8_t SetPosition(float, float); int8_t SetMIT(float, float, float, float, float);
  private:
-  bool Decode(DmFeedback&); int8_t Send(const CanFrame&) const; void RefreshState(const DmFeedback&);
+  FeedbackRead Decode(DmFeedback&); int8_t Send(const CanFrame&) const; void RefreshState(const DmFeedback&);
   MotorInstanceConfig<MotorKind::DM> config_{}; MotorInstallSpec install_{}; MotorState& state_; TransmissionMapper mapper_{}; RotorPositionTracker tracker_{}; CanTransport transport_{}; DmModule module_{}; DmFeedback feedback_{}; uint32_t last_sequence_ = 0U; uint32_t last_feedback_tick_ = 0U; bool have_feedback_ = false; bool registered_ = false; bool last_online_ = false;
   PendingCommandType pending_ = PendingCommandType::None; float pending_velocity_ = 0.0f; float pending_position_ = 0.0f; float pending_velocity_limit_ = 0.0f; float pending_mit_position_ = 0.0f; float pending_mit_velocity_ = 0.0f; float pending_kp_ = 0.0f; float pending_kd_ = 0.0f; float pending_torque_ = 0.0f;
 };

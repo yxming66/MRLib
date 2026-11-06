@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "device/device.h"
+#include "bsp/adapters/can_port.hpp"
 #include "device/motor/protocol/dm_protocol.hpp"
 #include "device/motor/protocol/lz_protocol.hpp"
 
@@ -24,6 +25,8 @@ struct FakeCanBus {
 };
 
 std::array<FakeCanBus, BSP_CAN_NUM> g_fake_buses{};
+uint32_t ClockMs() { return 0; }
+mr::board::BspCanPort g_ports[] = {{BSP_CAN_1, ClockMs}, {BSP_CAN_2, ClockMs}};
 int failures = 0;
 
 void Expect(bool condition, const char* message) {
@@ -41,7 +44,7 @@ using LzProtocol = mr::motor::MotorProtocol<mr::motor::MotorKind::LZ,
 DmProtocol MakeDmProtocol(uint16_t master_id, uint16_t can_id,
                          mr::motor::MotorState* state) {
   mr::motor::MotorInstanceConfig<mr::motor::MotorKind::DM> config{};
-  config.can = BSP_CAN_1;
+  config.port = &g_ports[0];
   config.master_id = master_id;
   config.can_id = can_id;
   return DmProtocol(config, mr::motor::kDirectDriveInstall, *state,
@@ -50,7 +53,7 @@ DmProtocol MakeDmProtocol(uint16_t master_id, uint16_t can_id,
 
 LzProtocol MakeLzProtocol(mr::motor::MotorState* state) {
   mr::motor::MotorInstanceConfig<mr::motor::MotorKind::LZ> config{};
-  config.can = BSP_CAN_2;
+  config.port = &g_ports[1];
   config.motor_id = 3U;
   config.host_id = 0xfdu;
   config.mode = mr::motor::LzControlMode::Motion;

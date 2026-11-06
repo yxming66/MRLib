@@ -7,6 +7,8 @@
 #include "component/math/scalar.hpp"
 #include "component/math/transmission_mapper.hpp"
 #include "device/motor/core/motor_state.hpp"
+#include "device/motor/core/motor_install_spec.hpp"
+#include "device/device.h"
 
 namespace mr::motor {
 
@@ -126,6 +128,24 @@ inline MitCommandValues PrepareMitCommand(const TransmissionMapper& mapper,
         ? mr::component::math::abs_clip_scalar(torque_ff, peak_torque)
         : torque_ff;
     return values;
+}
+
+enum class FeedbackRead { kNew, kNoNew, kInvalid };
+inline bool ValidInstall(const MotorInstallSpec& install) {
+    return mr::component::math::is_positive_scalar(install.external_ratio);
+}
+inline bool FeedbackTimeoutValid(uint32_t timeout) { return timeout > 0 && timeout <= INT32_MAX; }
+// A repeated/absent sample remains usable until its original receive timestamp
+// expires. Polling never refreshes sample age. Future timestamps are rejected.
+inline int8_t KeepFeedbackUntilTimeout(MotorState& state, uint32_t now, uint32_t timeout) {
+    if (state.feedback_valid && FeedbackTimeoutValid(timeout) &&
+        now - state.last_feedback_tick <= timeout) return DEVICE_OK;
+    if (state.online) ++state.feedback_lost_count;
+    state.online = state.feedback_valid = state.position_valid = false;
+    return DEVICE_ERR_NO_DEV;
+}
+inline bool IsFreshFeedback(uint32_t now, uint32_t timestamp, uint32_t timeout) {
+    return FeedbackTimeoutValid(timeout) && now - timestamp <= timeout;
 }
 
 inline void ResetZeroedState(MotorState& state) {

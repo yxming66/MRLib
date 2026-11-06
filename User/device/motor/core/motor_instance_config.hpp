@@ -8,57 +8,46 @@
 
 #include <stdint.h>
 
-#include "bsp/can.h"
+#include "device/motor/bus/can_transport.hpp"
 #include "device/motor/core/motor_kind.hpp"
 #include "device/motor/protocol/protocol_types.hpp"
 
 namespace mr::motor {
+class RmCommandBus;
 
 template <MotorKind Kind>
 struct MotorInstanceConfig;
 
 template <>
 struct MotorInstanceConfig<MotorKind::RM> {
-    BSP_CAN_t can = BSP_CAN_1;
+    CanPort* port = nullptr;
+    RmCommandBus* commands = nullptr;
     // RM feedback CAN identifier (M2006/M3508: 0x201-0x208;
     // GM6020: 0x205-0x20b). The command group/slot is derived with the model.
     uint16_t id = 0;
     bool reverse = false;
-
-    template <typename VendorParam>
-    static constexpr MotorInstanceConfig FromVendorParam(const VendorParam& param) {
-        return {param.can, param.id, param.reverse};
-    }
+    uint32_t feedback_timeout_ms = 20;
 
 };
 
 template <>
 struct MotorInstanceConfig<MotorKind::DM> {
-    BSP_CAN_t can = BSP_CAN_1;
+    CanPort* port = nullptr;
     uint16_t master_id = 0;
     uint16_t can_id = 0;
     bool reverse = false;
-
-    template <typename VendorParam>
-    static constexpr MotorInstanceConfig FromVendorParam(const VendorParam& param) {
-        return {param.can, param.master_id, param.can_id, param.reverse};
-    }
+    uint32_t feedback_timeout_ms = 20;
 
 };
 
 template <>
 struct MotorInstanceConfig<MotorKind::LZ> {
-    BSP_CAN_t can = BSP_CAN_1;
+    CanPort* port = nullptr;
     uint8_t motor_id = 0;
     uint8_t host_id = 0xff;
     LzControlMode mode = LzControlMode::Motion;
     bool reverse = false;
-
-    template <typename VendorParam>
-    static constexpr MotorInstanceConfig FromVendorParam(const VendorParam& param) {
-        return {param.can, param.motor_id, param.host_id,
-                static_cast<LzControlMode>(param.mode), param.reverse};
-    }
+    uint32_t feedback_timeout_ms = 20;
 
 };
 

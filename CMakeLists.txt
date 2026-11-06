@@ -233,9 +233,10 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     add_executable(mr_rm_protocol_host_tests
         tests/device/rm_protocol_host_tests.cpp
         User/device/motor/protocol/rm_protocol.cpp
-        User/device/motor/bus/can_transport.cpp)
+)
     target_include_directories(mr_rm_protocol_host_tests BEFORE PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
+    target_include_directories(mr_rm_protocol_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests")
     target_link_libraries(mr_rm_protocol_host_tests PRIVATE mr_component_math)
     set_target_properties(mr_rm_protocol_host_tests PROPERTIES
         CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
@@ -247,7 +248,7 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         tests/device/dm_lz_protocol_host_tests.cpp
         User/device/motor/protocol/dm_protocol.cpp
         User/device/motor/protocol/lz_protocol.cpp
-        User/device/motor/bus/can_transport.cpp)
+)
     target_include_directories(mr_dm_lz_protocol_host_tests BEFORE PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
     target_link_libraries(mr_dm_lz_protocol_host_tests PRIVATE mr_component_math)
@@ -257,6 +258,19 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti)
     add_test(NAME mr_dm_lz_protocol_host_tests
              COMMAND mr_dm_lz_protocol_host_tests)
+
+    add_executable(mr_motor_feedback_host_tests
+        tests/device/motor_feedback_host_tests.cpp
+        User/device/motor/protocol/dm_protocol.cpp
+        User/device/motor/protocol/lz_protocol.cpp)
+    target_include_directories(mr_motor_feedback_host_tests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/tests" "${CMAKE_CURRENT_LIST_DIR}/User")
+    set_target_properties(mr_motor_feedback_host_tests PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_motor_feedback_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    target_compile_options(mr_rm_protocol_host_tests PRIVATE -UNDEBUG)
+    add_test(NAME mr_motor_feedback_host_tests COMMAND mr_motor_feedback_host_tests)
 
     add_executable(mr_mrlink_host_tests
         tests/device/mrlink_host_tests.c
