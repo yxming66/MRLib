@@ -5,6 +5,9 @@
 
 static int g_failures;
 static unsigned g_handler_calls;
+static unsigned g_error_calls;
+static MrLink_ErrorCode_t g_last_error;
+static bool g_saw_drop;
 
 static void Expect(bool condition, const char *message) {
   if (!condition) {
@@ -21,6 +24,38 @@ static int8_t CountHandler(uint8_t cmd, const uint8_t *payload,
   (void)ctx;
   ++g_handler_calls;
   return MRLINK_OK;
+}
+
+static void CountError(const MrLink_ErrorInfo_t *info, void *ctx) {
+  (void)ctx;
+  if (info != NULL) {
+    ++g_error_calls;
+    g_last_error = info->code;
+    if (info->code == MRLINK_ERROR_RX_DROPPED) g_saw_drop = true;
+  }
+}
+
+static void TestCapacityAndDeferredOverflow(void) {
+  MrLink_t link;
+  uint8_t rx_storage[71]; /* capacity is 70 because one ring slot is reserved */
+  uint8_t tx_storage[MRLINK_MAX_FRAME_SIZE];
+  uint8_t input[72] = {0};
+  MrLink_Config_t config = {MRLINK_MAX_PAYLOAD_DEFAULT, true, 0U, 0U};
+
+  Expect(MrLink_Init(&link, &config, rx_storage, sizeof(rx_storage),
+                     tx_storage, sizeof(tx_storage)) == MRLINK_OK,
+         "an RX storage of max-frame+1 should be accepted");
+  Expect(MrLink_SetErrorHandler(&link, CountError, NULL) == MRLINK_OK,
+         "error callback should register");
+  g_error_calls = 0U;
+  g_saw_drop = false;
+  Expect(MrLink_PushBytes(&link, input, sizeof(input)) == MRLINK_OK,
+         "overflow input should be accepted with dropped-byte accounting");
+  Expect(g_error_calls == 0U,
+         "RX overflow must not invoke a business callback from PushBytes");
+  (void)MrLink_Dispatch(&link);
+  Expect(g_error_calls > 0U && g_saw_drop,
+         "Dispatch should report deferred RX overflow");
 }
 
 static void TestParseConsumesExactlyOneFrame(void) {
@@ -114,6 +149,7 @@ static void TestDispatchStillConsumesAllFrames(void) {
 }
 
 int main(void) {
+  TestCapacityAndDeferredOverflow();
   TestParseConsumesExactlyOneFrame();
   TestDispatchStillConsumesAllFrames();
   if (g_failures != 0) {
