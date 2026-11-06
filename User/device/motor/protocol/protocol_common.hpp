@@ -131,6 +131,9 @@ inline MitCommandValues PrepareMitCommand(const TransmissionMapper& mapper,
 inline void ResetZeroedState(MotorState& state) {
     state.position_rad = 0.0f;
     state.position_single_turn_rad = 0.0f;
+    state.position_valid = false;
+    state.online = false;
+    state.feedback_valid = false;
     state.last_commit_ok = true;
 }
 

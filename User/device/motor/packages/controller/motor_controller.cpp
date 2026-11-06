@@ -120,6 +120,8 @@ MotorControllerT<MotorType>::MotorControllerT(MotorType& motor,
             filtered_position_(0.0f),
             filtered_velocity_(0.0f),
             filtered_output_torque_(0.0f),
+            control_state_{},
+            control_state_valid_(false),
       mode_(ControlMode::Torque),
       target_torque_(0.0f),
       target_velocity_(0.0f),
@@ -217,7 +219,9 @@ int8_t MotorControllerT<MotorType>::UpdateFeedback() {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::UpdateCommand() {
-    return UpdateCommandFromState(motor_.GetState(), last_control_dt_s_);
+    return UpdateCommandFromState(control_state_valid_ ? control_state_
+                                                        : motor_.GetState(),
+                                  last_control_dt_s_);
 }
 
 template <typename MotorType>
@@ -479,6 +483,8 @@ void MotorControllerT<MotorType>::ResetFiltersToState() {
     last_output_torque_ = filtered_output_torque_;
     feedback_filter_initialized_ = true;
     output_filter_initialized_ = false;
+    control_state_ = state;
+    control_state_valid_ = false;
 }
 
 template <typename MotorType>
@@ -500,6 +506,8 @@ MotorState MotorControllerT<MotorType>::FilterFeedback(const MotorState& state,
     MotorState filtered_state = state;
     filtered_state.position_rad = filtered_position_;
     filtered_state.velocity_rad_s = filtered_velocity_;
+    control_state_ = filtered_state;
+    control_state_valid_ = true;
     return filtered_state;
 }
 

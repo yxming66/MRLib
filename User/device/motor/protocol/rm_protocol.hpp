@@ -20,6 +20,6 @@ template <MotorModel Model> class MotorProtocol<MotorKind::RM, Model> {
  private:
   bool Decode(RmFeedback&); void RefreshState(const RmFeedback&);
   MotorInstanceConfig<MotorKind::RM> config_{}; MotorInstallSpec install_{}; MotorState& state_; TransmissionMapper mapper_{}; CanTransport transport_{}; RmModule module_{}; RmFeedback feedback_{};
-  uint32_t last_sequence_ = 0U; uint32_t last_tick_ = 0U; bool registered_ = false; bool last_online_ = false; bool position_initialized_ = false; float last_position_ = 0.0f; float accumulated_position_ = 0.0f; float zero_offset_ = 0.0f; float pending_current_ = 0.0f; bool pending_valid_ = false; bool pending_relax_ = false;
+  uint32_t last_sequence_ = 0U; uint32_t last_tick_ = 0U; bool have_feedback_ = false; bool registered_ = false; bool last_online_ = false; bool position_initialized_ = false; float last_position_ = 0.0f; float accumulated_position_ = 0.0f; float zero_offset_ = 0.0f; float pending_current_ = 0.0f; bool pending_valid_ = false; bool pending_relax_ = false;
 };
 }

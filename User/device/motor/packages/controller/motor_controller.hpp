@@ -192,6 +192,8 @@ private:
     float filtered_position_;
     float filtered_velocity_;
     float filtered_output_torque_;
+    MotorState control_state_{};
+    bool control_state_valid_;
 
     ControlMode mode_;
     float target_torque_;

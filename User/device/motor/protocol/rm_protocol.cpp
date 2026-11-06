@@ -22,7 +22,7 @@ int8_t MotorProtocol<MotorKind::RM, M>::Register() {
   }
   return result;
 }
-template <MotorModel M> bool MotorProtocol<MotorKind::RM,M>::Decode(RmFeedback& f){CanFrame x{};if(transport_.ReadLatest(config_.id,&x)!=BSP_OK||x.dlc<8)return false;state_.last_feedback_tick=x.timestamp_ms;state_.feedback_sequence=x.sequence;state_.feedback_valid=true;f.angle=Read16(x.data);f.speed=ReadS16(x.data+2);f.current=ReadS16(x.data+4);f.temperature=x.data[6];f.error=x.data[7];return true;}
+template <MotorModel M> bool MotorProtocol<MotorKind::RM,M>::Decode(RmFeedback& f){CanFrame x{};if(transport_.ReadLatest(config_.id,&x)!=BSP_OK||x.dlc<8)return false;if(have_feedback_&&x.sequence==last_sequence_&&x.timestamp_ms==last_tick_)return false;last_sequence_=x.sequence;last_tick_=x.timestamp_ms;have_feedback_=true;state_.last_feedback_tick=x.timestamp_ms;state_.feedback_sequence=x.sequence;state_.feedback_valid=true;f.angle=Read16(x.data);f.speed=ReadS16(x.data+2);f.current=ReadS16(x.data+4);f.temperature=x.data[6];f.error=x.data[7];return true;}
 template <MotorModel M> void MotorProtocol<MotorKind::RM,M>::RefreshState(const RmFeedback& f){const float raw_pos=static_cast<float>(f.angle)*mr::component::math::kTwoPi/8192.0f;float p=raw_pos,v=static_cast<float>(f.speed)*0.104719755f,t=static_cast<float>(f.current)*MotorTraits<MotorKind::RM,M>::kCurrentRangeAmp/MotorTraits<MotorKind::RM,M>::kRawCurrentRange;if(config_.reverse){p=-p;v=-v;t=-t;}if(!position_initialized_){position_initialized_=true;last_position_=p;accumulated_position_=p;}const float d=mr::component::math::wrap_error(p-last_position_,mr::component::math::kTwoPi);accumulated_position_+=d;last_position_=p;state_.position_rad=mapper_.ToOutputPosition(accumulated_position_-zero_offset_);state_.position_single_turn_rad=mr::component::math::wrap_to_pi(state_.position_rad);state_.position_valid=true;state_.velocity_rad_s=mapper_.ToOutputVelocity(v);state_.torque_nm=mapper_.ToOutputTorque(t);state_.temperature_c=f.temperature;state_.online=true;state_.protocol_status_code=f.error;state_.protocol_fault=f.error?1UL<<((f.error<31)?f.error:31):0U;state_.protocol_state=f.error?MotorProtocolState::Fault:MotorProtocolState::Enabled;}
 template <MotorModel M> int8_t MotorProtocol<MotorKind::RM,M>::Update(){RmFeedback f{};if(!Decode(f)){state_.online=false;state_.feedback_valid=false;++state_.feedback_lost_count;return DEVICE_ERR_NO_DEV;}feedback_=f;RefreshState(f);return DEVICE_OK;}
 template <MotorModel M> int8_t MotorProtocol<MotorKind::RM,M>::Enable(){state_.protocol_state=MotorProtocolState::Enabled;return DEVICE_OK;}
@@ -113,7 +113,7 @@ int8_t MotorProtocol<MotorKind::RM, M>::SetTorque(float torque_nm) {
   state_.command_pending = true;
   return DEVICE_OK;
 }
-template <MotorModel M> int8_t MotorProtocol<MotorKind::RM,M>::SetZero(){if constexpr(M==MotorModel::M2006||M==MotorModel::M3508){zero_offset_=position_initialized_?last_position_:0.0f;state_.position_rad=0;return DEVICE_OK;}return DEVICE_ERR_UNSUPPORTED;}
+template <MotorModel M> int8_t MotorProtocol<MotorKind::RM,M>::SetZero(){if constexpr(M==MotorModel::M2006||M==MotorModel::M3508){zero_offset_=position_initialized_?last_position_:0.0f;state_.position_rad=0;state_.position_single_turn_rad=0;state_.position_valid=false;return DEVICE_OK;}return DEVICE_ERR_UNSUPPORTED;}
 #define INSTANTIATE(M) template class MotorProtocol<MotorKind::RM,M>;
 INSTANTIATE(MotorModel::M2006) INSTANTIATE(MotorModel::M3508) INSTANTIATE(MotorModel::M6020)
 }
