@@ -384,3 +384,18 @@ RM、DM/LZ 协议测试通过；控制器真实源文件在严格 C++17、无异
 ### 验证与边界
 
 RM、DM/LZ 主机协议测试通过，严格 C++17 编译及 `git diff --check` 通过。该标志只反映协议读取结果，不替代模块层基于时间戳的超时保护；STM32 总线时间戳和设备响应仍需实机验证。
+
+## 第二十四批：删除旧 C 电机栈（2026-11-06）
+
+### 完成项
+
+1. 机械臂项目参数改为轻量的 `Arm_LzMotorConfig_t`、`Arm_DmMotorConfig_t` 和 `Arm_TemperatureProtectionConfig_t`，不再从 C 电机头文件引入协议枚举和旧实例结构；具体型号在 C++ 注册时选择。
+2. 轮子配置改为直接持有 `MotorInstanceConfig<MotorKind::RM>`，删除 `MOTOR_RM_Param_t` 依赖。
+3. 删除旧的 `device/motor.h`、`motor_rm.*`、`motor_dm.*`、`motor_lz.*` C 实现和头文件。RM/DM/LZ 当前协议实现、状态、工厂和执行器适配器成为唯一电机路径。
+4. 清理设备 YAML 中只对应旧 C 电机栈的 `motor_rm` 条目；历史来源清单继续保留为导入快照。
+
+### 验证与边界
+
+机械臂输出适配器、轮子实现和机械臂模块在严格 C++17、无异常/RTTI、BSP stub 下编译通过；C11 机械臂配置头编译检查通过。RM、DM/LZ fake-CAN 主机测试以及电机控制器配置测试继续通过，`git diff --check` 通过。
+
+旧 C API 已移除，外部项目必须迁移到 `MotorT`、`MotorFactory` 或 `IActuator`；本批没有宣称 STM32 HAL 工程和实机行为已验证。

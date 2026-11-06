@@ -12,7 +12,6 @@ namespace {
 constexpr float kMinWheelRadiusM = 1e-4f;
 
 using mr::motor::MotorFactory;
-using mr::motor::MotorInstanceConfig;
 using mr::motor::MotorKind;
 using mr::motor::MotorModel;
 
@@ -28,10 +27,8 @@ RmM3508Wheel::RmM3508Wheel(const RmM3508WheelConfig& config)
       controller_(nullptr),
       state_{},
       controller_storage_{} {
-  const MotorInstanceConfig<MotorKind::RM> motor_config{
-      config.motor_param.can, config.motor_param.id, config.motor_param.reverse};
   motor_ = MotorFactory::Create<MotorKind::RM, MotorModel::M3508>(
-      motor_config, config.install, config.temperature_protection);
+      config.motor_config, config.install, config.temperature_protection);
   if (motor_ != nullptr) {
     controller_ =
         new (controller_storage_) Controller(*motor_, config.controller);

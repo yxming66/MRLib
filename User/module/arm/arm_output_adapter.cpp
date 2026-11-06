@@ -34,7 +34,7 @@ ArmOutputAdapter::ArmOutputAdapter()
 
 mr::motor::MotorTemperatureProtectionConfig
 ArmOutputAdapter::MakeTemperatureProtection(
-    const MOTOR_TemperatureProtectionConfig_t& parameters) {
+    const Arm_TemperatureProtectionConfig_t& parameters) {
   mr::motor::MotorTemperatureProtectionConfig result;
   result.warning_c = parameters.warning_c;
   result.limit_c = parameters.limit_c;
@@ -47,15 +47,22 @@ bool ArmOutputAdapter::Initialize(const Arm_Params_t& parameters) {
     return true;
   }
 
-  const MotorInstanceConfig<MotorKind::LZ> joint1_config =
-      MotorInstanceConfig<MotorKind::LZ>::FromVendorParam(
-          parameters.joint1_motor_param);
-  const MotorInstanceConfig<MotorKind::DM> joint2_config =
-      MotorInstanceConfig<MotorKind::DM>::FromVendorParam(
-          parameters.joint2_motor_param);
-  const MotorInstanceConfig<MotorKind::DM> joint3_config =
-      MotorInstanceConfig<MotorKind::DM>::FromVendorParam(
-          parameters.joint3_motor_param);
+  const MotorInstanceConfig<MotorKind::LZ> joint1_config{
+      static_cast<BSP_CAN_t>(parameters.joint1_motor_param.can),
+      parameters.joint1_motor_param.motor_id,
+      parameters.joint1_motor_param.host_id,
+      static_cast<mr::motor::LzControlMode>(parameters.joint1_motor_param.mode),
+      parameters.joint1_motor_param.reverse};
+  const MotorInstanceConfig<MotorKind::DM> joint2_config{
+      static_cast<BSP_CAN_t>(parameters.joint2_motor_param.can),
+      parameters.joint2_motor_param.master_id,
+      parameters.joint2_motor_param.can_id,
+      parameters.joint2_motor_param.reverse};
+  const MotorInstanceConfig<MotorKind::DM> joint3_config{
+      static_cast<BSP_CAN_t>(parameters.joint3_motor_param.can),
+      parameters.joint3_motor_param.master_id,
+      parameters.joint3_motor_param.can_id,
+      parameters.joint3_motor_param.reverse};
 
   joint1_motor_ = MotorFactory::Create<MotorKind::LZ, MotorModel::RSO3>(
       joint1_config, mr::motor::kDirectDriveInstall,

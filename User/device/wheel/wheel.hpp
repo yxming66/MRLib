@@ -5,7 +5,7 @@
  *
  * 快速用法：
  *   RmM3508WheelConfig config{};
- *   config.motor_param.can = BSP_CAN_1; config.motor_param.id = 0x201;
+ *   config.motor_config.can = BSP_CAN_1; config.motor_config.id = 0x201;
  *   config.radius_m = 0.076f;
  *   RmM3508Wheel wheel(config); wheel.Register();
  *
@@ -21,7 +21,7 @@
 #include "device/device.h"
 #include "device/motor/core/motor_install_spec.hpp"
 #include "device/motor/packages/controller/motor_controller.hpp"
-#include "device/motor_rm.h"
+#include "device/motor/core/motor_instance_config.hpp"
 #include "device/wheel/wheel_interface.hpp"
 
 namespace mr::wheel {
@@ -41,7 +41,7 @@ struct WheelState {
 };
 
 struct RmM3508WheelConfig {
-  MOTOR_RM_Param_t motor_param{};
+  mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM> motor_config{};
   mr::motor::MotorInstallSpec install{};
   mr::motor::MotorTemperatureProtectionConfig temperature_protection{};
   mr::motor::MotorControllerConfig controller{};

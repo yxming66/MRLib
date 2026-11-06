@@ -55,7 +55,7 @@ class ArmOutputAdapter final {
  private:
   static mr::motor::MotorTemperatureProtectionConfig
   MakeTemperatureProtection(
-      const MOTOR_TemperatureProtectionConfig_t& parameters);
+      const Arm_TemperatureProtectionConfig_t& parameters);
 
   int8_t FirstFailure(int8_t current, int8_t next) const;
   int8_t ApplyJoint(size_t index, const ThreeAxisJointCommand& command);
