@@ -197,6 +197,7 @@ int8_t MotorControllerT<MotorType>::Update() {
     last_control_dt_s_ = dt;
     int8_t ret = motor_.Update();
     if (ret != DEVICE_OK) {
+        control_state_valid_ = false;
         return ret;
     }
 
@@ -210,6 +211,7 @@ int8_t MotorControllerT<MotorType>::UpdateFeedback() {
     last_control_dt_s_ = dt;
     int8_t ret = motor_.Update();
     if (ret != DEVICE_OK) {
+        control_state_valid_ = false;
         return ret;
     }
 
@@ -308,6 +310,9 @@ void MotorControllerT<MotorType>::ClearPendingCommand() {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetTorque(float torque_nm) {
+    if (!scalar::is_finite_scalar(torque_nm)) {
+        return DEVICE_ERR;
+    }
     if (mode_ != ControlMode::Torque) {
         ResetControllers();
     }
@@ -318,6 +323,9 @@ int8_t MotorControllerT<MotorType>::SetTorque(float torque_nm) {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
+    if (!scalar::is_finite_scalar(velocity)) {
+        return DEVICE_ERR;
+    }
     target_velocity_ = velocity;
     target_position_ = motor_.GetState().position_rad;
     
@@ -343,6 +351,10 @@ int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetPosition(float position,
                                                 float max_velocity) {
+    if (!scalar::is_finite_scalar(position) ||
+        !scalar::is_finite_scalar(max_velocity) || max_velocity < 0.0f) {
+        return DEVICE_ERR;
+    }
     target_position_ = position;
     target_velocity_ = max_velocity;
 
@@ -391,6 +403,13 @@ template <typename MotorType>
 int8_t MotorControllerT<MotorType>::SetMIT(float position, float velocity,
                                            float kp, float kd,
                                            float torque_ff) {
+    if (!scalar::is_finite_scalar(position) ||
+        !scalar::is_finite_scalar(velocity) ||
+        !scalar::is_finite_scalar(kp) || kp < 0.0f ||
+        !scalar::is_finite_scalar(kd) || kd < 0.0f ||
+        !scalar::is_finite_scalar(torque_ff)) {
+        return DEVICE_ERR;
+    }
     if constexpr (MotorType::Traits::kSupportsMit) {
         // 原生支持 MIT 控制的电机 (DM/LZ 系列)
         if (mode_ != ControlMode::NativeMit) {

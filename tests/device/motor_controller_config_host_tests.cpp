@@ -29,11 +29,6 @@ int main() {
   Expect(injected_config.clock_us == &FakeClockUs,
          "motor controller config should preserve the injected clock callback");
 
-  mr::motor::MotorControllerConfig legacy_config(
-      nullptr, nullptr, 1000.0f, 0.0f, 0.0f, 0.0f, 0.0f);
-  Expect(legacy_config.clock_us == nullptr,
-         "legacy motor controller config constructor should remain available");
-
   if (failures != 0) {
     std::printf("%d motor controller config host test(s) failed\n", failures);
     return 1;

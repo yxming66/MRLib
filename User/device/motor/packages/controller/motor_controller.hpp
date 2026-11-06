@@ -70,16 +70,6 @@ struct MotorControllerConfig {
                     clock_us(nullptr) {}
 
         constexpr MotorControllerConfig(const KPID_Params_t* velocity,
-                                                                        const KPID_Params_t* position,
-                                                                        float sample,
-                                                                        float,
-                                                                        float,
-                                                                        float feedback_cutoff,
-                                                                        float output_cutoff)
-                : MotorControllerConfig(velocity, position, sample, feedback_cutoff,
-                                        output_cutoff) {}
-
-        constexpr MotorControllerConfig(const KPID_Params_t* velocity,
                                          const KPID_Params_t* position,
                                          float sample,
                                          float feedback_cutoff,
@@ -96,7 +86,7 @@ struct MotorControllerConfig {
 template <typename MotorType>
 struct MotorControllerDefaults {
     static constexpr MotorControllerConfig Config() {
-        return {nullptr, nullptr, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+        return MotorControllerConfig(nullptr, nullptr, 0.0f, 0.0f, 0.0f);
     }
 };
 

@@ -205,7 +205,7 @@ MR_TestLib/
 - RM/DM 没使用反馈 sequence/timestamp；重复读取 latest 缓存会持续认为在线。LZ 则没有本周期帧就离线；统一为按反馈时间计算健康状态。
 - DM/LZ 未设置 `position_valid`；反向、累计位置、软件零点与硬件设零的状态更新不一致。
 - `motor_controller.cpp:236`、`:249` 的合并/分离调用路径使用不同反馈，收敛为一个 `feedback + reference + dt → command` 执行核心。
-- `SetPositionTorque` 忽略 `torque_limit`（`:391`）；兼容构造函数静默忽略参数；模板实现仅显式实例化部分公开型号，可能出现链接缺口。
+- `SetPositionTorque` 忽略 `torque_limit`（`:391`）；旧兼容构造函数曾静默忽略参数；模板实现仅显式实例化部分公开型号，可能出现链接缺口。
 - `motor_factory.hpp:43` 的每型号存储与厂家共享计数器混杂。默认由项目静态创建对象并传引用，工厂不再偷偷管理全局设备容量。
 - 型号描述按厂商组织，区分协议量程、额定/峰值参数、内置减速比与外部安装传动。不要用额定参数猜测协议量程。
 

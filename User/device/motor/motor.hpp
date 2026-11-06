@@ -5,7 +5,7 @@
  *
  * 快速用法：包含本文件，选择 MotorFactory::Create 或具体 MotorT 别名，
  * 依次调用 Register、Enable、Update 和 SetXXX/CommitCommand。
- * 业务层不应直接依赖 protocol/*.hpp 的内部实现。
+ * 业务层不应直接依赖 protocol 目录下的内部实现头文件。
  */
 
 // 电机模块公共入口。使用方式：包含本文件后选择 MotorFactory::Create 或具体

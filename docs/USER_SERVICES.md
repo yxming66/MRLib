@@ -59,7 +59,7 @@ Reset(output) 清除积分和测量历史，output 只作为输出/斜率基准�
 
 `component/timer.hpp` 不再提供隐式 BSP 时钟。项目在配置中填写 `uint64_t (*)()` 回调，返回单调微秒；无时钟时 `ready()==false`、更新返回 0，周期判断为 false。构造对象不会读取时钟。
 
-`MotorControllerConfig.clock_us` 将同类回调传给电机控制器，用于估算相邻控制步的实际 dt。留空时控制器按 `sample_freq` 使用固定周期；需要变周期 PID/滤波时，board adapter 应显式填入 BSP 的单调微秒函数。控制器源文件不再直接绑定 BSP 时钟。旧的五参数和七参数配置构造仍可编译，但不会隐式读取硬件时钟；使用者应检查原工程是否依赖实际 dt，并按需设置 `clock_us`。软限位学习包目前仍直接依赖 BSP 时间。
+`MotorControllerConfig.clock_us` 将同类回调传给电机控制器，用于估算相邻控制步的实际 dt。留空时控制器按 `sample_freq` 使用固定周期；需要变周期 PID/滤波时，board adapter 应显式填入 BSP 的单调微秒函数。控制器源文件不再直接绑定 BSP 时钟。配置应使用带有反馈滤波、输出滤波和可选时钟的明确构造方式或成员初始化；旧的含义不清、会静默忽略参数的兼容构造已移除。软限位学习包目前仍直接依赖 BSP 时间。
 
 ```cpp
 mr::comp::timer_config config{};

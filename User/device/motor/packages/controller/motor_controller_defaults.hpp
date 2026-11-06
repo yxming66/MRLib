@@ -31,15 +31,13 @@ struct MotorControllerDefaults<RmM2006Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             500.0f,
-            RmM2006Motor::Traits::kMaxVelocity,
-            RmM2006Motor::Traits::kMaxTorque,
             160.0f,
-            120.0f,
-        };
+            120.0f
+        );
     }
 };
 
@@ -68,15 +66,13 @@ struct MotorControllerDefaults<RmM3508Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -105,15 +101,13 @@ struct MotorControllerDefaults<RmM6020Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -142,15 +136,13 @@ struct MotorControllerDefaults<DmJ10010Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -179,15 +171,13 @@ struct MotorControllerDefaults<DmJ10010LMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -216,15 +206,13 @@ struct MotorControllerDefaults<DmJ10422PMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -253,15 +241,13 @@ struct MotorControllerDefaults<DmJ3507Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -290,15 +276,13 @@ struct MotorControllerDefaults<DmJ4310Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -327,15 +311,13 @@ struct MotorControllerDefaults<DmJ4310PMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -364,15 +346,13 @@ struct MotorControllerDefaults<DmJ4340Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -401,15 +381,13 @@ struct MotorControllerDefaults<DmJ4340PMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -438,15 +416,13 @@ struct MotorControllerDefaults<DmJ6006Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -475,15 +451,13 @@ struct MotorControllerDefaults<DmJ6248PMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -512,15 +486,13 @@ struct MotorControllerDefaults<DmJ8006Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -549,15 +521,13 @@ struct MotorControllerDefaults<DmJ8009Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -586,15 +556,13 @@ struct MotorControllerDefaults<DmJ8009PMotor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -623,15 +591,13 @@ struct MotorControllerDefaults<DmH3510Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -660,15 +626,13 @@ struct MotorControllerDefaults<LzRso0Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -697,15 +661,13 @@ struct MotorControllerDefaults<LzRso1Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -734,15 +696,13 @@ struct MotorControllerDefaults<LzRso2Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -771,15 +731,13 @@ struct MotorControllerDefaults<LzRso3Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -808,15 +766,13 @@ struct MotorControllerDefaults<LzRso4Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -845,15 +801,13 @@ struct MotorControllerDefaults<LzRso5Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
@@ -882,15 +836,13 @@ struct MotorControllerDefaults<LzRso6Motor> {
     };
 
     static constexpr MotorControllerConfig Config() {
-        return {
+        return MotorControllerConfig(
             &kVelocityPid,
             &kPositionPid,
             0.0f,
             0.0f,
-            0.0f,
-            0.0f,
-            0.0f,
-        };
+            0.0f
+        );
     }
 };
 
