@@ -4,6 +4,7 @@
 #include <limits>
 
 #include "module/chassis/chassis.hpp"
+#include "module/chassis/wheel_strategies.hpp"
 
 namespace {
 
@@ -258,6 +259,60 @@ void TestEnableFailureRelaxesRegisteredDevices() {
   }
 }
 
+void TestWheelSpeedPlanner() {
+  mr::module::chassis::WheelSpeedPlanner<4> planner;
+  planner.Configure(2.0f);
+  std::array<float, 4> target{{1.0f, -1.0f, 0.0f, 0.0f}};
+  std::array<float, 4> planned{};
+  Expect(planner.Apply(target, 0.1f, planned),
+         "wheel speed planner should accept finite targets");
+  Expect(std::fabs(planned[0] - 0.2f) < 1.0e-6f &&
+             std::fabs(planned[1] + 0.2f) < 1.0e-6f,
+         "wheel speed planner should limit both acceleration directions");
+  Expect(planner.Apply(target, 0.1f, planned),
+         "wheel speed planner should advance a valid reference");
+  Expect(std::fabs(planned[0] - 0.4f) < 1.0e-6f,
+         "wheel speed planner should retain state between cycles");
+  planner.Reset();
+  Expect(planner.Apply(target, 0.1f, planned) &&
+             std::fabs(planned[0] - 0.2f) < 1.0e-6f,
+         "reset should clear the previous wheel reference");
+  Expect(!planner.Apply(target, 0.0f, planned),
+         "wheel speed planner should reject a non-positive period");
+}
+
+void TestWheelPositionHoldStrategy() {
+  mr::module::chassis::WheelPositionHoldConfig config{};
+  config.enabled = true;
+  config.enter_speed_mps = 0.5f;
+  config.enter_still_time_s = 0.01f;
+  config.max_position_step_rad = 0.5f;
+  config.position_pid.gains = {1.0f, 2.0f, 0.0f, 0.0f};
+  config.position_pid.output_limit = mr::comp::cntlr::SymmetricLimit::Abs(3.0f);
+  config.position_pid.control_freq_hz = 500.0f;
+
+  mr::module::chassis::WheelPositionHold<4> hold;
+  Expect(hold.Configure(config),
+         "valid position hold configuration should be accepted");
+  std::array<WheelFeedback, 4> feedback{};
+  for (auto& wheel : feedback) {
+    wheel.online = true;
+    wheel.position_rad = 1.0f;
+  }
+  std::array<float, 4> torque{};
+  Expect(!hold.Update(feedback, true, 0.005f, torque),
+         "position hold should wait for its still-time threshold");
+  Expect(hold.Update(feedback, true, 0.005f, torque) && hold.active(),
+         "position hold should activate after a stable zero command");
+  feedback[0].position_rad = 1.2f;
+  Expect(hold.Update(feedback, true, 0.002f, torque),
+         "active position hold should produce a torque command");
+  Expect(torque[0] < 0.0f,
+         "position hold should oppose a positive wheel displacement");
+  Expect(!hold.Update(feedback, false, 0.002f, torque) && !hold.active(),
+         "a non-zero command should leave position hold mode");
+}
+
 }  // namespace
 
 int main() {
@@ -268,6 +323,8 @@ int main() {
   TestFeedbackTimestampFreshness();
   TestFeedbackTimestampWraparound();
   TestInvalidFeedbackTimeoutRejected();
+  TestWheelSpeedPlanner();
+  TestWheelPositionHoldStrategy();
   if (failures != 0) {
     std::printf("%d chassis module host test(s) failed\n", failures);
     return 1;

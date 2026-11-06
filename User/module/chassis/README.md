@@ -19,3 +19,13 @@ UpdateFeedback -> SetCommand -> Step(dt_s) -> CommitOutput
 `device/wheel/wheel_interface.hpp` 定义模块需要的最小能力。它采用 `int8_t` 返回值以兼容现有嵌入式设备 API；返回 `0` 表示成功，非零表示设备错误。接口不拥有设备对象，也不负责设备的内存分配。
 
 当前的 `RmM3508Wheel` 已提供该接口的适配实现。其他电机型号只需要实现同一接口，即可复用底盘模块和运动学。
+
+## 可选控制策略
+
+`ChassisConfig` 中的 `wheel_acceleration_limit_mps2` 和
+`wheel_position_hold` 对应旧专用控制器中仍有通用价值的两项策略：
+
+- 轮速参考加速度限制：大于零时按 `m/s²` 限制每周期轮缘速度参考的变化；零值表示不启用。
+- 零指令位置保持：配置有效且车体速度为零时，轮子先保持静止一段时间，再以独立位置 PID 保持当前位置。
+
+两项策略都不创建电机、不初始化 CAN，也不决定遥控模式。高杆增益、旋转模式、云台跟随和遥控映射仍属于 app 或项目 preset；底盘只接收已经解析好的 `PlanarVelocity`。

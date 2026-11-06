@@ -3,10 +3,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 
 #include "component/controller/pid.hpp"
 #include "component/math/scalar.hpp"
 #include "device/wheel/wheel_interface.hpp"
+#include "module/chassis/wheel_strategies.hpp"
 #include "robotics/chassis/chassis_kinematics.hpp"
 
 namespace mr::module::chassis {
@@ -40,6 +42,9 @@ struct ChassisConfig {
   ChassisVelocityLimit max_body_velocity{};
   float max_wheel_speed_mps = 0.0f;
   mr::comp::cntlr::pid_config wheel_velocity_pid{};
+  // Zero disables reference slew limiting. Units are wheel linear speed/s.
+  float wheel_acceleration_limit_mps2 = 0.0f;
+  WheelPositionHoldConfig wheel_position_hold{};
   uint32_t feedback_timeout_ms = 20U;
 };
 
@@ -92,7 +97,13 @@ class Chassis final {
     config_ = config;
     wheels_ = wheels;
     for (auto& controller : wheel_velocity_pid_) {
-      controller.Configure(config_.wheel_velocity_pid);
+      if (!controller.Configure(config_.wheel_velocity_pid)) {
+        return ChassisStatus::kInvalidConfiguration;
+      }
+    }
+    wheel_speed_planner_.Configure(config_.wheel_acceleration_limit_mps2);
+    if (!wheel_position_hold_.Configure(config_.wheel_position_hold)) {
+      return ChassisStatus::kInvalidConfiguration;
     }
 
     for (std::size_t index = 0; index < kWheelCount; ++index) {
@@ -221,19 +232,34 @@ class Chassis final {
       return ChassisStatus::kKinematicsError;
     }
 
+    if (!wheel_speed_planner_.Apply(wheel_speed_refs, dt_s,
+                                    wheel_speed_refs)) {
+      EnterFault();
+      return ChassisStatus::kInvalidArgument;
+    }
+
     output_ = {};
     output_.wheel_speed_ref_mps = wheel_speed_refs;
+    std::array<float, kWheelCount> wheel_torques{};
+    const bool position_hold = wheel_position_hold_.Update(
+        feedback_.wheels, IsZeroCommand(command_), dt_s, wheel_torques);
     for (std::size_t index = 0; index < kWheelCount; ++index) {
-      const auto result = wheel_velocity_pid_[index].Step(
-          wheel_speed_refs[index], feedback_.wheels[index].linear_velocity_mps,
-          dt_s);
-      if (!result.valid || wheels_[index]->SetTorque(result.output) != 0 ||
+      float torque = wheel_torques[index];
+      bool valid = position_hold;
+      if (!position_hold) {
+        const auto result = wheel_velocity_pid_[index].Step(
+            wheel_speed_refs[index],
+            feedback_.wheels[index].linear_velocity_mps, dt_s);
+        torque = result.output;
+        valid = result.valid;
+      }
+      if (!valid || wheels_[index]->SetTorque(torque) != 0 ||
           wheels_[index]->UpdateCommand() != 0) {
         output_ = {};
         EnterFault();
         return ChassisStatus::kDeviceError;
       }
-      output_.wheel_output_torque_nm[index] = result.output;
+      output_.wheel_output_torque_nm[index] = torque;
     }
 
     output_.valid = true;
@@ -290,10 +316,37 @@ class Chassis final {
            mr::component::math::is_finite_scalar(
                config.max_wheel_speed_mps) &&
            config.max_wheel_speed_mps > 0.0f &&
+           mr::component::math::is_finite_scalar(
+               config.wheel_acceleration_limit_mps2) &&
+           config.wheel_acceleration_limit_mps2 >= 0.0f &&
            config.feedback_timeout_ms > 0U &&
            config.feedback_timeout_ms <= INT32_MAX &&
            config.wheel_velocity_pid.output_limit.enabled() &&
-           mr::comp::cntlr::pid::IsConfigValid(config.wheel_velocity_pid);
+           mr::comp::cntlr::pid::IsConfigValid(config.wheel_velocity_pid) &&
+           IsPositionHoldConfigValid(config.wheel_position_hold);
+  }
+
+  static bool IsPositionHoldConfigValid(
+      const WheelPositionHoldConfig& config) {
+    if (!config.enabled) {
+      return true;
+    }
+    return mr::component::math::is_finite_scalar(config.enter_speed_mps) &&
+           config.enter_speed_mps >= 0.0f &&
+           mr::component::math::is_finite_scalar(config.enter_still_time_s) &&
+           config.enter_still_time_s >= 0.0f &&
+           mr::component::math::is_finite_scalar(
+               config.max_position_step_rad) &&
+           config.max_position_step_rad > 0.0f &&
+           config.position_pid.output_limit.enabled() &&
+           mr::comp::cntlr::pid::IsConfigValid(config.position_pid);
+  }
+
+  static bool IsZeroCommand(const mr::robotics::chassis::PlanarVelocity& command) {
+    constexpr float kDeadband = 1.0e-4f;
+    return std::fabs(command.vx_mps) <= kDeadband &&
+           std::fabs(command.vy_mps) <= kDeadband &&
+           std::fabs(command.wz_rad_s) <= kDeadband;
   }
 
   void EnterFault() {
@@ -323,6 +376,8 @@ class Chassis final {
     output_ = {};
     output_pending_ = false;
     feedback_updated_ = false;
+    wheel_speed_planner_.Reset();
+    wheel_position_hold_.Reset();
     for (auto& controller : wheel_velocity_pid_) {
       controller.Reset();
     }
@@ -332,6 +387,8 @@ class Chassis final {
   mr::robotics::chassis::ChassisKinematics kinematics_{};
   std::array<mr::wheel::WheelDevice*, kWheelCount> wheels_{};
   std::array<mr::comp::cntlr::pid, kWheelCount> wheel_velocity_pid_{};
+  WheelSpeedPlanner<kWheelCount> wheel_speed_planner_{};
+  WheelPositionHold<kWheelCount> wheel_position_hold_{};
   mr::robotics::chassis::PlanarVelocity command_{};
   ChassisFeedback feedback_{};
   ChassisOutput output_{};
