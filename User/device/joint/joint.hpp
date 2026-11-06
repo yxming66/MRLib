@@ -22,137 +22,11 @@
 #include <cstring>
 
 #include "component/math/scalar.hpp"
-#include "device/motor/motor.hpp"
+#include "device/device.h"
+#include "device/joint/joint_interface.hpp"
 #include "device/joint/joint_mapping.hpp"
 
 namespace mr {
-
-struct ActuatorState {
-    float position;
-    float velocity;
-    float torque;
-    bool online;
-
-    ActuatorState() : position(0.0f), velocity(0.0f), torque(0.0f), online(false) {}
-};
-
-class IActuator {
-public:
-    virtual ~IActuator() = default;
-
-    virtual int8_t Register() = 0;
-    virtual int8_t Enable() = 0;
-    virtual int8_t Update() = 0;
-    virtual int8_t Relax() = 0;
-    virtual int8_t SetZero() = 0;
-    virtual int8_t CommitControl() = 0;
-    virtual bool HasPendingControl() const = 0;
-    virtual void ClearPendingControl() = 0;
-    virtual int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff) = 0;
-    virtual int8_t SetTorque(float torque) = 0;
-    virtual ActuatorState GetState() const = 0;
-};
-
-template <typename MotorType>
-class MotorActuatorAdapter final : public IActuator {
-public:
-    MotorActuatorAdapter() : motor_(nullptr) {}
-    explicit MotorActuatorAdapter(MotorType* motor) : motor_(motor) {}
-
-    void SetMotor(MotorType* motor) { motor_ = motor; }
-    MotorType* GetMotor() const { return motor_; }
-
-    int8_t Register() override {
-        return motor_ ? motor_->Register() : DEVICE_ERR_NULL;
-    }
-    int8_t Enable() override {
-        return motor_ ? motor_->Enable() : DEVICE_ERR_NULL;
-    }
-    int8_t Update() override {
-        return motor_ ? motor_->Update() : DEVICE_ERR_NULL;
-    }
-    int8_t Relax() override {
-        return motor_ ? motor_->Relax() : DEVICE_ERR_NULL;
-    }
-    int8_t SetZero() override {
-        return motor_ ? motor_->SetZero() : DEVICE_ERR_NULL;
-    }
-    int8_t CommitControl() override {
-        return motor_ ? motor_->CommitCommand() : DEVICE_ERR_NULL;
-    }
-    bool HasPendingControl() const override { return motor_ ? motor_->HasPendingCommand() : false; }
-    void ClearPendingControl() override {
-        if (motor_) {
-            motor_->ClearPendingCommand();
-        }
-    }
-    int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff) override {
-        return motor_ ? motor_->SetMIT(position, velocity, kp, kd, torque_ff)
-                      : DEVICE_ERR_NULL;
-    }
-    int8_t SetTorque(float torque) override {
-        return motor_ ? motor_->SetTorque(torque) : DEVICE_ERR_NULL;
-    }
-    ActuatorState GetState() const override {
-        ActuatorState state;
-        if (!motor_) {
-            return state;
-        }
-        const mr::motor::MotorState motor_state = motor_->GetState();
-        state.position = motor_state.position_rad;
-        state.velocity = motor_state.velocity_rad_s;
-        state.torque = motor_state.torque_nm;
-        state.online = motor_state.online;
-        return state;
-    }
-
-private:
-    MotorType* motor_;
-};
-
-struct JointControlParams {
-    float qmin;
-    float qmax;
-    float kp;
-    float kd;
-};
-
-class IJoint {
-public:
-    virtual ~IJoint() = default;
-
-    virtual uint8_t GetId() const = 0;
-    virtual const char* GetName() const = 0;
-    virtual JointType GetType() const = 0;
-    virtual float GetCurrentAngle() const = 0;
-    virtual float GetCurrentVelocity() const = 0;
-    virtual float GetTargetAngle() const = 0;
-    virtual bool IsOnline() const = 0;
-    virtual const JointControlParams& GetParams() const = 0;
-    virtual float GetOffset() const = 0;
-    virtual float GetFeedforwardTorque() const = 0;
-    virtual float GetMotorCommandPosition() const = 0;
-    virtual float GetMotorCommandVelocity() const = 0;
-    virtual float GetMotorCommandTorque() const = 0;
-    virtual float GetMotorCommandKp() const = 0;
-    virtual float GetMotorCommandKd() const = 0;
-
-    virtual void SetOffset(float offset) = 0;
-    virtual void SetTargetAngle(float target) = 0;
-    virtual void SetFeedforwardTorque(float torque) = 0;
-
-    virtual int8_t Register() = 0;
-    virtual int8_t Enable() = 0;
-    virtual int8_t Update() = 0;
-    virtual int8_t Relax() = 0;
-    virtual int8_t SetZero() = 0;
-    virtual int8_t CommitControl() = 0;
-    virtual bool HasPendingControl() const = 0;
-    virtual void ClearPendingControl() = 0;
-    virtual int8_t PositionControl(float target_angle, float dt) = 0;
-    virtual int8_t TorqueControl(float torque) = 0;
-    virtual bool IsReached(float tolerance) const = 0;
-};
 
 class JointT final : public IJoint {
 public:
@@ -519,11 +393,6 @@ private:
     JointStateCache state_;
 };
 
-using DmJ4310Actuator = MotorActuatorAdapter<mr::motor::DmJ4310Motor>;
-using DmJ4310PActuator = MotorActuatorAdapter<mr::motor::DmJ4310PMotor>;
-using DmJ4340Actuator = MotorActuatorAdapter<mr::motor::DmJ4340Motor>;
-using DmActuator = DmJ4310Actuator;
-using LzActuator = MotorActuatorAdapter<mr::motor::LzRso3Motor>;
 using DmJoint = JointT;
 using LzJoint = JointT;
 

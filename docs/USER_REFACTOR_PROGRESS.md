@@ -213,3 +213,15 @@ GNU 15.2.0 严格 C++17 手动编译并运行 joint host test 通过；CMake 注
 ### 验证与边界
 
 GNU 15.2.0 严格 C++17 主机编译及 joint host test 通过；完整 **15/15 CTest** 回归通过。完整 Ninja 构建、STM32 固件编译和硬件验证仍未完成；关节间同一周期反馈快照与统一提交语义继续留待后续阶段。
+
+## 第十一批：拆分通用关节接口与电机适配器（2026-11-06）
+
+### 完成项
+
+1. 新增 `joint_interface.hpp` 承载 `ActuatorState`、`IActuator`、`IJoint` 与控制参数；`joint.hpp` 只保留通用关节映射/控制实现，不再包含完整 motor subsystem。
+2. 将 `MotorActuatorAdapter` 和 DM/LZ 具体 actuator 别名迁至可选 `motor_actuator_adapter.hpp`。使用具体 motor adapter 的调用者改为显式包含该头；通用 Joint 使用者只需包含 `joint.hpp`。
+3. Joint fake-actuator 测试移除 BSP stub 仍能严格 C++17 编译并通过；新增 adapter 静态编译检查，验证其继续实现通用 actuator 接口。
+
+### 验证与边界
+
+GNU 15.2.0 下，通用 joint host test 在不提供任何 BSP stub 的情况下编译运行通过；具体 motor adapter 使用 fake CAN stub 编译通过；现有 **15/15 CTest** 全部通过。完整 CMake/Ninja 构建、STM32 固件与实机验证仍未完成。include 路径变化需要应用层逐步迁移。

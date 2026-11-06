@@ -146,8 +146,6 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
              COMMAND mr_motor_controller_config_host_tests)
 
     add_executable(mr_joint_host_tests tests/device/joint_host_tests.cpp)
-    target_include_directories(mr_joint_host_tests BEFORE PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
     target_include_directories(mr_joint_host_tests PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}/User")
     set_target_properties(mr_joint_host_tests PROPERTIES
@@ -155,6 +153,18 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     target_compile_options(mr_joint_host_tests PRIVATE
         -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti)
     add_test(NAME mr_joint_host_tests COMMAND mr_joint_host_tests)
+
+    add_library(mr_joint_adapter_compile_check OBJECT
+        tests/device/joint_motor_adapter_compile_check.cpp)
+    target_include_directories(mr_joint_adapter_compile_check BEFORE PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/tests/stubs")
+    target_include_directories(mr_joint_adapter_compile_check PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/User")
+    set_target_properties(mr_joint_adapter_compile_check PROPERTIES
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_joint_adapter_compile_check PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -Wno-comment
+        -fno-exceptions -fno-rtti)
 
     add_executable(mr_component_c_host_tests
         tests/component/scalar_c_host_tests.c
