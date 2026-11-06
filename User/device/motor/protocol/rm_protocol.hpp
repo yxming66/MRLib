@@ -12,17 +12,50 @@
 #include "device/motor/protocol/protocol_common.hpp"
 #include "device/motor/protocol/protocol_types.hpp"
 namespace mr::motor {
-template <MotorModel Model> class MotorProtocol<MotorKind::RM, Model> {
+template <MotorModel Model>
+class MotorProtocol<MotorKind::RM, Model> {
  public:
-  MotorProtocol(const MotorInstanceConfig<MotorKind::RM>&, const MotorInstallSpec&, MotorState&, RmModule);
-  ~MotorProtocol() { if (config_.commands) config_.commands->Release(this); }
+  MotorProtocol(const MotorInstanceConfig<MotorKind::RM>&, const MotorInstallSpec&, MotorState&,
+                RmModule);
+  ~MotorProtocol() {
+    if (config_.commands) config_.commands->Release(this);
+    if (config_.port) config_.port->ReleaseEndpoints(this);
+  }
   MotorProtocol(const MotorProtocol&) = delete;
   MotorProtocol& operator=(const MotorProtocol&) = delete;
-  int8_t Register(); int8_t Enable(); int8_t Disable(); int8_t Relax(); int8_t Update(); int8_t CommitCommand();
-  bool HasPendingCommand() const { return pending_valid_ || (config_.commands && config_.commands->Pending(this)); } void ClearPendingCommand(); int8_t SetTorque(float); int8_t SetZero();
+  int8_t Register();
+  int8_t Enable();
+  int8_t Disable();
+  int8_t Relax();
+  int8_t Update();
+  int8_t CommitCommand();
+  bool HasPendingCommand() const {
+    return pending_valid_ || (config_.commands && config_.commands->Pending(this));
+  }
+  void ClearPendingCommand();
+  int8_t SetTorque(float);
+  int8_t SetZero();
+
  private:
-  FeedbackRead Decode(RmFeedback&); void RefreshState(const RmFeedback&);
-  MotorInstanceConfig<MotorKind::RM> config_{}; MotorInstallSpec install_{}; MotorState& state_; TransmissionMapper mapper_{}; CanTransport transport_{}; RmModule module_{}; RmFeedback feedback_{};
-  uint32_t last_sequence_ = 0U; uint32_t last_tick_ = 0U; bool have_feedback_ = false; bool registered_ = false; bool last_online_ = false; bool position_initialized_ = false; float last_position_ = 0.0f; float accumulated_position_ = 0.0f; float zero_offset_ = 0.0f; float pending_current_ = 0.0f; bool pending_valid_ = false; bool pending_relax_ = false;
+  FeedbackRead Decode(RmFeedback&);
+  void RefreshState(const RmFeedback&);
+  MotorInstanceConfig<MotorKind::RM> config_{};
+  MotorInstallSpec install_{};
+  MotorState& state_;
+  TransmissionMapper mapper_{};
+  CanTransport transport_{};
+  RmModule module_{};
+  RmFeedback feedback_{};
+  uint32_t last_sequence_ = 0U;
+  uint32_t last_tick_ = 0U;
+  bool have_feedback_ = false;
+  bool registered_ = false;
+  bool position_initialized_ = false;
+  float last_position_ = 0.0f;
+  float accumulated_position_ = 0.0f;
+  float zero_offset_ = 0.0f;
+  float pending_current_ = 0.0f;
+  bool pending_valid_ = false;
+  bool pending_relax_ = false;
 };
-}
+}  // namespace mr::motor

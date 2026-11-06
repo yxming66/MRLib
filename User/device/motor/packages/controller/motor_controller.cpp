@@ -216,6 +216,19 @@ int8_t MotorControllerT<MotorType>::Update() {
 }
 
 template <typename MotorType>
+int8_t MotorControllerT<MotorType>::SetZero() {
+    motor_.ClearPendingCommand();
+    const auto result = motor_.SetZero();
+    if (result == DEVICE_OK) {
+        mode_ = ControlMode::Torque;
+        target_torque_ = target_velocity_ = target_position_ = 0.0f;
+        ResetControllers();
+        ResetFiltersToState();
+    }
+    return result;
+}
+
+template <typename MotorType>
 int8_t MotorControllerT<MotorType>::UpdateFeedback() {
     const float dt = UpdateControlDt();
     last_control_dt_s_ = dt;

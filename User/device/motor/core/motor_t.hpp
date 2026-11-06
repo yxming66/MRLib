@@ -58,6 +58,10 @@ public:
     }
     int8_t Disable() { return protocol_.Disable(); }
     int8_t Relax() { return protocol_.Relax(); }
+    int8_t ClearFault() {
+        if constexpr (Kind == MotorKind::DM || Kind == MotorKind::LZ) return protocol_.ClearFault();
+        return DEVICE_ERR_UNSUPPORTED;
+    }
     int8_t SetZero() {
         UpdateTemperatureProtectionFlags();
         if (state_.temperature_limit_latched) {
@@ -72,6 +76,15 @@ public:
     int8_t Update() {
         const int8_t ret = protocol_.Update();
         UpdateTemperatureProtectionFlags();
+        if (ret != DEVICE_OK || !state_.online || !state_.feedback_valid ||
+            !state_.position_valid || state_.protocol_fault ||
+            !mr::component::math::is_finite_scalar(state_.position_rad) ||
+            !mr::component::math::is_finite_scalar(state_.velocity_rad_s) ||
+            !mr::component::math::is_finite_scalar(state_.torque_nm)) {
+            ClearPendingCommand();
+            if (ret == DEVICE_OK && !state_.protocol_fault) MarkFeedbackUnavailable(state_);
+            return ret != DEVICE_OK ? ret : DEVICE_ERR_NO_DEV;
+        }
         if (ret == DEVICE_OK && state_.temperature_limit_latched) {
             return HoldForTemperatureLimit();
         }
@@ -105,7 +118,7 @@ public:
         SetTemperatureProtection({warning_c, limit_c, auto_relax_on_limit});
     }
     void DisableTemperatureProtection() {
-        temperature_protection_ = {};
+        temperature_protection_ = {0.0f, 0.0f, true};
         UpdateTemperatureProtectionFlags();
     }
     void ClearTemperatureLimitLatch() {
@@ -193,10 +206,10 @@ private:
     static MotorTemperatureProtectionConfig NormalizeTemperatureProtection(
         const MotorTemperatureProtectionConfig& config) {
         MotorTemperatureProtectionConfig normalized = config;
-        if (!TemperatureThresholdEnabled(normalized.warning_c)) {
+        if (!mr::component::math::is_finite_scalar(normalized.warning_c)) {
             normalized.warning_c = 70.0f;
         }
-        if (!TemperatureThresholdEnabled(normalized.limit_c)) {
+        if (!mr::component::math::is_finite_scalar(normalized.limit_c)) {
             normalized.limit_c = 80.0f;
         }
         normalized.warning_c =
@@ -248,7 +261,9 @@ private:
         if (!temperature_protection_.auto_relax_on_limit) {
             return DEVICE_ERR;
         }
-        return protocol_.Relax();
+        const auto result = protocol_.Relax();
+        // Relax may succeed, but the requested operation was refused.
+        return result != DEVICE_OK ? result : DEVICE_ERR;
     }
 
     Config config_;

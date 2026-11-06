@@ -131,6 +131,7 @@ public:
     int8_t Enable();
     int8_t Disable();
     int8_t Relax();
+    int8_t SetZero();
     int8_t Update();
     int8_t UpdateFeedback();
     int8_t UpdateCommand();

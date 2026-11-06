@@ -9,6 +9,7 @@ namespace mr::motor {
 class RmCommandBus final {
  public:
   explicit RmCommandBus(CanPort& port) : transport_(&port) {}
+  ~RmCommandBus() { transport_.port()->ReleaseEndpoints(this); }
   RmCommandBus(const RmCommandBus&) = delete;
   RmCommandBus& operator=(const RmCommandBus&) = delete;
   CanPort* port() const { return transport_.port(); }
@@ -17,28 +18,44 @@ class RmCommandBus final {
   }
   int8_t Register(const RmCommandAddress& address, const void* owner, MotorState& state) {
     if (!owner || !CanRegister(address)) return DEVICE_ERR;
+    const uint32_t key = GroupId(static_cast<size_t>(address.group));
+    if (!transport_.port()->ClaimEndpoints(this, &key, 1)) return DEVICE_ERR;
     auto& slot = slots_[Index(address)];
-    slot.owner = owner; slot.state = &state;
+    slot.owner = owner;
+    slot.state = &state;
     return DEVICE_OK;
   }
   void Release(const void* owner) {
-    for (auto& slot : slots_) if (slot.owner == owner) slot = {};
+    for (auto& slot : slots_)
+      if (slot.owner == owner) slot = {};
+    for (size_t group = 0; group < 3; ++group) {
+      bool used = false;
+      for (size_t i = 0; i < 4; ++i) used = used || slots_[group * 4 + i].owner;
+      if (!used) transport_.port()->ReleaseEndpoint(this, GroupId(group));
+    }
   }
   void BeginCycle() {
-    open_ = true; sealed_ = false;
+    open_ = true;
+    sealed_ = false;
     for (auto& done : sent_) done = false;
     for (auto& slot : slots_) {
-      slot.raw = 0; slot.staged = false; slot.relax = true;
+      slot.raw = 0;
+      slot.staged = false;
+      slot.relax = true;
       if (slot.state) slot.state->command_pending = false;
     }
   }
   int8_t Stage(const void* owner, int16_t raw, bool relax) {
     if (!open_ || sealed_) return DEVICE_ERR;
-    for (auto& slot : slots_) if (slot.owner == owner) {
-      slot.raw = static_cast<uint16_t>(raw); slot.staged = true; slot.relax = relax;
-      slot.state->command_pending = true; slot.state->last_commit_ok = false;
-      return DEVICE_OK;
-    }
+    for (auto& slot : slots_)
+      if (slot.owner == owner) {
+        slot.raw = static_cast<uint16_t>(raw);
+        slot.staged = true;
+        slot.relax = relax;
+        slot.state->command_pending = true;
+        slot.state->last_commit_ok = false;
+        return DEVICE_OK;
+      }
     return DEVICE_ERR_NO_DEV;
   }
   bool Pending(const void* owner) const {
@@ -47,10 +64,13 @@ class RmCommandBus final {
     return false;
   }
   void Cancel(const void* owner) {
-    for (auto& slot : slots_) if (slot.owner == owner) {
-      slot.raw = 0; slot.staged = false; slot.relax = true;
-      slot.state->command_pending = false;
-    }
+    for (auto& slot : slots_)
+      if (slot.owner == owner) {
+        slot.raw = 0;
+        slot.staged = false;
+        slot.relax = true;
+        slot.state->command_pending = false;
+      }
   }
   int8_t Flush() {
     if (!open_) return DEVICE_OK;
@@ -59,14 +79,19 @@ class RmCommandBus final {
     for (size_t group = 0; group < 3; ++group) {
       if (sent_[group]) continue;
       bool used = false;
-      CanFrame frame{}; frame.id = group == 0 ? 0x200 : (group == 1 ? 0x1ff : 0x2ff);
+      CanFrame frame{};
+      frame.id = GroupId(group);
       frame.dlc = 8;
       for (size_t i = 0; i < 4; ++i) {
         const auto& slot = slots_[group * 4 + i];
         used = used || slot.owner;
-        frame.data[2*i] = slot.raw >> 8; frame.data[2*i+1] = slot.raw;
+        frame.data[2 * i] = slot.raw >> 8;
+        frame.data[2 * i + 1] = slot.raw;
       }
-      if (!used) { sent_[group] = true; continue; }
+      if (!used) {
+        sent_[group] = true;
+        continue;
+      }
       const auto next = transport_.SendStandard(frame);
       if (result == DEVICE_OK) result = next;
       sent_[group] = next == DEVICE_OK;
@@ -82,13 +107,22 @@ class RmCommandBus final {
     if (result == DEVICE_OK) open_ = false;
     return result;
   }
-  int8_t EmergencyStop() { BeginCycle(); return Flush(); }
+  int8_t EmergencyStop() {
+    BeginCycle();
+    return Flush();
+  }
+
  private:
+  static uint32_t GroupId(size_t group) {
+    return group == 0 ? 0x200 : (group == 1 ? 0x1ff : 0x2ff);
+  }
   static bool Valid(const RmCommandAddress& a) {
     RmCommandBank check;
     return check.Set(a, 0);
   }
-  static size_t Index(const RmCommandAddress& a) { return static_cast<size_t>(a.group)*4+a.slot; }
+  static size_t Index(const RmCommandAddress& a) {
+    return static_cast<size_t>(a.group) * 4 + a.slot;
+  }
   struct Slot {
     const void* owner = nullptr;
     MotorState* state = nullptr;

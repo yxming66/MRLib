@@ -20,8 +20,9 @@ enum class MotorProtocolState : uint8_t {
 };
 
 struct MotorTemperatureProtectionConfig {
-    float warning_c = 0.0f;
-    float limit_c = 0.0f;
+    // Non-positive thresholds disable the respective check.
+    float warning_c = 70.0f;
+    float limit_c = 80.0f;
     bool auto_relax_on_limit = true;
 };
 

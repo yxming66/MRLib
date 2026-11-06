@@ -1,6 +1,9 @@
 #include <type_traits>
 
 #include "device/joint/motor_actuator_adapter.hpp"
+#include "device/motor/packages/controller/motor_controller.hpp"
+
+template class mr::MotorActuatorAdapter<mr::motor::MotorControllerT<mr::motor::RmM3508Motor>>;
 
 static_assert(std::is_base_of<mr::IActuator, mr::DmJ4310Actuator>::value,
               "the DM adapter must implement the generic actuator contract");

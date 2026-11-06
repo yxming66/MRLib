@@ -123,7 +123,11 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     target_include_directories(mr_controller_learning_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests")
     target_link_libraries(mr_controller_learning_host_tests PRIVATE
         mr_device_motor_controller mr_device_soft_limit_learning)
-    foreach(_mr_test IN ITEMS mr_execution_host_tests mr_controller_learning_host_tests)
+    add_executable(mr_motor_units_host_tests tests/device/motor_units_host_tests.cpp)
+    target_include_directories(mr_motor_units_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests"
+        "${CMAKE_CURRENT_LIST_DIR}/examples/device_execution/app")
+    target_link_libraries(mr_motor_units_host_tests PRIVATE mr_device_motor mr_device_wheel mr_module_chassis)
+    foreach(_mr_test IN ITEMS mr_execution_host_tests mr_controller_learning_host_tests mr_motor_units_host_tests)
         set_target_properties(${_mr_test} PROPERTIES
             CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
         target_compile_options(${_mr_test} PRIVATE

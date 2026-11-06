@@ -20,35 +20,37 @@ struct MotorInstanceConfig;
 
 template <>
 struct MotorInstanceConfig<MotorKind::RM> {
-    CanPort* port = nullptr;
-    RmCommandBus* commands = nullptr;
-    // RM feedback CAN identifier (M2006/M3508: 0x201-0x208;
-    // GM6020: 0x205-0x20b). The command group/slot is derived with the model.
-    uint16_t id = 0;
-    bool reverse = false;
-    uint32_t feedback_timeout_ms = 20;
-
+  CanPort* port = nullptr;
+  RmCommandBus* commands = nullptr;
+  // RM feedback CAN identifier (M2006/M3508: 0x201-0x208;
+  // GM6020: 0x205-0x20b). The command group/slot is derived with the model.
+  uint16_t id = 0;
+  bool reverse = false;
+  uint32_t feedback_timeout_ms = 20;
 };
 
 template <>
 struct MotorInstanceConfig<MotorKind::DM> {
-    CanPort* port = nullptr;
-    uint16_t master_id = 0;
-    uint16_t can_id = 0;
-    bool reverse = false;
-    uint32_t feedback_timeout_ms = 20;
-
+  CanPort* port = nullptr;
+  uint16_t master_id = 0;
+  uint16_t can_id = 0;
+  bool reverse = false;
+  uint32_t feedback_timeout_ms = 20;
+  // Symmetric MIT wire ranges, MUST match the device firmware configuration.
+  // Zero torque range selects this model's legacy peak-torque default.
+  float mit_position_range_rad = 12.56637f;
+  float mit_velocity_range_rad_s = 30.0f;
+  float mit_torque_range_nm = 0.0f;
 };
 
 template <>
 struct MotorInstanceConfig<MotorKind::LZ> {
-    CanPort* port = nullptr;
-    uint8_t motor_id = 0;
-    uint8_t host_id = 0xff;
-    LzControlMode mode = LzControlMode::Motion;
-    bool reverse = false;
-    uint32_t feedback_timeout_ms = 20;
-
+  CanPort* port = nullptr;
+  uint8_t motor_id = 0;
+  uint8_t host_id = 0xff;
+  LzControlMode mode = LzControlMode::Motion;
+  bool reverse = false;
+  uint32_t feedback_timeout_ms = 20;
 };
 
-} // namespace mr::motor
+}  // namespace mr::motor

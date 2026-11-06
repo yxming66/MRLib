@@ -16,7 +16,10 @@ class MotorWheel final : public WheelDevice {
   float RadiusM() const { return radius_m_; }
   int8_t Register() override { return IsValid() ? drive_.Register() : DEVICE_ERR; }
   int8_t Enable() override { return IsValid() ? drive_.Enable() : DEVICE_ERR; }
-  int8_t Relax() override { drive_.ClearPendingCommand(); return drive_.Relax(); }
+  int8_t Relax() override {
+    drive_.ClearPendingCommand();
+    return drive_.Relax();
+  }
   int8_t UpdateFeedback(WheelFeedback& feedback) override {
     feedback = {};
     if (!IsValid()) return DEVICE_ERR;
@@ -28,11 +31,15 @@ class MotorWheel final : public WheelDevice {
     feedback.timestamp_ms = state.last_feedback_tick;
     feedback.sequence = state.feedback_sequence;
     feedback.online = result == DEVICE_OK && state.online && state.feedback_valid &&
-        state.position_valid && !state.protocol_fault && !state.temperature_limit_latched &&
-        component::math::is_finite_scalar(feedback.position_rad) &&
-        component::math::is_finite_scalar(feedback.linear_velocity_mps) &&
-        component::math::is_finite_scalar(feedback.output_torque_nm);
-    if (!feedback.online) { drive_.ClearPendingCommand(); return result == DEVICE_OK ? DEVICE_ERR_NO_DEV : result; }
+                      state.position_valid && !state.protocol_fault &&
+                      !state.temperature_limit_latched &&
+                      component::math::is_finite_scalar(feedback.position_rad) &&
+                      component::math::is_finite_scalar(feedback.linear_velocity_mps) &&
+                      component::math::is_finite_scalar(feedback.output_torque_nm);
+    if (!feedback.online) {
+      drive_.ClearPendingCommand();
+      return result == DEVICE_OK ? DEVICE_ERR_NO_DEV : result;
+    }
     return DEVICE_OK;
   }
   int8_t SetTorque(float torque_nm) override {
@@ -44,6 +51,7 @@ class MotorWheel final : public WheelDevice {
   int8_t CommitCommand() override { return IsValid() ? drive_.CommitCommand() : DEVICE_ERR; }
   bool HasPendingCommand() const { return drive_.HasPendingCommand(); }
   void ClearPendingCommand() { drive_.ClearPendingCommand(); }
+
  private:
   Drive& drive_;
   float radius_m_;

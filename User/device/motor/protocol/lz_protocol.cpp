@@ -1,41 +1,272 @@
 #include "device/motor/protocol/lz_protocol.hpp"
+
 #include "component/math/scalar.hpp"
 #include "device/device.h"
 namespace mr::motor {
-namespace { constexpr float kAngle=12.57f,kVelocity=20.0f; bool IsFiniteCommand(float value){return mr::component::math::is_finite_scalar(value);} uint16_t Read16(const uint8_t* p){return static_cast<uint16_t>((p[0]<<8)|p[1]);} float Clip(float x,float l){return x>l?l:(x<-l?-l:x);} uint16_t Encode(float x,float max){x=Clip(x,max);return static_cast<uint16_t>((x+max)/(2.0f*max)*65535.0f);} float Decode(uint16_t x,float max){return static_cast<float>(x)*2.0f*max/65535.0f-max;} float TorqueRange(LzModule m){switch(m){case LzModule::Rso0:return 14;case LzModule::Rso1:case LzModule::Rso2:return 17;case LzModule::Rso3:return 60;case LzModule::Rso4:return 120;case LzModule::Rso5:return 5.5f;default:return 36;}} }
-namespace { uint32_t ParseLzId(uint32_t id, CanFrame::Format type){if(type!=CanFrame::Format::Extended)return id;const uint8_t cmd=static_cast<uint8_t>((id>>24)&31U);if(cmd!=2U)return id;const uint8_t host=static_cast<uint8_t>(id);const uint16_t data=static_cast<uint16_t>(id>>8);const uint8_t motor=static_cast<uint8_t>(data);return 0x02000000UL|(static_cast<uint32_t>(motor)<<8)|host;} }
-template <MotorModel M> MotorProtocol<MotorKind::LZ,M>::MotorProtocol(const MotorInstanceConfig<MotorKind::LZ>& c,const MotorInstallSpec& i,MotorState& s,LzModule m):config_(c),install_(i),state_(s),mapper_(TransmissionMapper::FromExternalRatio(i.external_ratio,MotorTraits<MotorKind::LZ,M>::kTorqueConstant)),transport_(c.port),module_(m){}
-template <MotorModel M> uint32_t MotorProtocol<MotorKind::LZ,M>::BuildId(uint8_t cmd,uint16_t data2,uint8_t target)const{return((static_cast<uint32_t>(cmd)&31U)<<24)|(static_cast<uint32_t>(data2)<<8)|target;}
-template <MotorModel M> uint32_t MotorProtocol<MotorKind::LZ,M>::FeedbackId()const{return BuildId(2,config_.motor_id,config_.host_id);}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Register(){if(registered_)return DEVICE_OK;if(!transport_.is_valid()||!ValidInstall(install_)||!FeedbackTimeoutValid(config_.feedback_timeout_ms)||config_.motor_id==config_.host_id||config_.mode!=LzControlMode::Motion)return DEVICE_ERR;const int8_t parser=transport_.RegisterIdParser(ParseLzId);if(parser!=DEVICE_OK)return parser;const int8_t r=transport_.RegisterQueue(FeedbackId(),3);if(r==DEVICE_OK){registered_=true;state_.protocol_state=MotorProtocolState::Registered;}return r;}
-template <MotorModel M> FeedbackRead MotorProtocol<MotorKind::LZ,M>::DecodeFeedback(LzFeedback& f){
+namespace {
+constexpr float kAngle = 12.57f, kVelocity = 20.0f;
+bool IsFiniteCommand(float value) { return mr::component::math::is_finite_scalar(value); }
+uint16_t Read16(const uint8_t* p) { return static_cast<uint16_t>((p[0] << 8) | p[1]); }
+float Clip(float x, float l) { return x > l ? l : (x < -l ? -l : x); }
+uint16_t Encode(float x, float max) {
+  x = Clip(x, max);
+  return static_cast<uint16_t>((x + max) / (2.0f * max) * 65535.0f);
+}
+float Decode(uint16_t x, float max) { return static_cast<float>(x) * 2.0f * max / 65535.0f - max; }
+float TorqueRange(LzModule m) {
+  switch (m) {
+    case LzModule::Rso0:
+      return 14;
+    case LzModule::Rso1:
+    case LzModule::Rso2:
+      return 17;
+    case LzModule::Rso3:
+      return 60;
+    case LzModule::Rso4:
+      return 120;
+    case LzModule::Rso5:
+      return 5.5f;
+    default:
+      return 36;
+  }
+}
+}  // namespace
+namespace {
+uint32_t ParseLzId(uint32_t id, CanFrame::Format type) {
+  if (type != CanFrame::Format::Extended) return id;
+  const uint8_t cmd = static_cast<uint8_t>((id >> 24) & 31U);
+  if (cmd != 2U) return id;
+  const uint8_t host = static_cast<uint8_t>(id);
+  const uint16_t data = static_cast<uint16_t>(id >> 8);
+  const uint8_t motor = static_cast<uint8_t>(data);
+  return 0x02000000UL | (static_cast<uint32_t>(motor) << 8) | host;
+}
+}  // namespace
+template <MotorModel M>
+MotorProtocol<MotorKind::LZ, M>::MotorProtocol(const MotorInstanceConfig<MotorKind::LZ>& c,
+                                               const MotorInstallSpec& i, MotorState& s, LzModule m)
+    : config_(c),
+      install_(i),
+      state_(s),
+      mapper_(TransmissionMapper::FromExternalRatio(i.external_ratio, 1.0f)),
+      transport_(c.port),
+      module_(m) {}
+template <MotorModel M>
+uint32_t MotorProtocol<MotorKind::LZ, M>::BuildId(uint8_t cmd, uint16_t data2,
+                                                  uint8_t target) const {
+  return ((static_cast<uint32_t>(cmd) & 31U) << 24) | (static_cast<uint32_t>(data2) << 8) | target;
+}
+template <MotorModel M>
+uint32_t MotorProtocol<MotorKind::LZ, M>::FeedbackId() const {
+  return BuildId(2, config_.motor_id, config_.host_id);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Register() {
+  if (registered_) return DEVICE_OK;
+  if (!transport_.is_valid() || !ValidInstall(install_) ||
+      !FeedbackTimeoutValid(config_.feedback_timeout_ms) || config_.motor_id == config_.host_id ||
+      config_.mode != LzControlMode::Motion)
+    return DEVICE_ERR;
+  // A motor target cannot be shared merely by choosing another host address.
+  const uint32_t keys[] = {CanPort::kLzTargetEndpoint | config_.motor_id,
+                           CanPort::kExtendedEndpoint | FeedbackId()};
+  if (!config_.port->ClaimEndpoints(this, keys, 2)) return DEVICE_ERR;
+  auto result = transport_.RegisterIdParser(ParseLzId);
+  if (result == DEVICE_OK) result = transport_.RegisterQueue(FeedbackId(), 3);
+  if (result != DEVICE_OK) {
+    config_.port->ReleaseEndpoints(this);
+    return result;
+  }
+  registered_ = true;
+  state_.protocol_state = MotorProtocolState::Registered;
+  return DEVICE_OK;
+}
+template <MotorModel M>
+FeedbackRead MotorProtocol<MotorKind::LZ, M>::DecodeFeedback(LzFeedback& f) {
   CanFrame x{};
-  const auto result = transport_.ReadNext(FeedbackId(),&x);
+  const auto result = transport_.ReadNext(FeedbackId(), &x);
   if (result == kCanNoFrame) return FeedbackRead::kNoNew;
-  if (result != DEVICE_OK || x.dlc != 8 || x.format!=CanFrame::Format::Extended || ((x.id>>24)&31U)!=2U || static_cast<uint8_t>(x.id)!=config_.host_id || static_cast<uint8_t>(x.id>>8)!=config_.motor_id ||
-      !IsFreshFeedback(transport_.NowMs(), x.timestamp_ms, config_.feedback_timeout_ms)) return FeedbackRead::kInvalid;
-  if (have_feedback_ && x.sequence == last_sequence_ && x.timestamp_ms == last_feedback_tick_) return FeedbackRead::kNoNew;
-  last_sequence_ = x.sequence; last_feedback_tick_ = x.timestamp_ms; have_feedback_ = true;
-  state_.last_feedback_tick = x.timestamp_ms; state_.feedback_sequence = x.sequence; state_.feedback_valid = true;const uint16_t d=static_cast<uint16_t>(x.id>>8);f.fault_bits=static_cast<uint8_t>((d>>8)&63U);f.state_bits=static_cast<uint8_t>((d>>14)&3U);f.angle=Read16(x.data);f.velocity=Read16(x.data+2);f.torque=Read16(x.data+4);f.temperature=Read16(x.data+6);return FeedbackRead::kNew;}
-template <MotorModel M> void MotorProtocol<MotorKind::LZ,M>::RefreshState(const LzFeedback& f){float p=Decode(f.angle,kAngle),v=Decode(f.velocity,kVelocity),t=Decode(f.torque,TorqueRange(module_));if(config_.reverse){p=-p;v=-v;t=-t;}if(!tracker_.initialized())tracker_.Sync(p);const float rp=tracker_.Accumulate(p,v,2*kAngle,kDefaultRotorResyncDeltaRad);state_.position_rad=mapper_.ToOutputPosition(rp);state_.position_single_turn_rad=mr::component::math::wrap_to_pi(state_.position_rad);state_.position_valid=true;state_.velocity_rad_s=mapper_.ToOutputVelocity(v);state_.torque_nm=mapper_.ToOutputTorque(t);state_.temperature_c=static_cast<float>(f.temperature)/10.0f;state_.online=true;state_.protocol_status_code=f.state_bits;state_.protocol_fault=(static_cast<uint32_t>(f.fault_bits)<<16);state_.protocol_state=f.fault_bits?MotorProtocolState::Fault:(f.state_bits==2?MotorProtocolState::Enabled:MotorProtocolState::Disabled);}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Update(){LzFeedback f{};  const auto result = DecodeFeedback(f);
-  if (result == FeedbackRead::kNoNew) return KeepFeedbackUntilTimeout(state_, transport_.NowMs(), config_.feedback_timeout_ms);
+  if (result != DEVICE_OK || x.dlc != 8 || x.format != CanFrame::Format::Extended ||
+      ((x.id >> 24) & 31U) != 2U || static_cast<uint8_t>(x.id) != config_.host_id ||
+      static_cast<uint8_t>(x.id >> 8) != config_.motor_id ||
+      !IsFreshFeedback(transport_.NowMs(), x.timestamp_ms, config_.feedback_timeout_ms))
+    return FeedbackRead::kInvalid;
+  if (have_feedback_ && x.sequence == last_sequence_ && x.timestamp_ms == last_feedback_tick_)
+    return FeedbackRead::kNoNew;
+  last_sequence_ = x.sequence;
+  last_feedback_tick_ = x.timestamp_ms;
+  have_feedback_ = true;
+  state_.last_feedback_tick = x.timestamp_ms;
+  state_.feedback_sequence = x.sequence;
+  state_.feedback_valid = true;
+  const uint16_t d = static_cast<uint16_t>(x.id >> 8);
+  f.fault_bits = static_cast<uint8_t>((d >> 8) & 63U);
+  f.state_bits = static_cast<uint8_t>((d >> 14) & 3U);
+  f.angle = Read16(x.data);
+  f.velocity = Read16(x.data + 2);
+  f.torque = Read16(x.data + 4);
+  f.temperature = Read16(x.data + 6);
+  return FeedbackRead::kNew;
+}
+template <MotorModel M>
+void MotorProtocol<MotorKind::LZ, M>::RefreshState(const LzFeedback& f) {
+  float p = Decode(f.angle, kAngle), v = Decode(f.velocity, kVelocity),
+        t = Decode(f.torque, TorqueRange(module_));
+  if (config_.reverse) {
+    p = -p;
+    v = -v;
+    t = -t;
+  }
+  if (!tracker_.initialized()) tracker_.Sync(p);
+  const float rp = tracker_.Accumulate(p, v, 2 * kAngle, kDefaultRotorResyncDeltaRad);
+  state_.position_rad = mapper_.ToOutputPosition(rp);
+  state_.position_single_turn_rad = mr::component::math::wrap_to_pi(state_.position_rad);
+  state_.position_valid = true;
+  state_.velocity_rad_s = mapper_.ToOutputVelocity(v);
+  state_.torque_nm = mapper_.ToOutputTorque(t);
+  state_.temperature_c = static_cast<float>(f.temperature) / 10.0f;
+  state_.online = true;
+  state_.protocol_status_code = f.state_bits;
+  state_.protocol_fault = (static_cast<uint32_t>(f.fault_bits) << 16);
+  state_.protocol_state = f.fault_bits ? MotorProtocolState::Fault
+                                       : (f.state_bits == 2 ? MotorProtocolState::Enabled
+                                                            : MotorProtocolState::Disabled);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Update() {
+  LzFeedback f{};
+  const auto result = DecodeFeedback(f);
+  if (result == FeedbackRead::kNoNew)
+    return KeepFeedbackUntilTimeout(state_, transport_.NowMs(), config_.feedback_timeout_ms);
   if (result == FeedbackRead::kInvalid) {
     if (state_.online) ++state_.feedback_lost_count;
-    MarkFeedbackUnavailable(state_); return DEVICE_ERR_NO_DEV;
+    MarkFeedbackUnavailable(state_);
+    return DEVICE_ERR_NO_DEV;
   }
-  feedback_=f; RefreshState(f); return DEVICE_OK;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Send(uint32_t id,const uint8_t* data)const{CanFrame f{};f.id=id;f.format=CanFrame::Format::Extended;f.dlc=8;for(uint8_t i=0;i<8;i++)f.data[i]=data?data[i]:0;return transport_.SendExtended(f);}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Enable(){uint8_t d[8]{};const int8_t r=Send(BuildId(3,config_.host_id,config_.motor_id),d);if(r==DEVICE_OK)state_.protocol_state=MotorProtocolState::Enabled;return r;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Disable(){ClearPendingCommand();uint8_t d[8]{};const int8_t r=Send(BuildId(4,config_.host_id,config_.motor_id),d);if(r==DEVICE_OK)state_.protocol_state=MotorProtocolState::Disabled;return r;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::Relax(){const int8_t r=Disable();if(r==DEVICE_OK)state_.protocol_state=MotorProtocolState::Relaxed;return r;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::SetZero(){uint8_t d[8]={1,0,0,0,0,0,0,0};const int8_t r=Send(BuildId(6,config_.host_id,config_.motor_id),d);if(r==DEVICE_OK){tracker_.Reset();ResetZeroedState(state_);}return r;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::CommitCommand(){if(pending_==PendingCommandType::None){state_.last_commit_ok=true;return DEVICE_OK;}uint8_t d[8]{};const float sign=config_.reverse?-1.0f:1.0f;const uint16_t tq=Encode(sign*pending_torque_,TorqueRange(module_));const uint16_t p=Encode(sign*pending_mit_position_,kAngle),v=Encode(sign*pending_mit_velocity_,kVelocity);d[0]=p>>8;d[1]=p;d[2]=v>>8;d[3]=v;const uint16_t kp=static_cast<uint16_t>(Clip(pending_kp_,5000)*65535/5000),kd=static_cast<uint16_t>(Clip(pending_kd_,100)*65535/100);d[4]=kp>>8;d[5]=kp;d[6]=kd>>8;d[7]=kd;const int8_t r=Send(BuildId(1,tq,config_.motor_id),d);state_.last_commit_ok=(r==DEVICE_OK);if(r==DEVICE_OK)ClearPendingCommand();return r;}
-template <MotorModel M> void MotorProtocol<MotorKind::LZ,M>::ClearPendingCommand(){pending_=PendingCommandType::None;state_.command_pending=false;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::SetTorque(float t){return SetMIT(state_.position_rad,0,0,0,t);}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::SetVelocity(float v){if(!IsFiniteCommand(v))return DEVICE_ERR;pending_mit_velocity_=v;pending_mit_position_=0;pending_torque_=0;pending_kp_=0;pending_kd_=3;pending_=PendingCommandType::Velocity;state_.command_pending=true;return DEVICE_OK;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::SetPosition(float p,float v){if(!IsFiniteCommand(p)||!IsFiniteCommand(v))return DEVICE_ERR;pending_mit_position_=p;pending_mit_velocity_=v;pending_torque_=0;pending_kp_=40;pending_kd_=1.5f;pending_=PendingCommandType::Position;state_.command_pending=true;return DEVICE_OK;}
-template <MotorModel M> int8_t MotorProtocol<MotorKind::LZ,M>::SetMIT(float p,float v,float kp,float kd,float t){if(!IsFiniteCommand(p)||!IsFiniteCommand(v)||!IsFiniteCommand(kp)||!IsFiniteCommand(kd)||!IsFiniteCommand(t)||kp<0.0f||kd<0.0f)return DEVICE_ERR;pending_mit_position_=p;pending_mit_velocity_=v;pending_kp_=kp;pending_kd_=kd;pending_torque_=t;pending_=PendingCommandType::Mit;state_.command_pending=true;return DEVICE_OK;}
-#define INSTANTIATE(M) template class MotorProtocol<MotorKind::LZ,M>;
-INSTANTIATE(MotorModel::RSO0) INSTANTIATE(MotorModel::RSO1) INSTANTIATE(MotorModel::RSO2) INSTANTIATE(MotorModel::RSO3) INSTANTIATE(MotorModel::RSO4) INSTANTIATE(MotorModel::RSO5) INSTANTIATE(MotorModel::RSO6)
+  feedback_ = f;
+  RefreshState(f);
+  return DEVICE_OK;
 }
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Send(uint32_t id, const uint8_t* data) const {
+  CanFrame f{};
+  f.id = id;
+  f.format = CanFrame::Format::Extended;
+  f.dlc = 8;
+  for (uint8_t i = 0; i < 8; i++) f.data[i] = data ? data[i] : 0;
+  return transport_.SendExtended(f);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Enable() {
+  uint8_t d[8]{};
+  const int8_t r = Send(BuildId(3, config_.host_id, config_.motor_id), d);
+  if (r == DEVICE_OK) state_.protocol_state = MotorProtocolState::Enabled;
+  return r;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Disable() {
+  ClearPendingCommand();
+  uint8_t d[8]{};
+  const int8_t r = Send(BuildId(4, config_.host_id, config_.motor_id), d);
+  if (r == DEVICE_OK) state_.protocol_state = MotorProtocolState::Disabled;
+  return r;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::Relax() {
+  const int8_t r = Disable();
+  if (r == DEVICE_OK) state_.protocol_state = MotorProtocolState::Relaxed;
+  return r;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::SetZero() {
+  uint8_t d[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+  const int8_t r = Send(BuildId(6, config_.host_id, config_.motor_id), d);
+  if (r == DEVICE_OK) {
+    ClearPendingCommand();
+    tracker_.Reset();
+    ResetZeroedState(state_);
+  }
+  return r;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::CommitCommand() {
+  if (pending_ == PendingCommandType::None) {
+    state_.last_commit_ok = true;
+    return DEVICE_OK;
+  }
+  uint8_t d[8]{};
+  const float sign = config_.reverse ? -1.0f : 1.0f;
+  const uint16_t tq = Encode(sign * pending_torque_, TorqueRange(module_));
+  const uint16_t p = Encode(sign * pending_mit_position_, kAngle),
+                 v = Encode(sign * pending_mit_velocity_, kVelocity);
+  d[0] = p >> 8;
+  d[1] = p;
+  d[2] = v >> 8;
+  d[3] = v;
+  const uint16_t kp = static_cast<uint16_t>(Clip(pending_kp_, 5000) * 65535 / 5000),
+                 kd = static_cast<uint16_t>(Clip(pending_kd_, 100) * 65535 / 100);
+  d[4] = kp >> 8;
+  d[5] = kp;
+  d[6] = kd >> 8;
+  d[7] = kd;
+  const int8_t r = Send(BuildId(1, tq, config_.motor_id), d);
+  state_.last_commit_ok = (r == DEVICE_OK);
+  if (r == DEVICE_OK) ClearPendingCommand();
+  return r;
+}
+template <MotorModel M>
+void MotorProtocol<MotorKind::LZ, M>::ClearPendingCommand() {
+  pending_ = PendingCommandType::None;
+  state_.command_pending = false;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::SetTorque(float t) {
+  return SetMIT(state_.position_rad, 0, 0, 0, t);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::SetVelocity(float velocity) {
+  // Motion-mode damping controller, with gains expressed at the final output.
+  return SetMIT(0, velocity, 0, 3, 0);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::SetPosition(float position, float max_velocity) {
+  if (!IsFiniteCommand(position) || !IsFiniteCommand(max_velocity) || max_velocity < 0)
+    return DEVICE_ERR;
+  // Motion MIT has a desired velocity, not a speed-cap field. Do not reinterpret
+  // the generic max_velocity argument as an active feed-forward velocity.
+  if (max_velocity != 0) return DEVICE_ERR_UNSUPPORTED;
+  return SetMIT(position, 0, 40, 1.5f, 0);
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::SetMIT(float position, float velocity, float kp, float kd,
+                                               float torque) {
+  const float p = mapper_.ToRotorPosition(position), v = mapper_.ToRotorVelocity(velocity);
+  const float t = mapper_.ToTorqueCurrent(torque);
+  const float native_kp = (kp / mapper_.ratio) / mapper_.ratio;
+  const float native_kd = (kd / mapper_.ratio) / mapper_.ratio;
+  if (!IsFiniteCommand(position) || !IsFiniteCommand(velocity) || !IsFiniteCommand(kp) ||
+      !IsFiniteCommand(kd) || !IsFiniteCommand(torque) || kp < 0 || kd < 0 || !IsFiniteCommand(p) ||
+      !IsFiniteCommand(v) || !IsFiniteCommand(t) || !IsFiniteCommand(native_kp) ||
+      !IsFiniteCommand(native_kd))
+    return DEVICE_ERR;
+  pending_mit_position_ = Clip(p, kAngle);
+  pending_mit_velocity_ = Clip(v, kVelocity);
+  pending_kp_ = native_kp;
+  pending_kd_ = native_kd;
+  pending_torque_ = Clip(t, TorqueRange(module_));
+  pending_ = PendingCommandType::Mit;
+  state_.command_pending = true;
+  return DEVICE_OK;
+}
+template <MotorModel M>
+int8_t MotorProtocol<MotorKind::LZ, M>::ClearFault() {
+  ClearPendingCommand();
+  const uint8_t data[8] = {1, 0, 0, 0, 0, 0, 0, 0};
+  // Stop with the native clear-fault flag. Feedback confirms the result.
+  return Send(BuildId(4, config_.host_id, config_.motor_id), data);
+}
+#define INSTANTIATE(M) template class MotorProtocol<MotorKind::LZ, M>;
+INSTANTIATE(MotorModel::RSO0)
+INSTANTIATE(MotorModel::RSO1) INSTANTIATE(MotorModel::RSO2) INSTANTIATE(MotorModel::RSO3)
+    INSTANTIATE(MotorModel::RSO4) INSTANTIATE(MotorModel::RSO5) INSTANTIATE(MotorModel::RSO6)
+}  // namespace mr::motor
