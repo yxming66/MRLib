@@ -123,4 +123,4 @@ RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程�
 
 ## 三轴机械臂模块装配边界
 
-`module/arm/Runtime` 仍是三轴项目模块，但不再从库内全局 `Config_GetRobotParam()` 读取参数，也不在初始化时隐式调用 `BSP_CAN_Init()`。应用应构造 `Runtime::Config`，填入 `Arm_Params_t` 指针；这份参数对象必须比 Runtime 活得更久。然后调用 `runtime.Init(config, control_freq_hz)`；CAN 初始化由 board/app 负责。命令队列仍通过 `PollCommand(osMessageQueueId_t)` 接入 CMSIS，后续将继续把 OS 适配与纯模块控制路径分开。
+`module/arm/Runtime` 仍是三轴项目模块，但不再从库内全局配置读取参数，也不在初始化时隐式调用 `BSP_CAN_Init()`。应用应构造 `Runtime::Config`，填入 `Arm_Params_t` 指针；这份参数对象必须比 Runtime 活得更久。然后调用 `runtime.Init(config, control_freq_hz)`；CAN 初始化由 board/app 负责。Runtime 是普通的显式实例，不再提供隐藏默认实例或 CMSIS 队列入口。项目任务自行读取队列并调用 `runtime.SetCommand(command)`，随后执行 `Update()`、`Control(dt_s)` 和 `Commit()`。

@@ -6,7 +6,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "cmsis_os2.h"
 #include "module/arm/arm_command_adapter.hpp"
 #include "module/arm/arm_control_types.h"
 #include "module/arm/arm_model_config.hpp"
@@ -57,7 +56,6 @@ class Runtime final {
 
   bool Init(const Config& config, float control_freq_hz);
   void Update();
-  void PollCommand(osMessageQueueId_t command_queue);
   void SetCommand(const Arm_CMD_t& command);
   void Control(float dt_s);
   void Commit();
@@ -114,15 +112,5 @@ class Runtime final {
   const Arm_Params_t* parameters_ = nullptr;
   RuntimeDebugData debug_{};
 };
-
-void SetDefaultRuntime(Runtime* runtime);
-bool Init(const Runtime::Config& config, float control_freq_hz);
-void Update();
-void PollCommand(osMessageQueueId_t command_queue);
-void Control(float dt_s);
-void Commit();
-int8_t RelaxJoint(size_t index);
-int8_t RelaxAll();
-int8_t SetMotorZero(size_t index);
 
 }  // namespace mr::arm

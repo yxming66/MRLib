@@ -9,11 +9,6 @@
 #include "robotics/arm/kinematics/forward_kinematics.hpp"
 
 namespace mr::arm {
-namespace {
-
-Runtime* g_default_runtime = nullptr;
-
-}  // namespace
 
 Runtime::Runtime()
     : model_(),
@@ -137,16 +132,6 @@ void Runtime::Update() {
   }
   (void)output_adapter_.UpdateFeedback(&feedback_);
   RefreshDebug(nullptr, nullptr);
-}
-
-void Runtime::PollCommand(osMessageQueueId_t command_queue) {
-  if (!initialized_) {
-    return;
-  }
-  if (command_queue == nullptr ||
-      osMessageQueueGet(command_queue, &command_, nullptr, 0U) != osOK) {
-    ClearTransientCommand(&command_);
-  }
 }
 
 void Runtime::SetCommand(const Arm_CMD_t& command) {
@@ -297,55 +282,6 @@ void Runtime::RefreshDebug(const ArmCommandAdapterResult* adapter_result,
           output->joint_command.effort_feedforward[index][0];
     }
   }
-}
-
-void SetDefaultRuntime(Runtime* runtime) {
-  g_default_runtime = runtime;
-}
-
-bool Init(const Runtime::Config& config, float control_freq_hz) {
-  return g_default_runtime != nullptr &&
-         g_default_runtime->Init(config, control_freq_hz);
-}
-
-void Update() {
-  if (g_default_runtime != nullptr) {
-    g_default_runtime->Update();
-  }
-}
-
-void PollCommand(osMessageQueueId_t command_queue) {
-  if (g_default_runtime != nullptr) {
-    g_default_runtime->PollCommand(command_queue);
-  }
-}
-
-void Control(float dt_s) {
-  if (g_default_runtime != nullptr) {
-    g_default_runtime->Control(dt_s);
-  }
-}
-
-void Commit() {
-  if (g_default_runtime != nullptr) {
-    g_default_runtime->Commit();
-  }
-}
-
-int8_t RelaxJoint(size_t index) {
-  return g_default_runtime != nullptr ? g_default_runtime->RelaxJoint(index)
-                                      : DEVICE_ERR_NULL;
-}
-
-int8_t RelaxAll() {
-  return g_default_runtime != nullptr ? g_default_runtime->RelaxAll()
-                                      : DEVICE_ERR_NULL;
-}
-
-int8_t SetMotorZero(size_t index) {
-  return g_default_runtime != nullptr
-             ? g_default_runtime->SetMotorZero(index)
-             : DEVICE_ERR_NULL;
 }
 
 }  // namespace mr::arm

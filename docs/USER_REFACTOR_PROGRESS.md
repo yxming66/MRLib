@@ -236,4 +236,16 @@ GNU 15.2.0 下，通用 joint host test 在不提供任何 BSP stub 的情况下
 
 ### 验证与边界
 
-本批完成源码级依赖审查和接口迁移；机械臂模块仍依赖 CMSIS queue、旧 C motor 参数结构和具体三轴电机适配。新增 CMSIS/CAN host stub 编译检查，GNU 15.2.0 严格 C++17 下真实 `arm.cpp` 单文件编译通过；现有 **15/15 CTest** 通过，未进行 STM32 固件或硬件验证。应用迁移到 `Runtime::Config` 后才能使用新的 Init 入口。
+本批完成源码级依赖审查和接口迁移；机械臂模块仍依赖旧 C motor 参数结构和具体三轴电机适配。GNU 15.2.0 严格 C++17 下真实 `arm.cpp` 单文件编译通过；现有 **15/15 CTest** 通过，未进行 STM32 固件或硬件验证。应用迁移到 `Runtime::Config` 后才能使用新的 Init 入口。
+
+## 第十三批：移除机械臂 Runtime 的 CMSIS 队列和全局实例
+
+### 完成项
+
+1. 删除 `Runtime::PollCommand(osMessageQueueId_t)` 和 CMSIS 头依赖；项目任务负责消息读取并把完整命令传给 `Runtime::SetCommand()`。
+2. 删除 `g_default_runtime` 及 namespace 级 `Init/Update/PollCommand/Control/Commit` 包装函数；控制调用必须针对项目显式持有的 Runtime 对象。
+3. 删除为机械臂单体编译检查添加的 CMSIS stub；真实 `arm.cpp` 仍通过 CAN stub 编译，确认模块本身不再需要 CMSIS。
+
+### 验证与边界
+
+GNU 15.2.0 严格 C++17 下 `arm.cpp` 主机编译通过，且测试 include 路径中不再提供 `cmsis_os2.h`；**15/15 CTest** 通过，空白检查通过。具体三轴电机适配仍在 module 侧，下一步需评估迁至可选 project/device adapter；旧底盘 Controller 仍引用已删除的配置头。
