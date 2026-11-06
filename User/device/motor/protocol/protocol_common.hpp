@@ -137,6 +137,12 @@ inline void ResetZeroedState(MotorState& state) {
     state.last_commit_ok = true;
 }
 
+inline void MarkFeedbackUnavailable(MotorState& state) {
+    state.online = false;
+    state.feedback_valid = false;
+    state.position_valid = false;
+}
+
 inline void MarkCommandFailed(MotorState& state) {
     state.last_commit_ok = false;
 }
