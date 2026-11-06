@@ -41,7 +41,7 @@ public:
         static_assert(MotorModelValidV<Kind, Model>, "Invalid motor kind/model combination");
         using MotorType = MotorT<Kind, Model>;
         static DriverSlot<MotorType> drivers[Capacity<Kind>()];
-        uint8_t& count = Counter<Kind>();
+        static uint8_t count = 0U;
         if (count >= Capacity<Kind>()) {
             return nullptr;
         }
@@ -62,12 +62,6 @@ private:
     template <MotorKind Kind>
     static constexpr uint8_t Capacity();
 
-    template <MotorKind Kind>
-    static uint8_t& Counter();
-
-    static uint8_t rm_count_;
-    static uint8_t dm_count_;
-    static uint8_t lz_count_;
 };
 
 template <>
@@ -78,14 +72,5 @@ inline constexpr uint8_t MotorFactory::Capacity<MotorKind::DM>() { return kDmMot
 
 template <>
 inline constexpr uint8_t MotorFactory::Capacity<MotorKind::LZ>() { return kLzMotorFactoryCapacity; }
-
-template <>
-inline uint8_t& MotorFactory::Counter<MotorKind::RM>() { return rm_count_; }
-
-template <>
-inline uint8_t& MotorFactory::Counter<MotorKind::DM>() { return dm_count_; }
-
-template <>
-inline uint8_t& MotorFactory::Counter<MotorKind::LZ>() { return lz_count_; }
 
 } // namespace mr::motor
