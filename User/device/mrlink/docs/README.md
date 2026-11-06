@@ -8,7 +8,7 @@
 
 | 层级 | 文件 | 作用 |
 |---|---|---|
-| Public API | `mrlink.h` | 通用 frame 协议 (32 槽 cmd 派发) |
+| Public API | `mrlink.h` | 通用 frame 协议 (64 槽 cmd 派发) |
 | Public API | `mrlink_channel.h` | 面向业务的通信通道 API，初始化时绑定 UART / USB / FDCAN |
 | Public API | `mrlink.hpp` | OneMessage-style typed 注册 API (namespace `mr::link`) |
 | Public API | `mrlink_lite.hpp` | Zero-`std::function` typed API for STM32 real-time / small-memory paths |

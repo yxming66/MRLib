@@ -72,7 +72,7 @@ static MrLink_Config_t Proto_ApplyConfig(const MrLink_Config_t *cfg) {
  *     6. 消费: offset += total, 统计 frame_rx_ok
  *   最后: 丢弃 [0..offset] 所有字节
  *
- * @return want_one_frame 模式下: MRLINK_OK 或 MRLINK_ERR
+ * @return want_one_frame 模式下: MRLINK_OK 或 MRLINK_ERR；该模式只消费一帧
  *         其他模式: MRLINK_OK
  */
 static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
@@ -225,6 +225,9 @@ static int8_t Proto_ProcessRx(MrLink_t *p, bool want_one_frame,
 
     p->stats.frame_rx_ok++;
     offset = (uint16_t)(offset + total);
+    if (want_one_frame) {
+      break;
+    }
   }
 
   /* 丢弃已消费的字节 (offset 之前的所有字节) */
@@ -369,9 +372,12 @@ int8_t MrLink_Dispatch(MrLink_t *p) {
   }
 
   const uint32_t prev_frame_rx_ok = p->stats.frame_rx_ok;
-  const int8_t ret = Proto_ProcessRx(p, false, NULL, NULL, NULL);
-  if (ret != MRLINK_OK) {
-    return ret;
+  for (;;) {
+    const uint32_t before = p->stats.frame_rx_ok;
+    const int8_t ret = Proto_ProcessRx(p, false, NULL, NULL, NULL);
+    if (ret != MRLINK_OK || p->stats.frame_rx_ok == before) {
+      break;
+    }
   }
   return (p->stats.frame_rx_ok != prev_frame_rx_ok) ? MRLINK_OK : MRLINK_ERR;
 }

@@ -45,6 +45,9 @@ inline bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
       !mr::component::math::is_positive_scalar(max_abs_speed_mps)) {
     return false;
   }
+  if (MaxAbsWheelSpeed(wheel_speeds) <= max_abs_speed_mps) {
+    return true;
+  }
   return mr::component::math::scale_to_abs_limit(
       wheel_speeds.data(), wheel_speeds.size(), max_abs_speed_mps);
 }

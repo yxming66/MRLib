@@ -99,7 +99,13 @@ extern "C" {
    MRLINK_CMD_FIELD_LEN + MRLINK_MAX_PAYLOAD_DEFAULT + \
    MRLINK_CRC_LEN)
 
+#ifndef MRLINK_INSTANCE_STORAGE_SIZE
+#if defined(UINTPTR_MAX) && (UINTPTR_MAX > UINT32_MAX)
+#define MRLINK_INSTANCE_STORAGE_SIZE (2048u)
+#else
 #define MRLINK_INSTANCE_STORAGE_SIZE (1024u)
+#endif
+#endif
 
 /* Exported types ----------------------------------------------------------- */
 
@@ -359,7 +365,7 @@ int8_t MrLink_RegisterHandler(MrLink_t *proto, uint8_t cmd,
  *   - handler != NULL + ctx != NULL: 注册 typed handler
  *   - handler == NULL: 注销该 cmd
  *   - 同 cmd 重复注册: 覆盖 (raw → typed, typed → typed 都行)
- *   - 32 槽满: 返回 MRLINK_ERR_ARGS
+ *   - 64 槽满: 返回 MRLINK_ERR_ARGS
  *
  * @param expected_size  payload 期望长度 (如 sizeof(ChassisCmd_t))
  * @param handler        业务回调, 形如 OnXxx(cmd, const T*, sz, ctx)
