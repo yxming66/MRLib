@@ -189,3 +189,15 @@ RM/DM/LZ 协议源码已分别进入 fake-CAN 主机测试编译，但仍未在 
 控制器实现通过 GNU 15.2.0 严格 C++17 单文件编译，配置 host test 手动编译运行通过；包含新增测试在内的 **14/14 CTest** 通过。新的 Ninja 全量/目标构建在生成后无编译输出并停滞，因此新 test target 是手动按相同编译参数构建并由 CTest 运行，CMake 驱动的完整构建仍需排查本机启动问题。CLI 公开头文件工程测试也在临时工程配置阶段停滞，不能计作通过。
 
 旧项目若依赖电机控制器的实测 dt，需要在 wheel/controller 配置中设置 `clock_us`；当前高层旧底盘类没有统一的时钟注入入口，使用者应确认其配置路径。软限位学习仍直接依赖 BSP 时间；CAN transport 仍直连静态 BSP CAN API；统一 command port 和跨设备提交器尚未实现。未进行 STM32 固件构建或实机验证。
+
+## 第九批：关节命令状态与增益语义（2026-11-06）
+
+### 完成项
+
+1. 删除 `JointT` 按 joint id 推断 Kp/Kd 的行为，显式使用 `JointControlParams`；零增益按配置透传，负数或非有限增益拒绝。
+2. `PositionControl` 和 `TorqueControl` 在 actuator 接受命令后才更新关节侧目标/命令缓存；拒绝或发送准备失败时保留之前缓存。力矩命令拒绝非有限值，偏移、目标和前馈 setter 忽略非有限输入并保留旧值。
+3. 新增 fake-actuator joint host 测试，覆盖零增益、不再按 id 推断、无效增益/输入拒绝及 actuator 错误时缓存不变。
+
+### 验证与边界
+
+GNU 15.2.0 严格 C++17 手动编译并运行 joint host test 通过；CMake 注册更新后 **15/15 CTest** 通过，`git diff --check` 无空白错误。CMake/Ninja 驱动的完整构建与 STM32/硬件验证仍未完成。Joint `PositionControl` 继续保留并忽略 `dt` 参数以维持旧签名；跨 joint 反馈快照一致性和模块级联合提交仍需后续处理。

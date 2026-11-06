@@ -114,3 +114,7 @@ Enable、Disable 和 Relax 的协议状态只在对应 CAN 发送接口成功后
 `device/motor/protocol/rm_command_group.hpp` 集中定义 RM/GM6020 命令帧与 4 槽映射，并保存每条帧组最近一次成功提交的原始电流值。发送尝试使用局部候选快照；CAN 发送失败时不更新已提交快照，且设备保留当前 pending 命令供显式重试。`MotorProtocol::Relax/Disable` 将当前电流目标设为零并立即提交；只有 CAN 层接受该帧后协议状态才变为 Relaxed。主机 fake-CAN 回归会编译真实 RM protocol 与 CAN transport，并验证 Relax 失败后的重试状态。
 
 RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程仲裁；同一 bus 的所有 RM 电机命令必须由一个控制上下文串行更新/提交。各槽的电流会一起重发，因此这个接口仍不是多电机原子 flush，也没有监控实际 CAN 总线是否成功发出或电机是否执行。总线发送错误、具体电机对零电流的响应、ID 分组和混合型号部署都需在 STM32 目标板验证。
+
+## 关节命令缓存
+
+`JointControlParams.kp/kd` 是显式 MIT 增益：零表示零增益，负数或非有限值会拒绝本次位置控制，不再根据 joint id 猜测默认值。`SetOffset`、`SetTargetAngle` 和 `SetFeedforwardTorque` 遇到非有限值时保留原值。位置/力矩命令只有在 actuator 接受后才更新 `JointT` 的命令状态缓存；随后由同一控制上下文调用 `CommitControl()` 提交。当前 `PositionControl(target, dt)` 为原生 MIT 准备目标，`dt` 参数保留兼容但不参与此执行路径。

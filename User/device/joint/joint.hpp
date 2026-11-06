@@ -200,14 +200,22 @@ public:
         name_[kJointNameMaxLen - 1U] = '\0';
     }
 
-    void SetOffset(float offset) override { q_offset_ = offset; }
+    void SetOffset(float offset) override {
+        if (mr::component::math::is_finite_scalar(offset)) {
+            q_offset_ = offset;
+        }
+    }
 
     void SetTargetAngle(float target) override {
-        state_.target_angle = target;
+        if (mr::component::math::is_finite_scalar(target)) {
+            state_.target_angle = target;
+        }
     }
 
     void SetFeedforwardTorque(float torque) override {
-        state_.feedforward_torque = torque;
+        if (mr::component::math::is_finite_scalar(torque)) {
+            state_.feedforward_torque = torque;
+        }
     }
 
     void SetTransmission(const JointTransmission& transmission) {
@@ -317,12 +325,19 @@ public:
 
     int8_t PositionControl(float target_angle, float dt) override {
         (void)dt;
+        if (actuator_ == nullptr) {
+            return DEVICE_ERR_NULL;
+        }
         if (!mr::component::math::is_finite_scalar(target_angle) ||
             !mr::component::math::is_finite_scalar(state_.current_angle) ||
             !mr::component::math::is_finite_scalar(params_.qmin) ||
             !mr::component::math::is_finite_scalar(params_.qmax) ||
-            params_.qmin >= params_.qmax) {
-            return -1;
+            !mr::component::math::is_finite_scalar(params_.kp) ||
+            !mr::component::math::is_finite_scalar(params_.kd) ||
+            !mr::component::math::is_finite_scalar(state_.feedforward_torque) ||
+            params_.qmin >= params_.qmax || params_.kp < 0.0f ||
+            params_.kd < 0.0f) {
+            return DEVICE_ERR;
         }
 
         float limited_target = target_angle;
@@ -346,42 +361,46 @@ public:
             limited_target = state_.current_angle;
         }
 
-        state_.target_angle = limited_target;
-
-        float kp = params_.kp;
-        float kd = params_.kd;
-        if (kp <= 0.0f) {
-            kp = (id_ < 3U) ? 10.0f : 50.0f;
-        }
-        if (kd <= 0.0f) {
-            kd = (id_ < 3U) ? 0.5f : 3.0f;
-        }
-
         const float torque_ff =
             blocked_by_limit ? 0.0f : state_.feedforward_torque;
         const float actuator_position = EncodeActuatorPosition(limited_target);
+        if (!mr::component::math::is_finite_scalar(actuator_position)) {
+            return DEVICE_ERR;
+        }
+
+        const int8_t ret = actuator_->SetMIT(
+            actuator_position, 0.0f, params_.kp, params_.kd, torque_ff);
+        if (ret != DEVICE_OK) {
+            return ret;
+        }
+
+        state_.target_angle = limited_target;
         state_.motor_command_position = actuator_position;
         state_.motor_command_velocity = 0.0f;
         state_.motor_command_torque = torque_ff;
-        state_.motor_command_kp = kp;
-        state_.motor_command_kd = kd;
-
-        return actuator_ ? actuator_->SetMIT(
-            actuator_position,
-            state_.motor_command_velocity,
-            kp,
-            kd,
-            torque_ff) : -1;
+        state_.motor_command_kp = params_.kp;
+        state_.motor_command_kd = params_.kd;
+        return DEVICE_OK;
     }
 
     int8_t TorqueControl(float torque) override {
+        if (!mr::component::math::is_finite_scalar(torque)) {
+            return DEVICE_ERR;
+        }
+        if (actuator_ == nullptr) {
+            return DEVICE_ERR_NULL;
+        }
+        const int8_t ret = actuator_->SetTorque(torque);
+        if (ret != DEVICE_OK) {
+            return ret;
+        }
         state_.feedforward_torque = torque;
         state_.motor_command_position = 0.0f;
         state_.motor_command_velocity = 0.0f;
         state_.motor_command_torque = torque;
         state_.motor_command_kp = 0.0f;
         state_.motor_command_kd = 0.0f;
-        return actuator_ ? actuator_->SetTorque(torque) : -1;
+        return DEVICE_OK;
     }
 
     bool IsReached(float tolerance) const override {
