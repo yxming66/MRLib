@@ -45,13 +45,17 @@ struct RuntimeDebugData {
 
 class Runtime final {
  public:
+  struct Config {
+    const Arm_Params_t* parameters = nullptr;
+  };
+
   Runtime();
   ~Runtime();
 
   Runtime(const Runtime&) = delete;
   Runtime& operator=(const Runtime&) = delete;
 
-  bool Init(float control_freq_hz);
+  bool Init(const Config& config, float control_freq_hz);
   void Update();
   void PollCommand(osMessageQueueId_t command_queue);
   void SetCommand(const Arm_CMD_t& command);
@@ -106,12 +110,13 @@ class Runtime final {
   bool last_enable_ = false;
   bool initialized_ = false;
   float control_freq_hz_ = 500.0f;
+  Config config_{};
   const Arm_Params_t* parameters_ = nullptr;
   RuntimeDebugData debug_{};
 };
 
 void SetDefaultRuntime(Runtime* runtime);
-bool Init(float control_freq_hz);
+bool Init(const Runtime::Config& config, float control_freq_hz);
 void Update();
 void PollCommand(osMessageQueueId_t command_queue);
 void Control(float dt_s);

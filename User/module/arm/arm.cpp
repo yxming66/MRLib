@@ -3,11 +3,9 @@
 #include <cstring>
 #include <new>
 
-#include "bsp/can.h"
 #include "component/math/matrix.hpp"
 #include "component/math/scalar.hpp"
 #include "device/device.h"
-#include "module/config.h"
 #include "robotics/arm/kinematics/forward_kinematics.hpp"
 
 namespace mr::arm {
@@ -32,6 +30,7 @@ Runtime::Runtime()
       last_enable_(false),
       initialized_(false),
       control_freq_hz_(500.0f),
+      config_(),
       parameters_(nullptr),
       debug_() {}
 
@@ -94,7 +93,7 @@ bool Runtime::InitializeController(float control_freq_hz) {
   return controller_->IsConfigured();
 }
 
-bool Runtime::Init(float control_freq_hz) {
+bool Runtime::Init(const Config& config, float control_freq_hz) {
   if (initialized_) {
     return true;
   }
@@ -102,13 +101,12 @@ bool Runtime::Init(float control_freq_hz) {
                          ? control_freq_hz
                          : 500.0f;
 
-  const Config_RobotParam_t* robot_parameters = Config_GetRobotParam();
-  if (robot_parameters == nullptr) {
+  if (config.parameters == nullptr) {
     return false;
   }
-  parameters_ = &robot_parameters->arm_param;
+  config_ = config;
+  parameters_ = config_.parameters;
 
-  (void)BSP_CAN_Init();
   if (!output_adapter_.Initialize(*parameters_) ||
       output_adapter_.Register() != DEVICE_OK ||
       !InitializeController(control_freq_hz_)) {
@@ -305,9 +303,9 @@ void SetDefaultRuntime(Runtime* runtime) {
   g_default_runtime = runtime;
 }
 
-bool Init(float control_freq_hz) {
+bool Init(const Runtime::Config& config, float control_freq_hz) {
   return g_default_runtime != nullptr &&
-         g_default_runtime->Init(control_freq_hz);
+         g_default_runtime->Init(config, control_freq_hz);
 }
 
 void Update() {

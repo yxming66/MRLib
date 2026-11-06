@@ -79,7 +79,7 @@ C 滤波结构体布局和 Init 返回值已变化，需要全部重新编译，
 
 ### 当前库状态
 
-重新扫描后，直接指向已删除库内头文件的引用从第一批的 **17 处降到 3 处**，分别是两个旧底盘专用控制器引用 `module/chassis.h`，以及旧机械臂 module 引用 `module/config.h`。初始审查的 42 处已处理 39 处；这只是失效 include 指标，不是全库完成百分比。
+重新扫描后，直接指向已删除库内头文件的引用从第一批的 **17 处降到 2 处**，目前是两个旧底盘专用控制器引用 `module/chassis.h`。旧机械臂 module 的 `module/config.h` 引用已改为显式 `Runtime::Config` 参数；这只是失效 include 指标，不是全库完成百分比。
 
 | 层/能力 | 当前情况 | 尚待完成 |
 | --- | --- | --- |
@@ -225,3 +225,15 @@ GNU 15.2.0 严格 C++17 主机编译及 joint host test 通过；完整 **15/15 
 ### 验证与边界
 
 GNU 15.2.0 下，通用 joint host test 在不提供任何 BSP stub 的情况下编译运行通过；具体 motor adapter 使用 fake CAN stub 编译通过；现有 **15/15 CTest** 全部通过。完整 CMake/Ninja 构建、STM32 固件与实机验证仍未完成。include 路径变化需要应用层逐步迁移。
+
+## 第十二批：机械臂模块改为显式参数装配（2026-11-06）
+
+### 完成项
+
+1. `module/arm/Runtime` 新增 `Runtime::Config`，`Init` 改为接收显式 `Arm_Params_t` 指针；移除对已删除 `module/config.h`、`Config_GetRobotParam()` 的依赖。
+2. 移除机械臂模块初始化中的隐式 `BSP_CAN_Init()`；CAN 和其他板级外设初始化由 board/app 负责，模块只注册和驱动已提供的设备。
+3. 失效库内 include 扫描从 3 处降为 2 处，剩余两处均在旧的专用底盘 Controller，待其策略迁移到统一 chassis 入口后删除或改造。
+
+### 验证与边界
+
+本批完成源码级依赖审查和接口迁移；机械臂模块仍依赖 CMSIS queue、旧 C motor 参数结构和具体三轴电机适配。新增 CMSIS/CAN host stub 编译检查，GNU 15.2.0 严格 C++17 下真实 `arm.cpp` 单文件编译通过；现有 **15/15 CTest** 通过，未进行 STM32 固件或硬件验证。应用迁移到 `Runtime::Config` 后才能使用新的 Init 入口。

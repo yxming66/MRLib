@@ -120,3 +120,7 @@ RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程�
 `JointControlParams.kp/kd` 是显式 MIT 增益：零表示零增益，负数或非有限值会拒绝本次位置控制，不再根据 joint id 猜测默认值。`SetOffset`、`SetTargetAngle` 和 `SetFeedforwardTorque` 遇到非有限值时保留原值。`Update()` 只有在 actuator 返回成功、反馈在线且数据及映射结果有限时才更新快照；失败会标记离线并保留最后一组数值。位置 MIT 控制要求最近一次反馈有效，避免离线时重复消费旧状态；力矩控制保持显式开环入口。位置/力矩命令只有在 actuator 接受后才更新 `JointT` 的命令状态缓存；随后由同一控制上下文调用 `CommitControl()` 提交。当前 `PositionControl(target, dt)` 为原生 MIT 准备目标，`dt` 参数保留兼容但不参与此执行路径。
 
 关节接口和状态定义位于 `device/joint/joint_interface.hpp`，通用映射/控制实现位于 `joint.hpp`，不依赖 motor 或 BSP。具体电机适配器及 `DmActuator`/`LzActuator` 等别名放在可选 `motor_actuator_adapter.hpp`；使用这些具体适配器的项目需显式包含此头文件。
+
+## 三轴机械臂模块装配边界
+
+`module/arm/Runtime` 仍是三轴项目模块，但不再从库内全局 `Config_GetRobotParam()` 读取参数，也不在初始化时隐式调用 `BSP_CAN_Init()`。应用应构造 `Runtime::Config`，填入 `Arm_Params_t` 指针；这份参数对象必须比 Runtime 活得更久。然后调用 `runtime.Init(config, control_freq_hz)`；CAN 初始化由 board/app 负责。命令队列仍通过 `PollCommand(osMessageQueueId_t)` 接入 CMSIS，后续将继续把 OS 适配与纯模块控制路径分开。
