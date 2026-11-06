@@ -62,12 +62,24 @@ public:
     void SetMotor(MotorType* motor) { motor_ = motor; }
     MotorType* GetMotor() const { return motor_; }
 
-    int8_t Register() override { return motor_ ? motor_->Register() : -1; }
-    int8_t Enable() override { return motor_ ? motor_->Enable() : -1; }
-    int8_t Update() override { return motor_ ? motor_->Update() : -1; }
-    int8_t Relax() override { return motor_ ? motor_->Relax() : -1; }
-    int8_t SetZero() override { return motor_ ? motor_->SetZero() : -1; }
-    int8_t CommitControl() override { return motor_ ? motor_->CommitCommand() : -1; }
+    int8_t Register() override {
+        return motor_ ? motor_->Register() : DEVICE_ERR_NULL;
+    }
+    int8_t Enable() override {
+        return motor_ ? motor_->Enable() : DEVICE_ERR_NULL;
+    }
+    int8_t Update() override {
+        return motor_ ? motor_->Update() : DEVICE_ERR_NULL;
+    }
+    int8_t Relax() override {
+        return motor_ ? motor_->Relax() : DEVICE_ERR_NULL;
+    }
+    int8_t SetZero() override {
+        return motor_ ? motor_->SetZero() : DEVICE_ERR_NULL;
+    }
+    int8_t CommitControl() override {
+        return motor_ ? motor_->CommitCommand() : DEVICE_ERR_NULL;
+    }
     bool HasPendingControl() const override { return motor_ ? motor_->HasPendingCommand() : false; }
     void ClearPendingControl() override {
         if (motor_) {
@@ -75,9 +87,12 @@ public:
         }
     }
     int8_t SetMIT(float position, float velocity, float kp, float kd, float torque_ff) override {
-        return motor_ ? motor_->SetMIT(position, velocity, kp, kd, torque_ff) : -1;
+        return motor_ ? motor_->SetMIT(position, velocity, kp, kd, torque_ff)
+                      : DEVICE_ERR_NULL;
     }
-    int8_t SetTorque(float torque) override { return motor_ ? motor_->SetTorque(torque) : -1; }
+    int8_t SetTorque(float torque) override {
+        return motor_ ? motor_->SetTorque(torque) : DEVICE_ERR_NULL;
+    }
     ActuatorState GetState() const override {
         ActuatorState state;
         if (!motor_) {
@@ -263,31 +278,59 @@ public:
     }
 
     int8_t Register() override {
-        return actuator_ ? actuator_->Register() : -1;
+        return actuator_ ? actuator_->Register() : DEVICE_ERR_NULL;
     }
 
     int8_t Enable() override {
-        return actuator_ ? actuator_->Enable() : -1;
+        return actuator_ ? actuator_->Enable() : DEVICE_ERR_NULL;
     }
 
     int8_t Update() override {
-        const int8_t ret = actuator_ ? actuator_->Update() : -1;
-        const ActuatorState actuator_state = actuator_ ? actuator_->GetState() : ActuatorState();
+        if (actuator_ == nullptr) {
+            state_.online = false;
+            return DEVICE_ERR_NULL;
+        }
+        const int8_t ret = actuator_->Update();
+        if (ret != DEVICE_OK) {
+            state_.online = false;
+            return ret;
+        }
+        const ActuatorState actuator_state = actuator_->GetState();
+        if (!actuator_state.online) {
+            state_.online = false;
+            return DEVICE_ERR_NO_DEV;
+        }
+        if (!mr::component::math::is_finite_scalar(actuator_state.position) ||
+            !mr::component::math::is_finite_scalar(actuator_state.velocity) ||
+            !mr::component::math::is_finite_scalar(actuator_state.torque)) {
+            state_.online = false;
+            return DEVICE_ERR;
+        }
 
-        state_.current_angle = DecodeJointPosition(actuator_state.position);
-        state_.current_velocity = DecodeJointVelocity(actuator_state.velocity);
+        const float joint_position =
+            DecodeJointPosition(actuator_state.position);
+        const float joint_velocity =
+            DecodeJointVelocity(actuator_state.velocity);
+        if (!mr::component::math::is_finite_scalar(joint_position) ||
+            !mr::component::math::is_finite_scalar(joint_velocity)) {
+            state_.online = false;
+            return DEVICE_ERR;
+        }
+
+        state_.current_angle = joint_position;
+        state_.current_velocity = joint_velocity;
         state_.current_torque = actuator_state.torque;
-        state_.online = actuator_state.online;
-        return ret;
+        state_.online = true;
+        return DEVICE_OK;
     }
 
     int8_t Relax() override {
-        return actuator_ ? actuator_->Relax() : -1;
+        return actuator_ ? actuator_->Relax() : DEVICE_ERR_NULL;
     }
 
     int8_t SetZero() override {
         if (actuator_ == nullptr) {
-            return -1;
+            return DEVICE_ERR_NULL;
         }
         const int8_t ret = actuator_->SetZero();
         if (ret == 0) {
@@ -305,7 +348,7 @@ public:
     }
 
     int8_t CommitControl() override {
-        return actuator_ ? actuator_->CommitControl() : -1;
+        return actuator_ ? actuator_->CommitControl() : DEVICE_ERR_NULL;
     }
 
     bool HasPendingControl() const override {
@@ -327,6 +370,9 @@ public:
         (void)dt;
         if (actuator_ == nullptr) {
             return DEVICE_ERR_NULL;
+        }
+        if (!state_.online) {
+            return DEVICE_ERR_NO_DEV;
         }
         if (!mr::component::math::is_finite_scalar(target_angle) ||
             !mr::component::math::is_finite_scalar(state_.current_angle) ||

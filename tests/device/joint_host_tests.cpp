@@ -6,6 +6,7 @@
 namespace {
 
 struct FakeActuator final : mr::IActuator {
+  int8_t update_result = DEVICE_OK;
   int8_t set_mit_result = DEVICE_OK;
   int8_t set_torque_result = DEVICE_OK;
   int mit_calls = 0;
@@ -13,10 +14,11 @@ struct FakeActuator final : mr::IActuator {
   float last_position = 0.0f;
   float last_kp = 0.0f;
   float last_kd = 0.0f;
+  mr::ActuatorState state{};
 
   int8_t Register() override { return DEVICE_OK; }
   int8_t Enable() override { return DEVICE_OK; }
-  int8_t Update() override { return DEVICE_OK; }
+  int8_t Update() override { return update_result; }
   int8_t Relax() override { return DEVICE_OK; }
   int8_t SetZero() override { return DEVICE_OK; }
   int8_t CommitControl() override { return DEVICE_OK; }
@@ -34,7 +36,7 @@ struct FakeActuator final : mr::IActuator {
     ++torque_calls;
     return set_torque_result;
   }
-  mr::ActuatorState GetState() const override { return {}; }
+  mr::ActuatorState GetState() const override { return state; }
 };
 
 int failures = 0;
@@ -53,7 +55,10 @@ mr::JointT MakeJoint(FakeActuator* actuator, float kp = 3.0f,
 
 void TestExplicitGainsAndRejectedCache() {
   FakeActuator actuator;
+  actuator.state.online = true;
   mr::JointT joint = MakeJoint(&actuator, 0.0f, 0.0f);
+  Expect(joint.Update() == DEVICE_OK,
+         "joint should accept a finite online actuator snapshot");
   Expect(joint.PositionControl(0.5f, 0.001f) == DEVICE_OK,
          "zero gains should be passed through explicitly");
   Expect(actuator.last_kp == 0.0f && actuator.last_kd == 0.0f,
@@ -89,7 +94,10 @@ void TestTorqueValidationAndRejectedCache() {
 
 void TestInvalidGainsAndSetters() {
   FakeActuator actuator;
+  actuator.state.online = true;
   mr::JointT invalid_gain_joint = MakeJoint(&actuator, -1.0f, 0.2f);
+  Expect(invalid_gain_joint.Update() == DEVICE_OK,
+         "joint should refresh feedback before position control");
   Expect(invalid_gain_joint.PositionControl(0.2f, 0.001f) == DEVICE_ERR,
          "negative joint gains should be rejected");
   Expect(actuator.mit_calls == 0,
@@ -103,12 +111,42 @@ void TestInvalidGainsAndSetters() {
          "void setters should preserve their last finite values");
 }
 
+void TestFailedFeedbackInvalidatesJointAndPreservesSnapshot() {
+  FakeActuator actuator;
+  actuator.state.position = 0.4f;
+  actuator.state.velocity = 0.1f;
+  actuator.state.torque = 0.2f;
+  actuator.state.online = true;
+  mr::JointT joint = MakeJoint(&actuator);
+  Expect(joint.Update() == DEVICE_OK && joint.IsOnline(),
+         "valid actuator feedback should mark the joint online");
+  const int mit_calls_before = actuator.mit_calls;
+
+  actuator.state.position = 0.8f;
+  actuator.state.velocity = 0.3f;
+  actuator.state.torque = 0.5f;
+  actuator.update_result = DEVICE_ERR_NO_DEV;
+  Expect(joint.Update() == DEVICE_ERR_NO_DEV && !joint.IsOnline(),
+         "failed actuator feedback should mark the joint offline");
+  Expect(joint.GetCurrentAngle() == 0.4f,
+         "failed feedback must preserve the last known numeric snapshot");
+  Expect(joint.PositionControl(0.6f, 0.001f) == DEVICE_ERR_NO_DEV &&
+             actuator.mit_calls == mit_calls_before,
+         "position control must not use a stale snapshot while offline");
+
+  actuator.update_result = DEVICE_OK;
+  Expect(joint.Update() == DEVICE_OK && joint.IsOnline() &&
+             joint.GetCurrentAngle() == 0.8f,
+         "joint should recover when the actuator provides a fresh snapshot");
+}
+
 }  // namespace
 
 int main() {
   TestExplicitGainsAndRejectedCache();
   TestTorqueValidationAndRejectedCache();
   TestInvalidGainsAndSetters();
+  TestFailedFeedbackInvalidatesJointAndPreservesSnapshot();
   if (failures != 0) {
     std::printf("%d joint host test(s) failed\n", failures);
     return 1;

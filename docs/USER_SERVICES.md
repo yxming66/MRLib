@@ -117,4 +117,4 @@ RM 命令 bank 是静态的、按 CAN bus 共享，当前没有锁或跨线程�
 
 ## 关节命令缓存
 
-`JointControlParams.kp/kd` 是显式 MIT 增益：零表示零增益，负数或非有限值会拒绝本次位置控制，不再根据 joint id 猜测默认值。`SetOffset`、`SetTargetAngle` 和 `SetFeedforwardTorque` 遇到非有限值时保留原值。位置/力矩命令只有在 actuator 接受后才更新 `JointT` 的命令状态缓存；随后由同一控制上下文调用 `CommitControl()` 提交。当前 `PositionControl(target, dt)` 为原生 MIT 准备目标，`dt` 参数保留兼容但不参与此执行路径。
+`JointControlParams.kp/kd` 是显式 MIT 增益：零表示零增益，负数或非有限值会拒绝本次位置控制，不再根据 joint id 猜测默认值。`SetOffset`、`SetTargetAngle` 和 `SetFeedforwardTorque` 遇到非有限值时保留原值。`Update()` 只有在 actuator 返回成功、反馈在线且数据及映射结果有限时才更新快照；失败会标记离线并保留最后一组数值。位置 MIT 控制要求最近一次反馈有效，避免离线时重复消费旧状态；力矩控制保持显式开环入口。位置/力矩命令只有在 actuator 接受后才更新 `JointT` 的命令状态缓存；随后由同一控制上下文调用 `CommitControl()` 提交。当前 `PositionControl(target, dt)` 为原生 MIT 准备目标，`dt` 参数保留兼容但不参与此执行路径。
