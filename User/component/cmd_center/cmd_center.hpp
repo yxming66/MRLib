@@ -1,8 +1,8 @@
 #pragma once
 
 // 固定容量、无动态分配的类型安全命令中心。
-// 使用方式：声明 CommandCenter<Capacity>，用 Register 注册命令类型，
-// 用 Publish/Dispatch 发送和分发；消费者通过 Subscribe 或 Sink 接收命令。
+// 使用方式：input/output/routes 注册后，每周期 tick(now_ms).publish()。
+// 单线程静态装配；名称字符串和外部指针须比 Center 活得更久。配置失败锁存安全输出。
 
 #include <cstddef>
 #include <cstdint>
@@ -233,6 +233,8 @@ struct Candidate {
   bool valid = false;
   bool locked = false;
   uint32_t sequence = 0;
+  uint32_t age_ms = 0;
+  bool timestamp_valid = false;
 };
 
 class Context {
@@ -250,6 +252,11 @@ class Context {
   }
 
   template <typename Input>
+  bool input_timestamp(uint32_t* stamp) const {
+    return timestamp_ && timestamp_(find_input_ctx_, TypeKey<Input>::id(), stamp);
+  }
+
+  template <typename Input>
   Input* input() const {
     return static_cast<Input*>(find_input(TypeKey<Input>::id()));
   }
@@ -260,6 +267,7 @@ class Context {
 
   void* (*find_input_)(void*, TypeId) = nullptr;
   void* find_input_ctx_ = nullptr;
+  bool (*timestamp_)(void*, TypeId, uint32_t*) = nullptr;
   uint32_t now_ms_ = 0;
   float dt_s_ = 0.0f;
 
@@ -270,6 +278,12 @@ class Context {
 
 namespace detail {
 
+template <typename T, typename = void>
+struct HasTimestamp : std::false_type {};
+template <typename T>
+struct HasTimestamp<T, std::void_t<decltype(std::declval<const T&>().timestamp_ms())>>
+    : std::true_type {};
+
 struct IInputSlot {
   const char* name = nullptr;
   TypeId type = nullptr;
@@ -277,6 +291,8 @@ struct IInputSlot {
   virtual bool update(Context& ctx) = 0;
   virtual bool online() const = 0;
   virtual void* raw() = 0;
+  virtual bool timestamp(uint32_t* out) const = 0;
+  bool usable = true;
 
  protected:
   ~IInputSlot() = default;
@@ -310,6 +326,10 @@ class InputSlot final : public IInputSlot {
   }
 
   void* raw() override { return &input_; }
+  bool timestamp(uint32_t* out) const override {
+    if constexpr (HasTimestamp<Input>::value) { *out = input_.timestamp_ms(); return true; }
+    return false;
+  }
 
  private:
   Input input_;
@@ -356,6 +376,17 @@ class RouteModel<Cmd,
     candidate.priority = priority;
     candidate.valid = true;
     candidate.locked = Locked;
+    candidate.timestamp_valid = sizeof...(Inputs) > 0;
+    auto collect = [&](auto* input) {
+      using Input = std::remove_pointer_t<decltype(input)>;
+      uint32_t stamp = 0;
+      if (!ctx.input_timestamp<Input>(&stamp)) { candidate.timestamp_valid = false; return; }
+      const uint32_t age = ctx.now_ms() - stamp;
+      if (age > INT32_MAX) { candidate.timestamp_valid = false; return; }
+      if (age > candidate.age_ms) candidate.age_ms = age;
+    };
+    (collect(static_cast<Inputs*>(nullptr)), ...);
+    (void)collect;
     return true;
   }
 
@@ -416,7 +447,7 @@ struct IOutputSlot {
 
   virtual void update(Context& ctx) = 0;
   virtual void force_safe(Context& ctx) = 0;
-  virtual void publish(Context& ctx) = 0;
+  virtual bool publish(Context& ctx) = 0;
 
  protected:
   ~IOutputSlot() = default;
@@ -458,6 +489,8 @@ class OutputSlot final : public IOutputSlot {
     name = output_name;
   }
 
+  bool can_add_route() const { return route_count_ < MaxRoutesPerOutput; }
+
   bool add_route(IRoute<Cmd>* route) {
     if (route_count_ >= MaxRoutesPerOutput) {
       return false;
@@ -485,6 +518,7 @@ class OutputSlot final : public IOutputSlot {
         continue;
       }
 
+      if (arbitration_.tie_break == TieBreak::Freshest && !candidate.timestamp_valid) continue;
       if (candidate.locked && (!winner.valid || !winner.locked)) {
         winner = candidate;
         conflict = false;
@@ -540,11 +574,12 @@ class OutputSlot final : public IOutputSlot {
     has_last_command_ = true;
   }
 
-  void publish(Context& ctx) override {
+  bool publish(Context& ctx) override {
     (void)ctx;
     if constexpr (HasPublish<Sink, Cmd>::value) {
-      sink_(command_);
+      return InvokeBoolOrVoid(sink_, command_);
     }
+    return false;
   }
 
  private:
@@ -576,7 +611,7 @@ class OutputSlot final : public IOutputSlot {
       case TieBreak::RouteOrder:
         return candidate.sequence < winner.sequence ? 1 : -1;
       case TieBreak::Freshest:
-        return candidate.sequence > winner.sequence ? 1 : -1;
+        return candidate.age_ms < winner.age_ms ? 1 : (candidate.age_ms == winner.age_ms ? 0 : -1);
       case TieBreak::RejectConflict:
       default:
         return 0;
@@ -602,9 +637,26 @@ template <size_t MaxInputs = 8, size_t MaxOutputs = 8, size_t MaxRoutes = 32,
           size_t OutputBytes = 256, size_t RouteBytes = 128>
 class Center {
  public:
+  static_assert(MaxInputs && MaxOutputs && MaxRoutes && MaxRoutesPerOutput,
+                "Center capacities must be positive");
+  Center(const Center&) = delete;
+  Center& operator=(const Center&) = delete;
+  Center(Center&&) = delete;
+  Center& operator=(Center&&) = delete;
+  ~Center() {
+    while (destructor_count_) { auto& d = destructors_[--destructor_count_]; d.destroy(d.object); }
+  }
   Center() {
     context_.find_input_ = &Center::FindInputThunk;
     context_.find_input_ctx_ = this;
+    context_.timestamp_ = [](void* self, TypeId type, uint32_t* out) {
+      auto* center = static_cast<Center*>(self);
+      for (size_t i = 0; i < center->input_count_; ++i) {
+        const auto* slot = center->inputs_[i];
+        if (slot->type == type && slot->usable && slot->online()) return slot->timestamp(out);
+      }
+      return false;
+    };
   }
 
   template <typename Input, typename... Args>
@@ -614,13 +666,16 @@ class Center {
                   "input slot too large; increase Center InputBytes");
     static_assert(alignof(Slot) <= alignof(InputStorage),
                   "input slot alignment too large");
+    for (size_t i = 0; i < input_count_; ++i)
+      if (inputs_[i]->type == TypeKey<Input>::id()) { overflow_ = true; return *this; }
     if (input_count_ >= MaxInputs) {
       overflow_ = true;
       return *this;
     }
     void* storage = input_storage_[input_count_].bytes;
-    inputs_[input_count_++] =
-        new (storage) Slot(name, std::forward<Args>(args)...);
+    auto* slot = new (storage) Slot(name, std::forward<Args>(args)...);
+    inputs_[input_count_++] = slot;
+    remember(slot);
     return *this;
   }
 
@@ -628,25 +683,25 @@ class Center {
   class OutputRef {
    public:
     OutputRef(Center& center,
-              detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>& output)
+              detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>* output)
         : center_(center), output_(output) {}
 
     template <typename SafeBuilder>
     OutputRef& safe(SafeBuilder builder = SafeBuilder{}) {
-      output_.set_safe(center_.template make_safe<Cmd>(builder));
+      if (output_) { auto* p = center_.template make_safe<Cmd>(builder); if (p) output_->set_safe(p); }
       return *this;
     }
 
     template <typename HoldBuilder>
     OutputRef& hold(HoldBuilder builder = HoldBuilder{}) {
-      output_.set_hold(center_.template make_safe<Cmd>(builder));
+      if (output_) { auto* p = center_.template make_safe<Cmd>(builder); if (p) output_->set_hold(p); }
       return *this;
     }
 
     template <typename Arbitration>
     OutputRef& arbitrate(Arbitration arbitration = Arbitration{}) {
       if constexpr (std::is_same_v<Arbitration, HighestPriority>) {
-        output_.set_arbitration(arbitration);
+        if (output_) output_->set_arbitration(arbitration);
       }
       return *this;
     }
@@ -663,17 +718,21 @@ class Center {
       return *this;
     }
 
+    explicit operator bool() const { return output_ != nullptr; }
+
    private:
     template <typename RouteSpec>
     void add_route(RouteSpec spec) {
+      if (!output_) return;
+      if (!output_->can_add_route()) { center_.overflow_ = true; return; }
       auto* route = center_.template make_route<Cmd>(spec);
-      if (route == nullptr || !output_.add_route(route)) {
+      if (route == nullptr || !output_->add_route(route)) {
         center_.overflow_ = true;
       }
     }
 
     Center& center_;
-    detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>& output_;
+    detail::OutputSlot<Cmd, Sink, MaxRoutesPerOutput>* output_;
   };
 
   template <typename Cmd, typename Sink>
@@ -685,13 +744,13 @@ class Center {
                   "output slot alignment too large");
     if (output_count_ >= MaxOutputs) {
       overflow_ = true;
-      return OutputRef<Cmd, Sink>(*this, *reinterpret_cast<Slot*>(
-                                             output_storage_[0].bytes));
+      return OutputRef<Cmd, Sink>(*this, nullptr);
     }
     void* storage = output_storage_[output_count_].bytes;
     auto* slot = new (storage) Slot(name, sink);
     outputs_[output_count_++] = slot;
-    return OutputRef<Cmd, Sink>(*this, *slot);
+    remember(slot);
+    return OutputRef<Cmd, Sink>(*this, slot);
   }
 
   class GlobalRef {
@@ -719,10 +778,10 @@ class Center {
     context_.set_time(now_ms, dt_s);
 
     for (size_t i = 0; i < input_count_; ++i) {
-      inputs_[i]->update(context_);
+      inputs_[i]->usable = inputs_[i]->update(context_);
     }
 
-    bool force_safe = false;
+    bool force_safe = overflow_;
     for (size_t i = 0; i < safety_count_; ++i) {
       if (safeties_[i]->active(context_)) {
         force_safe = true;
@@ -741,12 +800,14 @@ class Center {
   }
 
   Center& publish() {
+    publish_ok_ = true;
     for (size_t i = 0; i < output_count_; ++i) {
-      outputs_[i]->publish(context_);
+      if (!outputs_[i]->publish(context_)) publish_ok_ = false;
     }
     return *this;
   }
 
+  bool last_publish_ok() const { return publish_ok_; }
   bool overflowed() const { return overflow_; }
   Context& context() { return context_; }
   const Context& context() const { return context_; }
@@ -776,7 +837,9 @@ class Center {
       return nullptr;
     }
     void* storage = route_storage_[route_count_++].bytes;
-    return new (storage) Route(spec);
+    auto* route = new (storage) Route(spec);
+    remember(route);
+    return route;
   }
 
   template <typename Cmd, typename Builder>
@@ -791,7 +854,9 @@ class Center {
       return nullptr;
     }
     void* storage = route_storage_[route_count_++].bytes;
-    return new (storage) Model(builder);
+    auto* model = new (storage) Model(builder);
+    remember(model);
+    return model;
   }
 
   template <typename SafetyRule>
@@ -806,7 +871,9 @@ class Center {
       return;
     }
     void* storage = route_storage_[route_count_++].bytes;
-    safeties_[safety_count_++] = new (storage) Model(rule);
+    auto* model = new (storage) Model(rule);
+    safeties_[safety_count_++] = model;
+    remember(model);
   }
 
   static void* FindInputThunk(void* self, TypeId type) {
@@ -816,12 +883,19 @@ class Center {
   void* find_input(TypeId type) {
     for (size_t i = 0; i < input_count_; ++i) {
       if (inputs_[i]->type == type) {
-        return inputs_[i]->raw();
+        return inputs_[i]->usable && inputs_[i]->online() ? inputs_[i]->raw() : nullptr;
       }
     }
     return nullptr;
   }
 
+  struct Destructor { void* object; void (*destroy)(void*); };
+  template <typename T> void remember(T* object) {
+    destructors_[destructor_count_++] = {object, [](void* p) { static_cast<T*>(p)->~T(); }};
+  }
+  Destructor destructors_[MaxInputs + MaxOutputs + MaxRoutes]{};
+  size_t destructor_count_ = 0;
+  bool publish_ok_ = false;
   detail::IInputSlot* inputs_[MaxInputs]{};
   detail::IOutputSlot* outputs_[MaxOutputs]{};
   detail::ISafetyRule* safeties_[MaxRoutes]{};

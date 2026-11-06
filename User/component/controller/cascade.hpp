@@ -1,7 +1,7 @@
 #pragma once
 
 /*
- * 模型预测速度控制器。
+ * 位置—速度串级 P 控制器（不求解预测模型或优化问题）。
  *
  * 基于位置误差和速度误差的双环速度控制器：
  *   target_velocity = kp_position * pos_error
@@ -16,7 +16,7 @@
  *   - 适用于点到点运动跟踪
  *
  * 使用示例：
- *   auto mpc = mr::comp::cntlr::mpc::Build(
+ *   auto cascade = mr::comp::cntlr::cascade::Build(
  *       2.0f,    // kp_position: 位置环增益
  *       10.0f,   // kp_velocity: 速度环增益
  *       1.0f,    // velocity_limit: 最大速度 (m/s 或 rad/s)
@@ -24,14 +24,14 @@
  *       3.0f     // output_limit: 力矩/力输出限幅
  *   );
  *
- *   float torque = mpc.Update(target_pos, current_pos, current_vel, dt_s);
+ *   float torque = cascade.Update(target_pos, current_pos, current_vel, dt_s);
  */
 
 #include "component/controller/controller_types.hpp"
 
 namespace mr::comp::cntlr {
 
-struct mpc_config {
+struct cascade_config {
   Scalar kp_position = 0.0f;
   Scalar kp_velocity = 0.0f;
   SymmetricLimit velocity_limit{};
@@ -39,22 +39,22 @@ struct mpc_config {
   SymmetricLimit output_limit{};
 };
 
-struct mpc_step {
+struct cascade_step {
   Scalar target_velocity = 0.0f;
   Scalar output = 0.0f;
   bool valid = false;
 };
 
-class mpc {
+class cascade {
  public:
-  using Config = mpc_config;
-  using Step = mpc_step;
+  using Config = cascade_config;
+  using Step = cascade_step;
 
-  static mpc Build(const Config& config) {
-    return mpc(config);
+  static cascade Build(const Config& config) {
+    return cascade(config);
   }
 
-  static mpc Build(Scalar kp_position,
+  static cascade Build(Scalar kp_position,
                    Scalar kp_velocity,
                    Scalar velocity_limit = kUnlimited,
                    Scalar acceleration_limit = kUnlimited,
@@ -65,22 +65,20 @@ class mpc {
     config.velocity_limit = SymmetricLimit::Abs(velocity_limit);
     config.acceleration_limit = SymmetricLimit::Abs(acceleration_limit);
     config.output_limit = SymmetricLimit::Abs(output_limit);
-    return mpc(config);
+    return cascade(config);
   }
 
-  constexpr mpc() = default;
-  explicit mpc(const Config& config)
-      : config_(config),
-        velocity_limiter_(SlewRateLimiter::Build(config.acceleration_limit.value)) {}
+  constexpr cascade() = default;
+  explicit cascade(const Config& config) { Configure(config); }
 
   void Configure(const Config& config) {
     config_ = config;
-    velocity_limiter_ = SlewRateLimiter::Build(config.acceleration_limit.value);
+    reference_velocity_ = 0;
     last_ = {};
   }
 
   void Reset(Scalar current_velocity = 0.0f) {
-    velocity_limiter_.Reset(current_velocity);
+    if (IsUsableScalar(current_velocity)) reference_velocity_ = current_velocity;
     last_ = {};
   }
 
@@ -97,17 +95,28 @@ class mpc {
                 Scalar dt_s) {
     last_ = {};
     if (!IsUsableScalar(target_position) || !IsUsableScalar(position) ||
-        !IsUsableScalar(velocity)) {
+        !IsUsableScalar(velocity) || !IsUsableScalar(dt_s) || dt_s <= 0 ||
+        !Nonnegative(config_.kp_position) || !Nonnegative(config_.kp_velocity) ||
+        !Nonnegative(config_.velocity_limit.value) || !Nonnegative(config_.acceleration_limit.value) ||
+        !Nonnegative(config_.output_limit.value)) {
       return last_;
     }
 
     const Scalar pos_error = target_position - position;
     Scalar target_velocity = config_.kp_position * pos_error;
+    if (!IsUsableScalar(target_velocity)) return last_;
     target_velocity = config_.velocity_limit.Apply(target_velocity);
-    target_velocity = velocity_limiter_.Update(target_velocity, dt_s);
+    if (config_.acceleration_limit.enabled()) {
+      const Scalar delta = config_.acceleration_limit.value * dt_s;
+      if (!IsUsableScalar(delta)) return last_;
+      target_velocity = reference_velocity_ +
+          mr::component::math::clamp_scalar(target_velocity-reference_velocity_, -delta, delta);
+    }
 
     Scalar output = config_.kp_velocity * (target_velocity - velocity);
+    if (!IsUsableScalar(output) || !IsUsableScalar(target_velocity)) return last_;
     output = config_.output_limit.Apply(output);
+    reference_velocity_ = target_velocity;
 
     last_.target_velocity = target_velocity;
     last_.output = output;
@@ -118,8 +127,9 @@ class mpc {
   const Step& last() const { return last_; }
 
  private:
+  static bool Nonnegative(Scalar value) { return IsUsableScalar(value) && value >= 0; }
   Config config_{};
-  SlewRateLimiter velocity_limiter_{};
+  Scalar reference_velocity_ = 0;
   Step last_{};
 };
 

@@ -1,5 +1,12 @@
 #pragma once
 
+// Cortex-M single-core latest-value mailbox. Read/write copies execute with PRIMASK
+// interrupts masked; payload size determines interrupt latency. Not NMI/multicore/DMA
+// synchronization, nor a desktop thread-safe seqlock. Init/rebinding requires quiescence.
+// Handle and external storage must not be copied; storage must outlive all accesses.
+// Reset preserves sequence progress. A reader must poll within one uint32 sequence cycle.
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif  

@@ -26,7 +26,7 @@
  *   cfg.coeff[1][5][0] = k26;  // 第 1 个输出对第 5 个状态的固定增益
  *   cfg.output_limit[0] = mr::comp::cntlr::SymmetricLimit::Abs(10.0f);
  *   cfg.output_limit[1] = mr::comp::cntlr::SymmetricLimit::Abs(8.0f);
- *d1222
+ * 本组件接收外部离线增益，不在线求解 Riccati 方程。
  *   auto ctrl = Lqr::Build(cfg);
  *   Lqr::State ref = {0.0f, 0.0f, target_x, target_v, 0.0f, 0.0f};
  *   Lqr::State x = {theta, d_theta, pos_x, vel_x, pitch, pitch_rate};
@@ -121,8 +121,7 @@ class lqr {
     Reset();
     current_schedule_ = 0.0f;
     if constexpr (PolyOrder == 1U) {
-      RecalculateGain(0.0f);
-      schedule_valid_ = true;
+      schedule_valid_ = RecalculateGain(0.0f);
     } else {
       gain_ = {};
       schedule_valid_ = false;
@@ -134,10 +133,9 @@ class lqr {
   void SetCoeff(const Coeff& coeff) {
     config_.coeff = coeff;
     if constexpr (PolyOrder == 1U) {
-      RecalculateGain(0.0f);
-      schedule_valid_ = true;
+      schedule_valid_ = RecalculateGain(0.0f);
     } else if (schedule_valid_) {
-      RecalculateGain(current_schedule_);
+      schedule_valid_ = RecalculateGain(current_schedule_);
     }
   }
 
@@ -148,10 +146,9 @@ class lqr {
     }
 
     schedule = ClampSchedule(schedule);
-    RecalculateGain(schedule);
-    current_schedule_ = schedule;
-    schedule_valid_ = true;
-    return true;
+    schedule_valid_ = RecalculateGain(schedule);
+    if (schedule_valid_) current_schedule_ = schedule;
+    return schedule_valid_;
   }
 
   void SetOutputLimit(uint16_t index, SymmetricLimit limit) {
@@ -208,7 +205,7 @@ class lqr {
     last_.error = error;
     last_.feedforward = feedforward;
 
-    if (!schedule_valid_ || !IsStateUsable(error) ||
+    if (!schedule_valid_ || !ConfigValid() || !IsStateUsable(error) ||
         !IsControlUsable(feedforward)) {
       return last_;
     }
@@ -219,6 +216,7 @@ class lqr {
         value -= gain_[output][state] * error[state];
       }
 
+      if (!IsUsableScalar(value)) { last_ = {}; return last_; }
       last_.unsaturated_output[output] = value;
       last_.output[output] = config_.output_limit[output].Apply(value);
       last_.channel_saturated[output] =
@@ -285,13 +283,24 @@ class lqr {
     return schedule;
   }
 
-  void RecalculateGain(Scalar schedule) {
+  bool ConfigValid() const {
+    for (auto limit : config_.output_limit)
+      if (!IsUsableScalar(limit.value) || limit.value < 0) return false;
+    for (auto wrap : config_.state_wrap)
+      if (!IsUsableScalar(wrap.range) || wrap.range < 0) return false;
+    return !config_.clamp_schedule ||
+        (IsUsableScalar(config_.schedule_min) && IsUsableScalar(config_.schedule_max) &&
+         config_.schedule_min <= config_.schedule_max);
+  }
+  bool RecalculateGain(Scalar schedule) {
     for (uint16_t output = 0; output < ControlDim; ++output) {
       for (uint16_t state = 0; state < StateDim; ++state) {
         gain_[output][state] =
             EvalPolynomial(config_.coeff[output][state], schedule);
       }
     }
+    for (const auto& row : gain_) for (Scalar v : row) if (!IsUsableScalar(v)) return false;
+    return ConfigValid();
   }
 
   static Scalar EvalPolynomial(const std::array<Scalar, PolyOrder>& coeff,

@@ -94,7 +94,8 @@ void LatestSlot_Reset(LatestSlot_t *slot) {
   }
 
   const uint32_t primask = LatestSlot_EnterCritical();
-  slot->seq = 0u;
+  slot->seq++;
+  if (slot->seq == 0u) slot->seq = 1u;
   slot->valid = false;
   LatestSlot_ExitCritical(primask);
 }

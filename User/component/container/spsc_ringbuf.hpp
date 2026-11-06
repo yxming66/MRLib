@@ -19,7 +19,7 @@
  *                                                sizeof(sensor_b_storage));
  *
  *   // 生产者
- *   sensor_a_rb.TryPushObject(SensorSample{ /* ... *\/ });
+ *   sensor_a_rb.TryPushObject(SensorSample{});
  *
  *   // 消费者
  *   SensorSample s;
@@ -31,11 +31,11 @@
  * @subsection static StaticSpscRingBuf<N> —— 存储随对象一起静态分配
  *
  * @code
- *   // 容量在编译期确定；对象是 trivially-copyable，可放全局/静态
+ *   // 容量在编译期确定；对象禁止复制和移动，可放全局/静态
  *   static mr::comp::StaticSpscRingBuf<1024> log_rb;
  *
  *   // 推一条强类型记录
- *   LogEntry e{ /* ... *\/ };
+ *   LogEntry e{};
  *   if (!log_rb.TryPushObject(e)) {
  *     // 队列满
  *   }
@@ -84,8 +84,8 @@
  *
  * @subsection threadsafe 线程安全
  * 同 spsc_ringbuf.h：单生产者写 Push/TryPush，单消费者写 Pop/TryPop/Drop/Peek。
- * TryPushObject/TryPopObject 内部是 memcpy 之后的两端长度校验，
- * 跨字段读到的对象在多生产者场景下可能撕裂，仅限 SPSC 使用。
+ * 类型化操作先检查完整记录长度再复制。只允许单生产者/单消费者；
+ * 使用 CMSIS 单核同步，不承诺桌面线程、多核、NMI 或 DMA 缓存一致性。
  */
 
 #include <cstdint>
@@ -98,6 +98,10 @@ namespace mr::comp {
 class SpscRingBufView final {
  public:
   SpscRingBufView() = default;
+  SpscRingBufView(const SpscRingBufView&) = delete;
+  SpscRingBufView& operator=(const SpscRingBufView&) = delete;
+  SpscRingBufView(SpscRingBufView&&) = delete;
+  SpscRingBufView& operator=(SpscRingBufView&&) = delete;
 
   SpscRingBufView(uint8_t* storage, uint16_t size) {
     (void)Init(storage, size);
@@ -208,6 +212,10 @@ class StaticSpscRingBuf final {
   static_assert(StorageSize >= 2u,
                 "StaticSpscRingBuf storage must be at least 2 bytes");
 
+  StaticSpscRingBuf(const StaticSpscRingBuf&) = delete;
+  StaticSpscRingBuf& operator=(const StaticSpscRingBuf&) = delete;
+  StaticSpscRingBuf(StaticSpscRingBuf&&) = delete;
+  StaticSpscRingBuf& operator=(StaticSpscRingBuf&&) = delete;
   StaticSpscRingBuf() {
     (void)view_.Init(storage_, StorageSize);
   }

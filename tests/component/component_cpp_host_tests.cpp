@@ -3,6 +3,8 @@
 #include "component/cmd_center/cmd_center.hpp"
 
 #include <cstdio>
+#include "component/controller/cascade.hpp"
+#include "component/controller/lqr.hpp"
 #include <limits>
 
 #define CHECK(condition) do { \
@@ -98,10 +100,80 @@ bool TestCommandRouting() {
   CHECK(published.mode == 0 && published.value == 0.0f);
   return true;
 }
+struct TimedA {
+  uint32_t stamp = 0;
+  bool enabled = true;
+  bool online() const { return enabled; }
+  uint32_t timestamp_ms() const { return stamp; }
+};
+struct TimedB : TimedA {};
+struct RouteA { bool operator()(const TimedA&, Command& c) const { c.mode=1; return true; } };
+struct RouteB { bool operator()(const TimedB&, Command& c) const { c.mode=2; return true; } };
+struct OwnedInput {
+  int* live;
+  explicit OwnedInput(int* count) : live(count) { ++*live; }
+  ~OwnedInput() { --*live; }
+};
+bool TestCommandBoundaries() {
+  static_assert(!std::is_copy_constructible_v<cmd::Center<>>);
+  static_assert(!std::is_move_constructible_v<cmd::Center<>>);
+  int live = 0;
+  { cmd::Center<> owner; owner.input<OwnedInput>("owned",&live); CHECK(live==1); }
+  CHECK(live==0);
+  Command published;
+  cmd::Center<2,1,4> center;
+  center.input<TimedA>("a").input<TimedB>("b");
+  auto* a = center.context().input<TimedA>();
+  auto* b = center.context().input<TimedB>();
+  a->stamp = 0xfffffff0u; b->stamp = 4;
+  center.output<Command>("out",Sink{&published}).safe<Safe>()
+      .arbitrate(cmd::HighestPriority{cmd::TieBreak::Freshest})
+      .routes(cmd::from<TimedA,RouteA>(),cmd::from<TimedB,RouteB>());
+  center.tick(5).publish(); CHECK(published.mode==2 && center.last_publish_ok());
+  a->stamp=6;
+  center.tick(7).publish(); CHECK(published.mode==1);
+  a->enabled=false;
+  center.tick(8).publish(); CHECK(published.mode==2);
+  auto invalid = center.output<int>("overflow",[](int) { return true; });
+  CHECK(!invalid);
+  // A failed registration may be chained without touching a previously constructed slot.
+  invalid.safe([](int& x) { x=0; return true; });
+  center.tick(9).publish(); CHECK(center.overflowed() && published.mode==0);
+  cmd::Center<1,1,1,1> small;
+  small.input<Remote>("r");
+  small.output<Command>("o",Sink{&published}).route(cmd::from<Remote,FromRemote>())
+      .route(cmd::from<Remote,FromRemote>());
+  small.tick(1).publish(); CHECK(small.overflowed() && published.mode==0);
+  cmd::Center<1,1,1> failure;
+  failure.input<Remote>("r");
+  failure.output<Command>("out",[](const Command&) { return false; });
+  failure.tick(1).publish(); CHECK(!failure.last_publish_ok());
+  return true;
+}
+
+bool TestControllerSemantics() {
+  using Cascade = mr::comp::cntlr::cascade;
+  auto c = Cascade::Build(2,3,4,1,10);
+  auto first = c.StepOnce(2,0,0,0.1f);
+  CHECK(first.valid && Near(first.target_velocity,0.1f));
+  CHECK(!c.StepOnce(2,0,0,NAN).valid);
+  auto second = c.StepOnce(2,0,0,0.1f);
+  CHECK(second.valid && Near(second.target_velocity,0.2f));
+  CHECK(!Cascade::Build(NAN,1).StepOnce(1,0,0,0.1f).valid);
+  using Lqr = mr::comp::cntlr::lqr<1,1,2>;
+  Lqr::Config cfg;
+  cfg.clamp_schedule=false; cfg.coeff[0][0] = {2,3};
+  Lqr l(cfg);
+  CHECK(l.UpdateSchedule(2));
+  CHECK(Near(l.StepError({1}).output[0],-7));
+  CHECK(!l.UpdateSchedule(std::numeric_limits<float>::max()));
+  CHECK(!l.StepError({1}).valid);
+  return true;
+}
 }  // namespace
 
 int main() {
-  if (!TestScalarInterface() || !TestObserverDimensions() || !TestCommandRouting()) return 1;
-  std::puts("C++ component tests passed (3 groups)");
+  if (!TestScalarInterface() || !TestObserverDimensions() || !TestCommandRouting() || !TestCommandBoundaries() || !TestControllerSemantics()) return 1;
+  std::puts("C++ component tests passed (5 groups)");
   return 0;
 }

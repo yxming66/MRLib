@@ -5,6 +5,7 @@
 // 将 sink 注册到命令中心；命令中心分发时会把最新命令写入该队列。
 
 #include "cmsis_os2.h"
+#include <type_traits>
 
 namespace cmd {
 
@@ -15,11 +16,12 @@ class CmsisQueueSink {
 
   template <typename Cmd>
   bool operator()(const Cmd& cmd) const {
-    if (queue_ == nullptr) {
+    static_assert(std::is_trivially_copyable_v<Cmd>, "CMSIS queue commands must be trivially copyable");
+    if (queue_ == nullptr || osMessageQueueGetMsgSize(queue_) != sizeof(Cmd)) {
       return false;
     }
     if (reset_before_put_) {
-      (void)osMessageQueueReset(queue_);
+      if (osMessageQueueReset(queue_) != osOK) return false;
     }
     return osMessageQueuePut(queue_, &cmd, 0, 0) == osOK;
   }

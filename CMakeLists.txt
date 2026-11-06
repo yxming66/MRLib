@@ -228,6 +228,18 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     endif()
     add_test(NAME mr_component_c_host_tests COMMAND mr_component_c_host_tests)
 
+    add_executable(mr_storage_host_tests tests/component/storage_host_tests.cpp
+        User/component/container/spsc_ringbuf.c User/component/container/latest_slot.c)
+    target_link_libraries(mr_storage_host_tests PRIVATE mr_component_math)
+    target_include_directories(mr_storage_host_tests BEFORE PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests/stubs/container")
+    set_target_properties(mr_storage_host_tests PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO
+        CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+    target_compile_options(mr_storage_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG
+        "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-rtti>")
+    add_test(NAME mr_storage_host_tests COMMAND mr_storage_host_tests)
+
     add_executable(mr_numeric_host_tests tests/component/numeric_host_tests.cpp)
     target_link_libraries(mr_numeric_host_tests PRIVATE mr_component_math)
     set_target_properties(mr_numeric_host_tests PROPERTIES
