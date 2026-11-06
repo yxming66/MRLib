@@ -32,4 +32,21 @@ inline bool IsFinite(const WheelSpeeds& wheel_speeds) {
                                                 wheel_speeds.size());
 }
 
+/** Maximum absolute wheel linear speed in the configured wheel order. */
+inline float MaxAbsWheelSpeed(const WheelSpeeds& wheel_speeds) {
+  return mr::component::math::max_abs_array(wheel_speeds.data(),
+                                             wheel_speeds.size());
+}
+
+/** Scale all wheel linear speeds proportionally to an absolute limit. */
+inline bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
+                                    float max_abs_speed_mps) {
+  if (!IsFinite(wheel_speeds) ||
+      !mr::component::math::is_positive_scalar(max_abs_speed_mps)) {
+    return false;
+  }
+  return mr::component::math::scale_to_abs_limit(
+      wheel_speeds.data(), wheel_speeds.size(), max_abs_speed_mps);
+}
+
 }  // namespace mr::robotics::chassis

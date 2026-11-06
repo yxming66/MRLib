@@ -93,21 +93,13 @@ class ChassisKinematics final {
   }
 
   static float MaxAbsWheelSpeed(const WheelSpeeds& wheel_speeds) {
-    return mr::component::math::max_abs_array(wheel_speeds.data(),
-                                              wheel_speeds.size());
+    return mr::robotics::chassis::MaxAbsWheelSpeed(wheel_speeds);
   }
 
   static bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
-                                      float max_abs_speed) {
-    if (!mr::robotics::chassis::IsFinite(wheel_speeds) ||
-        !mr::component::math::is_positive_scalar(max_abs_speed)) {
-      return false;
-    }
-    if (MaxAbsWheelSpeed(wheel_speeds) <= max_abs_speed) {
-      return true;
-    }
-    return mr::component::math::scale_to_abs_limit(
-        wheel_speeds.data(), wheel_speeds.size(), max_abs_speed);
+                                      float max_abs_speed_mps) {
+    return mr::robotics::chassis::ScaleWheelSpeedsToLimit(
+        wheel_speeds, max_abs_speed_mps);
   }
 
  private:

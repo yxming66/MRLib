@@ -2,7 +2,7 @@
 
 // 前全向轮、后麦克纳姆轮混合底盘运动学模型。
 // 使用方式：构造几何参数后调用正解/逆解函数；控制时输入车体系
-// vx、vy、wz，反馈时将各轮角速度传入反解函数。
+// vx、vy、wz，反馈时将各轮轮缘线速度传入反解函数。
 
 #include <array>
 
@@ -106,14 +106,13 @@ class FrontOmniRearMecanumChassis {
   }
 
   static float MaxAbsWheelSpeed(const WheelSpeeds& wheel_speeds) {
-    return mr::component::math::max_abs_array(wheel_speeds.data(),
-                                              kWheelCount);
+    return mr::robotics::chassis::MaxAbsWheelSpeed(wheel_speeds);
   }
 
   static bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
-                                      float max_abs_speed) {
-    return mr::component::math::scale_to_abs_limit(
-        wheel_speeds.data(), kWheelCount, max_abs_speed);
+                                      float max_abs_speed_mps) {
+    return mr::robotics::chassis::ScaleWheelSpeedsToLimit(
+        wheel_speeds, max_abs_speed_mps);
   }
 
  private:

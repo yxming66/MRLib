@@ -10,13 +10,15 @@
  *   PlanarVelocity body{};
  *   chassis.ForwardKinematics(wheels, body);
  *
- * vx/vy 使用 m/s，wz 和轮速使用 rad/s；几何参数必须与轮子编号约定一致。
+ * vx/vy 使用 m/s，wz 使用 rad/s；轮速是轮缘线速度 m/s。
+ * 几何参数必须与轮子编号约定一致。
  */
 
 // 麦克纳姆底盘运动学模型。
 // 使用方式：构造 MecanumGeometry 和 MecanumKinematics，调用
-// ChassisVelocityToWheelVelocity() 将车体速度转换为四轮角速度，
-// 或调用 WheelVelocityToChassisVelocity() 做反馈反解。速度单位为 m/s、rad/s。
+// ChassisVelocityToWheelVelocity() 将车体速度转换为四轮轮缘线速度，
+// 或调用 WheelVelocityToChassisVelocity() 做反馈反解。线速度单位为 m/s，
+// 角速度单位为 rad/s。
 
 #include <array>
 
@@ -100,14 +102,13 @@ class MecanumChassis {
   }
 
   static float MaxAbsWheelSpeed(const WheelSpeeds& wheel_speeds) {
-    return mr::component::math::max_abs_array(wheel_speeds.data(),
-                                              kWheelCount);
+    return mr::robotics::chassis::MaxAbsWheelSpeed(wheel_speeds);
   }
 
   static bool ScaleWheelSpeedsToLimit(WheelSpeeds& wheel_speeds,
-                                      float max_abs_speed) {
-    return mr::component::math::scale_to_abs_limit(
-        wheel_speeds.data(), kWheelCount, max_abs_speed);
+                                      float max_abs_speed_mps) {
+    return mr::robotics::chassis::ScaleWheelSpeedsToLimit(
+        wheel_speeds, max_abs_speed_mps);
   }
 
  private:
