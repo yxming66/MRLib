@@ -36,7 +36,7 @@
  *   // sample.position, sample.velocity, sample.acceleration
  */
 
-#include <math.h>
+#include <cmath>
 
 #include "trajectory_types.hpp"
 
@@ -66,103 +66,48 @@ class TrapezoidProfile {
         valid_(false) {}
 
   static Scalar MinDuration(const Config& config) {
-    const Scalar d = abs_scalar(config.distance);
-    const Scalar v = abs_scalar(config.max_velocity);
-    const Scalar a = abs_scalar(config.max_acceleration);
-    const Scalar epsilon = abs_scalar(config.epsilon);
-    if (!is_finite_scalar(d) || !is_finite_scalar(v) ||
-        !is_finite_scalar(a) || !is_finite_scalar(epsilon)) {
-      return -1.0f;
-    }
-    if (d <= epsilon) {
-      return 0.0f;
-    }
-    if (v <= epsilon || a <= epsilon) {
-      return -1.0f;
-    }
-
-    const Scalar t_acc = v / a;
-    const Scalar accel_decel_distance = (v * v) / a;
-    if (d <= accel_decel_distance) {
-      return 2.0f * sqrtf(d / a);
-    }
-    return 2.0f * t_acc + (d - accel_decel_distance) / v;
+    const double d = std::fabs(static_cast<double>(config.distance));
+    const double v = config.max_velocity, a = config.max_acceleration;
+    if (!is_finite_scalar(config.distance) || !is_finite_scalar(config.max_velocity) ||
+        !is_finite_scalar(config.max_acceleration) || !is_finite_scalar(config.epsilon) ||
+        config.epsilon <= 0 || v < 0 || a < 0) return -1;
+    if (d <= config.epsilon) return 0;
+    if (v <= 0 || a <= 0) return -1;
+    const double t = d <= v*v/a ? 2*std::sqrt(d/a) : d/v + v/a;
+    Scalar result = static_cast<Scalar>(t);
+    if (result < t) result = std::nextafter(result, INFINITY);
+    return is_finite_scalar(result) ? result : -1;
   }
 
   bool Configure(const Config& config) {
-    const Scalar duration = MinDuration(config);
-    if (duration < 0.0f) {
-      reset();
-      return false;
-    }
-    return ConfigureForDuration(config, duration);
+    return ConfigureForDuration(config, MinDuration(config));
   }
 
   bool ConfigureForDuration(const Config& config, Scalar duration) {
     reset();
-    if (!is_finite_scalar(config.distance) ||
-        !is_finite_scalar(config.max_velocity) ||
-        !is_finite_scalar(config.max_acceleration) ||
-        !is_finite_scalar(config.epsilon) || !is_finite_scalar(duration) ||
-        duration < 0.0f) {
-      return false;
-    }
-
-    distance_ = config.distance;
-    abs_distance_ = abs_scalar(config.distance);
-    direction_ = (config.distance >= 0.0f) ? 1.0f : -1.0f;
-    duration_ = duration;
-    epsilon_ = abs_scalar(config.epsilon);
-
-    if (abs_distance_ <= epsilon_) {
-      valid_ = true;
-      return true;
-    }
-    if (duration_ <= epsilon_) {
-      return false;
-    }
-
-    const Scalar max_acc = abs_scalar(config.max_acceleration);
-    const Scalar max_vel = abs_scalar(config.max_velocity);
-    if (max_acc <= epsilon_ || max_vel <= epsilon_) {
-      return false;
-    }
-
     const Scalar min_time = MinDuration(config);
-    if (min_time < 0.0f || duration_ + 1.0e-5f < min_time) {
-      return false;
-    }
-
-    Scalar discriminant =
-        duration_ * duration_ - 4.0f * abs_distance_ / max_acc;
-    if (discriminant < 0.0f) {
-      if (discriminant < -1.0e-5f) {
-        return false;
-      }
-      discriminant = 0.0f;
-    }
-
-    Scalar ta = 0.5f * (duration_ - sqrtf(discriminant));
-    ta = clamp_scalar(ta, 0.0f, 0.5f * duration_);
-    Scalar v_peak = max_acc * ta;
-
-    if (v_peak > max_vel + 1.0e-4f) {
-      v_peak = max_vel;
-      ta = v_peak / max_acc;
-    }
-
-    const Scalar tc = duration_ - 2.0f * ta;
-    accel_time_ = ta;
-    cruise_time_ = (tc > 0.0f) ? tc : 0.0f;
-    peak_velocity_ = v_peak;
-    acceleration_ = (ta > epsilon_) ? max_acc : 0.0f;
-    valid_ = true;
-    return true;
+    if (min_time < 0 || !is_finite_scalar(duration) || duration < min_time) return false;
+    distance_ = config.distance;
+    direction_ = distance_ >= 0 ? 1 : -1;
+    abs_distance_ = abs_scalar(distance_);
+    duration_ = duration;
+    epsilon_ = config.epsilon;
+    if (min_time == 0) { valid_ = true; return true; }
+    const double d = abs_distance_, a = config.max_acceleration, v = config.max_velocity;
+    const double ta = std::fmin(v/a, std::sqrt(d/a));
+    const double tc = std::fmax(0.0, d/(a*ta)-ta);
+    const double stretch = duration / (2*ta+tc);
+    accel_time_ = static_cast<Scalar>(ta*stretch);
+    cruise_time_ = static_cast<Scalar>(tc*stretch);
+    peak_velocity_ = static_cast<Scalar>(a*ta/stretch);
+    acceleration_ = static_cast<Scalar>(a/(stretch*stretch));
+    valid_ = is_finite_scalar(acceleration_) && is_finite_scalar(peak_velocity_);
+    return valid_;
   }
 
   ScalarMotionSample Sample(Scalar elapsed) const {
     ScalarMotionSample out;
-    if (!valid_) {
+    if (!valid_ || !is_finite_scalar(elapsed)) {
       return out;
     }
 
@@ -180,7 +125,7 @@ class TrapezoidProfile {
     Scalar vel_abs = 0.0f;
     Scalar acc_abs = 0.0f;
 
-    if (abs_distance_ <= epsilon_ || acceleration_ <= epsilon_) {
+    if (abs_distance_ <= epsilon_ || acceleration_ == 0) {
       pos_abs = abs_distance_;
     } else if (t <= accel_time_) {
       pos_abs = 0.5f * acceleration_ * t * t;

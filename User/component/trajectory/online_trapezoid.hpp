@@ -4,7 +4,7 @@
 // 使用方式：配置 OnlineTrapezoidAxisConfig，构造 OnlineTrapezoidAxis，
 // 每周期调用 Update(target, dt)，再读取 CurrentPosition/CurrentVelocity。
 
-#include <math.h>
+#include <cmath>
 
 #include "component/trajectory/trajectory_types.hpp"
 
@@ -40,73 +40,34 @@ inline OnlineTrapezoidAxisSample update_trapezoid_axis(
     return out;
   }
 
-  Scalar max_vel = abs_scalar(max_velocity);
-  Scalar max_acc = abs_scalar(max_acceleration);
-  if (!is_finite_scalar(*velocity)) {
-    *velocity = 0.0f;
-  }
-  dt = mr::component::math::sanitize_dt(
-      dt, 0.0f, mr::component::math::kDefaultEpsilon,
-      mr::component::math::kFiniteLimit);
-  position_epsilon = abs_scalar(position_epsilon);
-  velocity_epsilon_floor = abs_scalar(velocity_epsilon_floor);
-
-  if (!is_finite_scalar(max_vel) || !is_finite_scalar(max_acc) ||
-      max_vel <= kDefaultEpsilon || max_acc <= kDefaultEpsilon) {
-    out.velocity = *velocity;
-    return out;
-  }
-
-  const Scalar error = target - current;
-  const Scalar stop_vel_epsilon =
-      fmaxf(velocity_epsilon_floor, max_acc * dt);
-
-  if (abs_scalar(error) <= position_epsilon &&
-      abs_scalar(*velocity) <= stop_vel_epsilon) {
-    *velocity = 0.0f;
-    out.position = target;
-    out.velocity = 0.0f;
-    out.valid = true;
-    out.reached = true;
-    return out;
-  }
-
-  const Scalar brake_velocity =
-      sqrtf(fmaxf(0.0f, 2.0f * max_acc * abs_scalar(error)));
-  Scalar desired_velocity = copysignf(fminf(max_vel, brake_velocity), error);
-  if (brake_velocity < stop_vel_epsilon) {
-    desired_velocity = 0.0f;
-  }
-
-  const Scalar max_delta_velocity = max_acc * dt;
-  *velocity = mr::component::math::apply_delta_limit(
-      desired_velocity, *velocity, max_delta_velocity);
-  *velocity = mr::component::math::abs_clip_scalar(*velocity, max_vel);
-
-  if (abs_scalar(error) <= position_epsilon &&
-      abs_scalar(*velocity) <= stop_vel_epsilon) {
-    *velocity = 0.0f;
-    out.position = target;
-    out.velocity = 0.0f;
-    out.valid = true;
-    out.reached = true;
-    return out;
-  }
-
-  const Scalar next_position = current + (*velocity) * dt;
-  if ((target - current) * (target - next_position) <= 0.0f) {
-    *velocity = 0.0f;
-    out.position = target;
-    out.velocity = 0.0f;
-    out.valid = true;
-    out.reached = true;
-    return out;
-  }
-
-  out.position = next_position;
   out.velocity = *velocity;
+  if (!is_finite_scalar(*velocity) || !is_finite_scalar(max_velocity) ||
+      !is_finite_scalar(max_acceleration) || !is_finite_scalar(dt) || dt <= 0 ||
+      !is_finite_scalar(position_epsilon) || position_epsilon < 0 ||
+      !is_finite_scalar(velocity_epsilon_floor) || velocity_epsilon_floor < 0 ||
+      max_velocity <= 0 || max_acceleration <= 0 || abs_scalar(*velocity) > max_velocity)
+    return out;
+
+  const double delta = static_cast<double>(max_acceleration)*dt;
+  const double error = static_cast<double>(target)-current;
+  // Discrete braking bound for semi-implicit integration. Crossing the target never
+  // resets a moving axis: an infeasible target change is followed by bounded braking.
+  const double adt = delta;
+  const double speed = 2 * max_acceleration * std::fabs(error) /
+      (std::sqrt(adt*adt + 2*max_acceleration*std::fabs(error)) + adt);
+  const double desired = std::copysign(std::fmin(max_velocity, speed), error);
+  double next_v = *velocity + std::fmax(-delta, std::fmin(delta, desired-*velocity));
+  double next_p = current + next_v*dt;
+  // Position snapping is confined to the configured tolerance; velocity can only
+  // reach zero when the one-step acceleration bound permits it.
+  if (std::fabs(error) <= position_epsilon && std::fabs(*velocity) <= delta) {
+    next_v = 0; next_p = target; out.reached = true;
+  }
+  out.position = static_cast<Scalar>(next_p);
+  out.velocity = static_cast<Scalar>(next_v);
   out.valid = is_finite_scalar(out.position) && is_finite_scalar(out.velocity);
-  out.reached = false;
+  if (out.valid) *velocity = out.velocity;
+
   return out;
 }
 

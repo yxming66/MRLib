@@ -13,7 +13,7 @@
  *
  * 业务代码通常包含具体轨迹头文件或聚合头文件即可：
  *
- *   #include "component/trajectory/trajectory.hpp"
+ *   #include "component/trajectory/trapezoid.hpp"
  */
 
 #include <stdint.h>

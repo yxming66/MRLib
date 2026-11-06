@@ -37,7 +37,7 @@ class SynchronizedProfile {
 
     for (uint16_t i = 0; i < static_cast<uint16_t>(N); ++i) {
       const Scalar min_time = ScalarProfile::MinDuration(axis_configs[i]);
-      if (min_time < 0.0f) {
+      if (!is_finite_scalar(min_time) || min_time < 0.0f) {
         return false;
       }
       if (min_time > duration_) {
@@ -58,14 +58,14 @@ class SynchronizedProfile {
   }
 
   ScalarMotionSample SampleAxis(uint16_t index, Scalar elapsed) const {
-    if (index >= static_cast<uint16_t>(N)) {
+    if (!valid_ || index >= static_cast<uint16_t>(N)) {
       return ScalarMotionSample();
     }
     return profiles_[index].Sample(elapsed);
   }
 
-  const ScalarProfile& Axis(uint16_t index) const {
-    return profiles_[index];
+  const ScalarProfile* Axis(uint16_t index) const {
+    return valid_ && index < N ? &profiles_[index] : nullptr;
   }
 
   Scalar Duration() const { return duration_; }

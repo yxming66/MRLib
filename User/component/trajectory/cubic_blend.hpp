@@ -11,7 +11,7 @@
  *
  * 特性：
  *   - 返回归一化进度 s ∈ [0, 1]，乘以目标距离得到实际位置
- *   - 速度和加速度在起点/终点为零
+ *   - 端点速度为零；区间内端点加速度为 ±6/T²，不能用于要求端点零加速度的拼接
  *   - 适用于笛卡尔空间直线/旋转轨迹的平滑插值
  *
  * 使用示例：
@@ -35,6 +35,7 @@ struct CubicBlendSample {
   Scalar ds;
   Scalar dds;
   bool finished;
+  bool valid = false;
 
   CubicBlendSample() : s(0.0f), ds(0.0f), dds(0.0f), finished(false) {}
 };
@@ -44,8 +45,11 @@ inline CubicBlendSample sample_cubic_blend(
     Scalar duration,
     Scalar epsilon = kDefaultEpsilon) {
   CubicBlendSample sample;
+  if (!is_finite_scalar(elapsed) || !is_finite_scalar(duration) || duration < 0 ||
+      !is_finite_scalar(epsilon) || epsilon <= 0) return sample;
+  sample.valid = true;
   if (duration <= epsilon) {
-    sample.s = (elapsed > 0.0f) ? 1.0f : 0.0f;
+    sample.s = (elapsed >= 0.0f) ? 1.0f : 0.0f;
     sample.finished = (elapsed >= 0.0f);
     return sample;
   }
@@ -76,6 +80,9 @@ inline Scalar cubic_blend_duration_from_limits(
     Scalar max_velocity,
     Scalar max_acceleration,
     Scalar epsilon = kDefaultEpsilon) {
+  if (!is_finite_scalar(epsilon) || epsilon <= 0 || !is_finite_scalar(distance) ||
+      !is_finite_scalar(max_velocity) || !is_finite_scalar(max_acceleration) ||
+      max_velocity < 0 || max_acceleration < 0) return -1;
   const Scalar abs_distance = abs_scalar(distance);
   if (abs_distance <= epsilon) {
     return 0.0f;
@@ -89,8 +96,8 @@ inline Scalar cubic_blend_duration_from_limits(
   const Scalar velocity_bound = 1.5f * abs_distance / max_velocity;
   const Scalar acceleration_bound =
       sqrtf(6.0f * abs_distance / max_acceleration);
-  return (velocity_bound > acceleration_bound) ? velocity_bound
-                                               : acceleration_bound;
+  const Scalar result = (velocity_bound > acceleration_bound) ? velocity_bound : acceleration_bound;
+  return is_finite_scalar(result) ? result : -1;
 }
 
 }  // namespace mr::comp::traj
