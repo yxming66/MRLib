@@ -15,10 +15,11 @@
 //   });
 //
 // 精细控制流程仍然保留:
-//   controller.Update();                        // 先刷新反馈和控制律
+//   controller.UpdateFeedback();                // 只刷新反馈
 //   ...                                         // 可插入限位学习、状态观测、调试逻辑
 //   controller.SetVelocity(target_rad_s);        // 选择本周期目标
-//   controller.CommitCommand();                  // 周期末提交到底层电机协议
+//   controller.UpdateCommand();                 // 按本周期目标计算控制律
+//   controller.CommitCommand();                 // 周期末暂存/发送，RM 还需 Flush
 //
 // 控制策略: 底层电机支持原生速度/位置/MIT 时优先透传；不支持时回退到软件 PID。
 
@@ -107,16 +108,22 @@ public:
 
     template <typename CommandFn>
     int8_t Step(CommandFn command_fn) {
-        const int8_t update_ret = Update();
+        const int8_t update_ret = UpdateFeedback();
         if (update_ret != DEVICE_OK) {
             return update_ret;
         }
 
         const int8_t command_ret = command_fn(*this);
         if (command_ret != DEVICE_OK) {
+            ClearPendingCommand();
             return command_ret;
         }
 
+        const int8_t prepare_ret = UpdateCommand();
+        if (prepare_ret != DEVICE_OK) {
+            ClearPendingCommand();
+            return prepare_ret;
+        }
         return CommitCommand();
     }
 

@@ -1,87 +1,51 @@
 #pragma once
-
-/*
- * 轮子设备封装：组合 RM M3508 电机、轮半径和轮子控制器。
- *
- * 快速用法：
- *   RmM3508WheelConfig config{};
- *   config.motor_config.can = BSP_CAN_1; config.motor_config.id = 0x201;
- *   config.radius_m = 0.076f;
- *   RmM3508Wheel wheel(config); wheel.Register();
- *
- * 控制周期：Update() -> SetTorque/SetPosition() -> CommitCommand()。
- */
-
-// 轮子设备封装，将固定型号电机与轮半径、轮速控制器组合起来。
-// 使用方式：填写 RmM3508WheelConfig，构造 RmM3508Wheel，依次调用
-// Register、Enable、Update；控制时调用 SetTorque/SetPosition 和 CommitCommand。
-
-#include <stdint.h>
-
+#include "component/math/scalar.hpp"
 #include "device/device.h"
-#include "device/motor/core/motor_install_spec.hpp"
-#include "device/motor/packages/controller/motor_controller.hpp"
-#include "device/motor/core/motor_instance_config.hpp"
 #include "device/wheel/wheel_interface.hpp"
-
 namespace mr::wheel {
-
-struct WheelState {
-  float position_rad = 0.0f;
-  float angular_velocity_rad_s = 0.0f;
-  float linear_velocity_mps = 0.0f;
-  float torque_nm = 0.0f;
-  float temperature_c = 0.0f;
-  bool temperature_warning = false;
-  bool temperature_over_limit = false;
-  bool temperature_limit_latched = false;
-  bool online = false;
-  uint32_t feedback_timestamp_ms = 0U;
-  uint32_t feedback_sequence = 0U;
-};
-
-struct RmM3508WheelConfig {
-  mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM> motor_config{};
-  mr::motor::MotorInstallSpec install{};
-  mr::motor::MotorTemperatureProtectionConfig temperature_protection{};
-  mr::motor::MotorControllerConfig controller{};
-  float radius_m = 0.0f;
-};
-
-class RmM3508Wheel final : public WheelDevice {
+// Motor is app-owned and exposes output-shaft SI units. Bind a raw MotorT or
+// a compatible drive whose Update only refreshes feedback, not a controller.
+// Chassis owns wheel velocity PID; this adapter adds no second velocity loop.
+template <typename Drive>
+class MotorWheel final : public WheelDevice {
  public:
-  explicit RmM3508Wheel(const RmM3508WheelConfig& config);
-
-  int8_t Register() override;
-  int8_t Enable() override;
-  int8_t Relax() override;
-  int8_t Update();
-  int8_t UpdateFeedback();
-  int8_t UpdateFeedback(WheelFeedback& feedback) override;
-  int8_t UpdateCommand() override;
-  int8_t SetTorque(float torque_nm) override;
-  int8_t SetPosition(float position_rad, float max_velocity_rad_s = 0.0f);
-  int8_t CommitCommand() override;
-  bool HasPendingCommand() const;
-  void ClearPendingCommand();
-
-  const WheelState& State() const { return state_; }
+  MotorWheel(Drive& drive, float radius_m) : drive_(drive), radius_m_(radius_m) {}
+  MotorWheel(const MotorWheel&) = delete;
+  MotorWheel& operator=(const MotorWheel&) = delete;
+  bool IsValid() const { return component::math::is_positive_scalar(radius_m_); }
   float RadiusM() const { return radius_m_; }
-  bool IsValid() const { return controller_ != nullptr; }
-
+  int8_t Register() override { return IsValid() ? drive_.Register() : DEVICE_ERR; }
+  int8_t Enable() override { return IsValid() ? drive_.Enable() : DEVICE_ERR; }
+  int8_t Relax() override { drive_.ClearPendingCommand(); return drive_.Relax(); }
+  int8_t UpdateFeedback(WheelFeedback& feedback) override {
+    feedback = {};
+    if (!IsValid()) return DEVICE_ERR;
+    const auto result = drive_.Update();
+    const auto state = drive_.GetState();
+    feedback.position_rad = state.position_rad;
+    feedback.linear_velocity_mps = state.velocity_rad_s * radius_m_;
+    feedback.output_torque_nm = state.torque_nm;
+    feedback.timestamp_ms = state.last_feedback_tick;
+    feedback.sequence = state.feedback_sequence;
+    feedback.online = result == DEVICE_OK && state.online && state.feedback_valid &&
+        state.position_valid && !state.protocol_fault && !state.temperature_limit_latched &&
+        component::math::is_finite_scalar(feedback.position_rad) &&
+        component::math::is_finite_scalar(feedback.linear_velocity_mps) &&
+        component::math::is_finite_scalar(feedback.output_torque_nm);
+    if (!feedback.online) { drive_.ClearPendingCommand(); return result == DEVICE_OK ? DEVICE_ERR_NO_DEV : result; }
+    return DEVICE_OK;
+  }
+  int8_t SetTorque(float torque_nm) override {
+    if (!IsValid() || !component::math::is_finite_scalar(torque_nm)) return DEVICE_ERR;
+    return drive_.SetTorque(torque_nm);
+  }
+  // Drive::SetTorque prepares the command. No hidden update or second PID.
+  int8_t UpdateCommand() override { return IsValid() ? DEVICE_OK : DEVICE_ERR; }
+  int8_t CommitCommand() override { return IsValid() ? drive_.CommitCommand() : DEVICE_ERR; }
+  bool HasPendingCommand() const { return drive_.HasPendingCommand(); }
+  void ClearPendingCommand() { drive_.ClearPendingCommand(); }
  private:
-  using Motor = mr::motor::RmM3508Motor;
-  using Controller = mr::motor::MotorControllerT<Motor>;
-
-  static float ResolveRadius(float radius_m);
-
-  void RefreshState();
-
+  Drive& drive_;
   float radius_m_;
-  Motor* motor_;
-  Controller* controller_;
-  WheelState state_;
-  alignas(Controller) unsigned char controller_storage_[sizeof(Controller)];
 };
-
 }  // namespace mr::wheel

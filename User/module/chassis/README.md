@@ -18,7 +18,7 @@ UpdateFeedback -> SetCommand -> Step(dt_s) -> CommitOutput
 
 `device/wheel/wheel_interface.hpp` 定义模块需要的最小能力。它采用 `int8_t` 返回值以兼容现有嵌入式设备 API；返回 `0` 表示成功，非零表示设备错误。接口不拥有设备对象，也不负责设备的内存分配。
 
-当前的 `RmM3508Wheel` 已提供该接口的适配实现。其他电机型号只需要实现同一接口，即可复用底盘模块和运动学。
+`MotorWheel<Drive>` 绑定项目持有的电机和轮半径，不限定电机型号，也不额外创建速度 PID。底盘模块负责轮速闭环，轮子负责反馈单位换算和转矩暂存；RM 输出仍需共享总线统一 Flush。
 
 ## 可选控制策略
 

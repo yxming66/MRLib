@@ -38,9 +38,9 @@
 //
 //   EmulatedMit:
 //     u_torque = Kp * (target_position - feedback_position)
-//              - Kd * feedback_velocity
+//              + Kd * (target_velocity - feedback_velocity)
 //              + torque_ff
-//     target_velocity 当前仅保留接口语义，模拟实现不引入速度误差项。
+//     模拟实现与原生 MIT 使用相同的速度误差语义。
 //
 // 滤波与限幅:
 //   feedback_lowpass_cutoff_hz 对闭环使用的 position/velocity 做一阶低通；<=0 时直通。
@@ -92,6 +92,14 @@ float ResolveCutoffHz(float cutoff_hz) {
     return (scalar::is_finite_scalar(cutoff_hz) && cutoff_hz > 0.0f)
                ? cutoff_hz
                : 0.0f;
+}
+
+bool ValidControlFeedback(const MotorState& state) {
+    return state.online && state.feedback_valid && state.position_valid &&
+        !state.protocol_fault && !state.temperature_limit_latched &&
+        scalar::is_finite_scalar(state.position_rad) &&
+        scalar::is_finite_scalar(state.velocity_rad_s) &&
+        scalar::is_finite_scalar(state.torque_nm);
 }
 
 } // namespace
@@ -196,9 +204,11 @@ int8_t MotorControllerT<MotorType>::Update() {
     const float dt = UpdateControlDt();
     last_control_dt_s_ = dt;
     int8_t ret = motor_.Update();
-    if (ret != DEVICE_OK) {
+    if (ret != DEVICE_OK || !ValidControlFeedback(motor_.GetState())) {
         control_state_valid_ = false;
-        return ret;
+        feedback_filter_initialized_ = false;
+        motor_.ClearPendingCommand();
+        return ret != DEVICE_OK ? ret : DEVICE_ERR_NO_DEV;
     }
 
     const MotorState state = FilterFeedback(motor_.GetState(), dt);
@@ -210,9 +220,11 @@ int8_t MotorControllerT<MotorType>::UpdateFeedback() {
     const float dt = UpdateControlDt();
     last_control_dt_s_ = dt;
     int8_t ret = motor_.Update();
-    if (ret != DEVICE_OK) {
+    if (ret != DEVICE_OK || !ValidControlFeedback(motor_.GetState())) {
         control_state_valid_ = false;
-        return ret;
+        feedback_filter_initialized_ = false;
+        motor_.ClearPendingCommand();
+        return ret != DEVICE_OK ? ret : DEVICE_ERR_NO_DEV;
     }
 
     (void)FilterFeedback(motor_.GetState(), dt);
@@ -221,15 +233,20 @@ int8_t MotorControllerT<MotorType>::UpdateFeedback() {
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::UpdateCommand() {
-    return UpdateCommandFromState(control_state_valid_ ? control_state_
-                                                        : motor_.GetState(),
-                                  last_control_dt_s_);
+    if (!control_state_valid_) {
+        motor_.ClearPendingCommand();
+        return DEVICE_ERR_NO_DEV;
+    }
+    return UpdateCommandFromState(control_state_, last_control_dt_s_);
 }
 
 template <typename MotorType>
 int8_t MotorControllerT<MotorType>::UpdateCommandFromState(
     const MotorState& state, float dt) {
 
+    if (!ValidControlFeedback(state)) {
+        motor_.ClearPendingCommand(); return DEVICE_ERR_NO_DEV;
+    }
     switch (mode_) {
     case ControlMode::Torque:
         return motor_.SetTorque(FilterOutputTorque(target_torque_, dt));
@@ -284,7 +301,7 @@ int8_t MotorControllerT<MotorType>::UpdateCommandFromState(
     case ControlMode::EmulatedMit: {
         float pos_error = target_position_ - state.position_rad;
         float torque_cmd = target_mit_kp_ * pos_error
-                         - target_mit_kd_ * state.velocity_rad_s
+                         + target_mit_kd_ * (target_velocity_ - state.velocity_rad_s)
                          + target_mit_torque_ff_;
         return motor_.SetTorque(FilterOutputTorque(torque_cmd, dt));
     }
@@ -326,6 +343,9 @@ int8_t MotorControllerT<MotorType>::SetVelocity(float velocity) {
     if (!scalar::is_finite_scalar(velocity)) {
         return DEVICE_ERR;
     }
+    if constexpr (!MotorType::Traits::kSupportsVelocity) {
+        if (!velocity_pid_ready_) return DEVICE_ERR_UNSUPPORTED;
+    }
     target_velocity_ = velocity;
     target_position_ = motor_.GetState().position_rad;
     
@@ -354,6 +374,9 @@ int8_t MotorControllerT<MotorType>::SetPosition(float position,
     if (!scalar::is_finite_scalar(position) ||
         !scalar::is_finite_scalar(max_velocity) || max_velocity < 0.0f) {
         return DEVICE_ERR;
+    }
+    if constexpr (!MotorType::Traits::kSupportsPosition) {
+        if (!position_pid_ready_ || !velocity_pid_ready_) return DEVICE_ERR_UNSUPPORTED;
     }
     target_position_ = position;
     target_velocity_ = max_velocity;
@@ -384,6 +407,7 @@ int8_t MotorControllerT<MotorType>::SetPositionTorque(float position,
         !scalar::is_finite_scalar(torque_limit) || torque_limit < 0.0f) {
         return DEVICE_ERR;
     }
+    if (!position_pid_ready_) return DEVICE_ERR_UNSUPPORTED;
     target_position_ = position;
     target_velocity_ = 0.0f;
     position_torque_limit_ = ClampLimit(torque_limit);

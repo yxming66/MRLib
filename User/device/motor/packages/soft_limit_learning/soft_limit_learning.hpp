@@ -128,6 +128,8 @@ struct SoftLimitLearningConfig {
     float learned_limit_margin_rad =
         SOFT_LIMIT_LEARNING_LEARNED_LIMIT_MARGIN_RAD;
     float min_seek_travel_before_capture_rad = 0.0f;
+    // Optional monotonic clock for Observe(state); explicit-dt mode needs none.
+    mr::comp::ClockUsFn clock_us = nullptr;
 };
 
 enum class SoftLimitReturnTarget : uint8_t {
@@ -229,6 +231,8 @@ public:
     float GetSeekTravelRad() const;
 
 private:
+    bool have_sample_ = false;
+    uint32_t sample_sequence_ = 0, sample_tick_ = 0;
     bool StartSeek(float seek_velocity_rad_s, bool upper, SoftLimitLearningWorkflow workflow, float travel_rad);
     bool CommitRange(SoftLimitRange range);
     void FinishSeekAt(float position_rad);

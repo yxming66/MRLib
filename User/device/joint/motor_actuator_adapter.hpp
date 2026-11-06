@@ -59,7 +59,10 @@ class MotorActuatorAdapter final : public IActuator {
     state.position = motor_state.position_rad;
     state.velocity = motor_state.velocity_rad_s;
     state.torque = motor_state.torque_nm;
-    state.online = motor_state.online;
+    state.online = motor_state.online && motor_state.feedback_valid && motor_state.position_valid &&
+                   !motor_state.protocol_fault && !motor_state.temperature_limit_latched;
+    state.timestamp_ms = motor_state.last_feedback_tick;
+    state.sequence = motor_state.feedback_sequence;
     return state;
   }
 

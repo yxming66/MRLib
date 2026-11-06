@@ -117,6 +117,20 @@ endif()
 if(MR_TESTLIB_BUILD_HOST_TESTS)
     enable_testing()
 
+    add_executable(mr_execution_host_tests tests/device/execution_host_tests.cpp)
+    target_link_libraries(mr_execution_host_tests PRIVATE mr_device_joint mr_device_wheel)
+    add_executable(mr_controller_learning_host_tests tests/device/controller_learning_host_tests.cpp)
+    target_include_directories(mr_controller_learning_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests")
+    target_link_libraries(mr_controller_learning_host_tests PRIVATE
+        mr_device_motor_controller mr_device_soft_limit_learning)
+    foreach(_mr_test IN ITEMS mr_execution_host_tests mr_controller_learning_host_tests)
+        set_target_properties(${_mr_test} PROPERTIES
+            CXX_STANDARD 17 CXX_STANDARD_REQUIRED YES CXX_EXTENSIONS NO)
+        target_compile_options(${_mr_test} PRIVATE
+            -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+        add_test(NAME ${_mr_test} COMMAND ${_mr_test})
+    endforeach()
+
     # Compile the controller package against the host BSP stub to keep the
     # board clock injectable and avoid accidental timer dependencies on BSP.
     add_library(mr_motor_controller_compile_check OBJECT

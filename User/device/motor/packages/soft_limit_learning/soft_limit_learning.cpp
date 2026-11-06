@@ -1,6 +1,6 @@
 #include "device/motor/packages/soft_limit_learning/soft_limit_learning.hpp"
 
-#include "bsp/time.h"
+
 
 #include "component/math/range_limits.hpp"
 #include "component/math/scalar.hpp"
@@ -83,9 +83,9 @@ mr::component::math::RangeLimits<1> BuildRangeLimits(float lower_rad,
     return limits;
 }
 
-mr::comp::timer::Config BuildObserveTimerConfig(float seek_timeout_s) {
+mr::comp::timer::Config BuildObserveTimerConfig(float seek_timeout_s, mr::comp::ClockUsFn clock) {
     mr::comp::timer::Config timer_config{};
-    timer_config.clock_us = BSP_TIME_Get_us;
+    timer_config.clock_us = clock;
     if (seek_timeout_s > 0.0f) {
         timer_config.max_dt_us = mr::comp::timer::SecondsToUs(seek_timeout_s);
     }
@@ -132,7 +132,7 @@ void SoftLimitLearning::Configure(const SoftLimitLearningConfig& config) {
     config_.min_seek_travel_before_capture_rad =
         ClampFiniteNonNegative(config_.min_seek_travel_before_capture_rad,
                                0.0f);
-    observe_timer_.Configure(BuildObserveTimerConfig(config_.seek_timeout_s));
+    observe_timer_.Configure(BuildObserveTimerConfig(config_.seek_timeout_s, config_.clock_us));
     if (!NormalizeRangeCandidate(range_, config_.min_range_rad)) {
         range_ = {};
         if (!IsSeeking()) {
@@ -151,6 +151,7 @@ void SoftLimitLearning::Reset() {
     range_ = {};
     observed_state_ = {};
     has_observed_state_ = false;
+    have_sample_ = false;
     ResetSeekTracking();
     ClearWorkflow();
     post_learn_target_available_ = false;
@@ -175,15 +176,10 @@ void SoftLimitLearning::Observe(const MotorState& state) {
 
 void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
     observed_state_ = state;
-    has_observed_state_ = IsFiniteMotorState(state);
+    has_observed_state_ = state.online && state.feedback_valid && state.position_valid &&
+        !state.protocol_fault && !state.temperature_limit_latched && IsFiniteMotorState(state);
 
     if (!IsSeeking()) {
-        return;
-    }
-
-    if (!state.online || !IsFiniteMotorState(state)) {
-        stall_cycles_ = 0u;
-        seek_position_initialized_ = false;
         return;
     }
 
@@ -195,6 +191,17 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
         return;
     }
 
+    if (!has_observed_state_) {
+        stall_cycles_ = 0u;
+        seek_position_initialized_ = false;
+        return;
+    }
+
+    const bool duplicate = have_sample_ && sample_sequence_ == state.feedback_sequence &&
+        sample_tick_ == state.last_feedback_tick;
+    have_sample_ = true;
+    sample_sequence_ = state.feedback_sequence;
+    sample_tick_ = state.last_feedback_tick;
     if (startup_ignore_left_s_ > 0.0f) {
         startup_ignore_left_s_ -= dt;
         if (startup_ignore_left_s_ < 0.0f) {
@@ -205,6 +212,9 @@ void SoftLimitLearning::Observe(const MotorState& state, float dt_s) {
         stall_cycles_ = 0u;
         return;
     }
+
+    // A cached sample (or an invalid time step) is never new stall evidence.
+    if (duplicate || dt <= 0.0f) return;
 
     if (!seek_position_initialized_) {
         last_seek_position_rad_ = state.position_rad;

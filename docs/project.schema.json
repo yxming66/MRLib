@@ -4,13 +4,22 @@
   "title": "MR_TestLib project configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "project"],
+  "required": [
+    "version",
+    "project"
+  ],
   "properties": {
-    "version": { "const": 1 },
+    "version": {
+      "const": 1
+    },
     "project": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "library", "targets"],
+      "required": [
+        "name",
+        "library",
+        "targets"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -43,7 +52,13 @@
               "mr_module_arm",
               "mr_module_audio",
               "mr_module_cloudmusic",
-              "mr_robotics_arm"
+              "mr_robotics_arm",
+              "mr_component_timer",
+              "mr_device_motor",
+              "mr_device_motor_controller",
+              "mr_device_soft_limit_learning",
+              "mr_device_wheel",
+              "mr_device_joint"
             ]
           }
         }

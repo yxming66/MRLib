@@ -131,6 +131,113 @@
         "mr_component_trajectory",
         "mr_robotics_core"
       ]
+    },
+    {
+      "name": "mr_component_timer",
+      "alias": "mr::component_timer",
+      "type": "STATIC",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "component/timer.hpp",
+      "dependencies": [],
+      "sources": [
+        "User/component/timer.cpp"
+      ]
+    },
+    {
+      "name": "mr_device_motor",
+      "alias": "mr::device_motor",
+      "type": "STATIC",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "device/motor/motor.hpp",
+      "dependencies": [
+        "mr_component_math"
+      ],
+      "sources": [
+        "User/device/motor/protocol/rm_protocol.cpp",
+        "User/device/motor/protocol/dm_protocol.cpp",
+        "User/device/motor/protocol/lz_protocol.cpp"
+      ]
+    },
+    {
+      "name": "mr_device_motor_controller",
+      "alias": "mr::device_motor_controller",
+      "type": "STATIC",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "device/motor/packages/controller/motor_controller.hpp",
+      "dependencies": [
+        "mr_device_motor",
+        "mr_component_controller",
+        "mr_component_timer"
+      ],
+      "sources": [
+        "User/device/motor/packages/controller/motor_controller.cpp"
+      ]
+    },
+    {
+      "name": "mr_device_soft_limit_learning",
+      "alias": "mr::device_soft_limit_learning",
+      "type": "STATIC",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "device/motor/packages/soft_limit_learning/soft_limit_learning.hpp",
+      "dependencies": [
+        "mr_component_math",
+        "mr_component_timer"
+      ],
+      "sources": [
+        "User/device/motor/packages/soft_limit_learning/soft_limit_learning.cpp"
+      ]
+    },
+    {
+      "name": "mr_device_wheel",
+      "alias": "mr::device_wheel",
+      "type": "INTERFACE",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "device/wheel/wheel.hpp",
+      "dependencies": [
+        "mr_device_wheel_interface",
+        "mr_component_math"
+      ]
+    },
+    {
+      "name": "mr_device_joint",
+      "alias": "mr::device_joint",
+      "type": "INTERFACE",
+      "include_dirs": [
+        "User"
+      ],
+      "compile_features": [
+        "cxx_std_17"
+      ],
+      "header": "device/joint/joint_group.hpp",
+      "dependencies": [
+        "mr_device_joint_interface",
+        "mr_component_math"
+      ]
     }
   ]
 }

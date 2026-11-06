@@ -13,6 +13,8 @@ struct ActuatorState {
   float velocity = 0.0f;
   float torque = 0.0f;
   bool online = false;
+  uint32_t timestamp_ms = 0;
+  uint32_t sequence = 0;
 };
 
 class IActuator {
@@ -49,6 +51,8 @@ class IJoint {
   virtual JointType GetType() const = 0;
   virtual float GetCurrentAngle() const = 0;
   virtual float GetCurrentVelocity() const = 0;
+  virtual float GetCurrentTorque() const = 0;
+  virtual uint32_t FeedbackEpoch() const = 0;
   virtual float GetTargetAngle() const = 0;
   virtual bool IsOnline() const = 0;
   virtual const JointControlParams& GetParams() const = 0;
