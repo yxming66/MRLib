@@ -26,3 +26,7 @@ jobs:
         run: ctest --test-dir build/cmake-host --output-on-failure
       - name: Run new-project CLI tests
         run: python tools/test_mrctl.py
+      - name: Install robot config dependencies
+        run: python -m pip install -r tools/requirements-config.txt
+      - name: Run robot config and assembly tests
+        run: python -m unittest tools.test_robot_config tools.test_robot_generation -v

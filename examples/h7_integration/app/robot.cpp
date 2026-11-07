@@ -12,11 +12,13 @@
 #include "module/arm/arm.hpp"
 #include "module/chassis/chassis.hpp"
 #include "motor_config.hpp"
+#include "robot_config.hpp"
 
 namespace {
 using namespace mr::motor;
 using mr::module::chassis::ChassisStatus;
 using Arm = mr::module::arm::Arm<3>;
+constexpr float kDtSeconds = mr::generated::ChassisAssembly::kDtSeconds;
 
 // Development request only: no remote message can enable this example.
 // The default build rejects motor TX at the port as well as keeping Enable off.
@@ -25,7 +27,7 @@ volatile uint32_t cycles = 0, faults = 0, tx_rejected = 0, link_tx_failed = 0;
 volatile int8_t last_error = 0;
 class MotorPort final : public CanPort {
  public:
-  mr::board::BspCanPort actual{BSP_CAN_1, BSP_TIME_Get_ms};
+  mr::board::BspCanPort actual{MR_ROBOT_CAN_BINDING, BSP_TIME_Get_ms};
   uint32_t NowMs() const override { return actual.NowMs(); }
   int8_t RegisterLatest(uint32_t id) override { return actual.RegisterLatest(id); }
   int8_t RegisterQueue(uint32_t id, uint8_t n) override { return actual.RegisterQueue(id, n); }
@@ -33,42 +35,29 @@ class MotorPort final : public CanPort {
   int8_t ReadLatest(uint32_t id, CanFrame& f) override { return actual.ReadLatest(id, f); }
   int8_t ReadNext(uint32_t id, CanFrame& f) override { return actual.ReadNext(id, f); }
   int8_t Send(const CanFrame& f) override {
-#if MR_H7_ALLOW_MOTOR_TX
-    return actual.Send(f);
-#else
+    if constexpr (mr::generated::ChassisAssembly::kAllowMotorTx) return actual.Send(f);
     (void)f;
     ++tx_rejected;
     return DEVICE_ERR;
-#endif
   }
 };
 
 struct Robot {
   MotorPort port;
-  RmCommandBus rm{port};
-  RmM3508Motor m0{app::WheelConfig(port, rm, 0x201)}, m1{app::WheelConfig(port, rm, 0x202)},
-      m2{app::WheelConfig(port, rm, 0x203)}, m3{app::WheelConfig(port, rm, 0x204)};
-  mr::wheel::MotorWheel<RmM3508Motor> w0{m0, .1f}, w1{m1, .1f}, w2{m2, .1f}, w3{m3, .1f};
+  mr::generated::ChassisAssembly drive{port};
+  RmCommandBus& rm = drive.commands;
   DmJ4310Motor d0{app::JointConfig(port, 0)}, d1{app::JointConfig(port, 1)},
       d2{app::JointConfig(port, 2)};
   mr::DmJ4310Actuator a0{&d0}, a1{&d1}, a2{&d2};
   mr::JointT j0{0, &a0, {-1, 1, 0, 0}, 0, 1000}, j1{1, &a1, {-1, 1, 0, 0}, 0, 1000},
       j2{2, &a2, {-1, 1, 0, 0}, 0, 1000};
-  mr::module::chassis::Chassis chassis;
+  mr::module::chassis::Chassis& chassis = drive.chassis;
   Arm arm;
   board::ChannelAndLink telemetry;
   bool running = false, previous_request = false, fault = false;
 
   bool Init() {
-    mr::module::chassis::ChassisConfig c;
-    c.kinematics.model = mr::robotics::chassis::ChassisModel::kMecanum;
-    c.kinematics.geometry = {.4f, .4f};
-    c.max_body_velocity = {2, 2, 2};
-    c.max_wheel_speed_mps = 3;
-    c.wheel_velocity_pid.gains = {1, 1, 0, 0};
-    c.wheel_velocity_pid.output_limit = mr::comp::cntlr::SymmetricLimit::Abs(2);
-    c.wheel_velocity_pid.control_freq_hz = 1000;
-    if (chassis.Register(c, {&w0, &w1, &w2, &w3}) != ChassisStatus::kOk) return false;
+    if (drive.Register() != ChassisStatus::kOk) return false;
     // Representative chain only. No zzrobot calibration or mass model is implied.
     mr::robotics::arm::JointModel joints[3];
     for (int i = 0; i < 3; ++i) {
@@ -81,6 +70,7 @@ struct Robot {
     }
     using mr::component::math::matrix::identity;
     Arm::Config cfg;
+    cfg.controller.default_dt_s = kDtSeconds;
     cfg.model = {joints, identity<4>(), identity<4>(), mr::component::math::matrix::zeros<3, 1>()};
     cfg.output.actuators = {&j0, &j1, &j2};
     for (auto& gain : cfg.output.gains) gain = {5, .2f, 0};
@@ -99,7 +89,8 @@ struct Robot {
   bool Start() {
     // Reuse the same fresh-feedback clock as BSP reception. Do not fabricate it.
     mr::wheel::WheelFeedback feedback;
-    for (auto* wheel : std::array<mr::wheel::WheelDevice*, 4>{&w0, &w1, &w2, &w3})
+    for (auto* wheel : std::array<mr::wheel::WheelDevice*, 4>{
+             &drive.wheel_0, &drive.wheel_1, &drive.wheel_2, &drive.wheel_3})
       if (wheel->UpdateFeedback(feedback) != DEVICE_OK || !feedback.online) return false;
     if (arm.UpdateFeedback() != DEVICE_OK || arm.Enable() != DEVICE_OK) return false;
     return chassis.Enable() == ChassisStatus::kOk;
@@ -119,7 +110,7 @@ struct Robot {
     }
     previous_request = requested;
     if (running && !fault) {
-      const auto result = example::RunChassisCycle(chassis, rm, now, {}, .001f);
+      const auto result = example::RunChassisCycle(chassis, rm, now, {}, kDtSeconds);
       if (!result.ok()) {
         last_error = DEVICE_ERR;
         fault = true;
@@ -128,7 +119,7 @@ struct Robot {
         return;
       }
       int8_t status = arm.UpdateFeedback();
-      if (status == DEVICE_OK) status = arm.Step(.001f);  // Hold captured at Enable.
+      if (status == DEVICE_OK) status = arm.Step(kDtSeconds);  // Hold captured at Enable.
       if (status == DEVICE_OK) status = arm.CommitOutput();
       if (status != DEVICE_OK) {
         last_error = status;
@@ -148,6 +139,9 @@ board::DmaPolicy dma_policy{regions, 1};
 }  // namespace
 
 extern "C" void RobotTask(void*) {
+  static_assert(mr::generated::ChassisAssembly::kPeriodUs % 1000u == 0u,
+                "Example scheduler requires whole milliseconds at 1000 Hz");
+  constexpr uint32_t kPeriodTicks = mr::generated::ChassisAssembly::kPeriodUs / 1000u;
   BSP_DMA_Configure(board::SynchronizeDma, &dma_policy);
   if (osKernelGetTickFreq() != 1000u || BSP_FDCAN_Init() != BSP_OK || !robot.Init()) {
     last_error = DEVICE_ERR;
@@ -165,7 +159,8 @@ extern "C" void RobotTask(void*) {
       if (!robot.telemetry.link.Publish(sample)) ++link_tx_failed;
     }
     // This Cube config uses 1000 Hz; delay-until keeps the control period stable.
-    if (osDelayUntil(++next) != osOK) {
+    next += kPeriodTicks;
+    if (osDelayUntil(next) != osOK) {
       ++faults;
       robot.Stop();
       next = osKernelGetTickCount();

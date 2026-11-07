@@ -26,7 +26,7 @@
 
 期望的新建项目流程是：准备 STM32 板级工程，在项目配置中选择所需能力，运行工具检查依赖并生成装配，再编译、烧录和标定。工具应指出缺少或冲突的依赖；开发者不应靠反复勾选文件来修复 include 缺失，也不应担心重新生成覆盖手写代码。VS Code 插件可以在命令行和配置格式稳定后提供图形入口，核心构建流程不依赖插件。
 
-当前 CLI 仍处于基础阶段：可以选择已登记的 CMake target、生成主机项目脚手架并检查公开头文件依赖；它还不能完整生成 STM32 外设注册、设备装配、模块配置或任务入口。上述目标是后续架构与工具优化的验收方向，不代表当前功能已经具备。已提供[机器人参数 YAML 范本](examples/h7_integration/config.yaml)和[配置 v2 规范与校验](docs/ROBOT_CONFIG.md)，自动装配生成仍未实现。详见[架构说明](docs/ARCHITECTURE.md)和[旧版主机项目配置说明](docs/PROJECT_CONFIG.md)。
+当前已支持主机项目脚手架，以及 [config.yaml v2](docs/ROBOT_CONFIG.md) 的单 CAN 总线 RM 四轮底盘装配生成：自动连接设备、轮子、模块参数和库依赖，修改 YAML 后重新构建即更新。H723 示例已接入并完成真实固件链接。机械臂、通信和任务创建仍手写，自定义外设注册与通用板级模板尚未实现。接入方法见 [板级集成](docs/BOARD_INTEGRATION.md)，主机脚手架见 [旧版项目配置](docs/PROJECT_CONFIG.md)。
 
 ## 开始使用
 
@@ -64,7 +64,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
 4. 核对任务入口、引脚、总线、设备 ID、单位、方向、零点、限位及线程/中断使用约束。
 5. 完成编译和对应实机验证后，记录板型、工具链、提交号及结果。
 
-原工程构建配置并未包含在本库中。当前处于接口重构阶段，旧整机任务已移除，旧专用底盘控制器和机械臂模块仍有失效依赖；不能用主机测试通过推断整个 `User` 已能生成固件。审查方案与已完成批次见 [User 重构方案](docs/USER_REFACTOR_PLAN.md) 和 [重构进度](docs/USER_REFACTOR_PROGRESS.md)。
+旧整机任务已移除；当前 H723 集成示例提供独立构建入口，已完成选定装配的完整固件链接及全部 User 生产实现严格编译。其他功能组合和板上运行仍需分别验证。审查方案与已完成批次见 [User 重构方案](docs/USER_REFACTOR_PLAN.md) 和 [重构进度](docs/USER_REFACTOR_PROGRESS.md)。
 
 ### 主机构建与 CMake target
 
@@ -76,7 +76,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前已有 18 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
+当前已有 29 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 

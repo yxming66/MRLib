@@ -95,4 +95,6 @@ py -3 tools/check_user_io_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrob
 
 完整链接已经验证；烧录、Cache 开启与真实控制验收尚未完成。这个示例只覆盖选定的实际装配，不表示所有可选功能组合都已链接验证。详细构建步骤、板级前提与待验收项目见示例 README。
 
+H7 底盘现已接入 config.yaml v2 生成：RM 四轮设备、轮径/几何/PID/周期和库 target 自动装配，修改 YAML 后普通 CMake build 即可更新。`cmake/MrRobot.cmake` 为已有固件 target 接入生成配置，`cmake/MrStm32H7.cmake` 可选取当前 H723 BSP 源依赖。机械臂、通信、任务创建与 Cube/HAL/启动/链接继续由项目维护；详见 [板级接入](BOARD_INTEGRATION.md)。
+
 旧 GUI 使用的 `User/bsp/bsp_config.yaml`、`User/component/component_config.yaml`、`User/device/device_config.yaml` 已删除；它们与当前 BSP 不匹配且没有仓库内消费者。当前 target 与依赖清单以 `cmake/targets.json` 为准，项目 YAML 以 `docs/project.schema.json` 为准；来源 manifest 仍保留历史文件记录。

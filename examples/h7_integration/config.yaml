@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=../../docs/robot.schema.json
-# 机器人配置 v2 示例：尚未用于生成 robot.cpp，当前由独立校验工具检查。
-# 以下均为演示值；不是 zzrobot 的机械标定。修改后不会自动改变现有固件。
+# 机器人配置 v2：当前生成 RM 四轮底盘装配、参数及依赖，修改后构建自动更新。
+# arm/通信/任务创建仍在 app/board 手写。以下均为演示值，不是 zzrobot 的机械标定。
 version: 2
 project:
   name: mr_h7_integration

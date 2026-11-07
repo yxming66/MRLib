@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 project(mr_h7_integration LANGUAGES C CXX ASM)
-option(MR_H7_ALLOW_MOTOR_TX "Allow motor TX after manual request_run (hardware review required)" OFF)
+set(MR_ROBOT_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml" CACHE FILEPATH "Robot YAML input")
+set(MR_CONFIG_PYTHON "" CACHE FILEPATH "Python interpreter with config validation dependencies")
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -40,19 +41,18 @@ foreach(_name croutine event_groups list queue stream_buffer tasks timers)
 endforeach()
 list(APPEND _cube_sources "${_rtos}/CMSIS_RTOS_V2/cmsis_os2.c"
     "${_rtos}/portable/MemMang/heap_4.c" "${_rtos}/portable/GCC/ARM_CM4F/port.c")
-add_library(cube_platform OBJECT ${_cube_sources})
+add_library(cube_platform INTERFACE)
+get_directory_property(_mr_cube_includes INCLUDE_DIRECTORIES)
+target_include_directories(cube_platform INTERFACE ${_mr_cube_includes})
+target_compile_definitions(cube_platform INTERFACE STM32H723xx USE_HAL_DRIVER USE_PWR_LDO_SUPPLY)
+add_library(cube_sources OBJECT ${_cube_sources})
+target_link_libraries(cube_sources PRIVATE cube_platform)
 
 set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${MR_LIBRARY_ROOT}" mr_library)
-add_library(user_board OBJECT
-    "${MR_LIBRARY_ROOT}/User/bsp/dma.c" "${MR_LIBRARY_ROOT}/User/bsp/mm.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/time.c" "${MR_LIBRARY_ROOT}/User/bsp/fdcan.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/uart.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/mrlink/channel.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/mrlink/channel_uart.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/mrlink/channel_fdcan.c"
-    "${MR_LIBRARY_ROOT}/User/bsp/mrlink/channel_usb.c")
-target_include_directories(user_board PRIVATE "${MR_LIBRARY_ROOT}/User")
+include("${MR_LIBRARY_ROOT}/cmake/MrStm32H7.cmake")
+mr_add_stm32h7_bsp(TARGET user_board PLATFORM cube_platform PROFILE h723_zzrobot
+    COMPONENTS can mrlink)
 target_compile_options(user_board PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 
 # Compile every production User implementation, including optional peripherals.
@@ -65,16 +65,16 @@ target_include_directories(user_all_compile_check PRIVATE "${MR_LIBRARY_ROOT}/Us
 target_compile_options(user_all_compile_check PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 
-add_executable(mr_h7_integration board/startup.c app/robot.cpp)
-target_compile_definitions(mr_h7_integration PRIVATE
-    MR_H7_ALLOW_MOTOR_TX=$<BOOL:${MR_H7_ALLOW_MOTOR_TX}>)
+add_executable(mr_h7_integration board/main.c app/robot.cpp)
 set_target_properties(mr_h7_integration PROPERTIES SUFFIX ".elf")
 target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
-target_link_libraries(mr_h7_integration PRIVATE cube_platform user_board
-    mr::device_motor mr::device_joint mr::device_wheel mr::module_chassis
+target_link_libraries(mr_h7_integration PRIVATE cube_platform cube_sources
+    mr::device_joint
     mr::module_arm mr::component_mrlink mr::component_timer m)
+mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
+    MODULE chassis BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
 target_link_options(mr_h7_integration PRIVATE
     "-T${CMAKE_CURRENT_SOURCE_DIR}/board/stm32h723.ld"
     --specs=nano.specs --specs=nosys.specs

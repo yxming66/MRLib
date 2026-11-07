@@ -556,3 +556,14 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 - 验证：示例 Schema/语义校验通过；11 项配置回归通过（包含另一份仅底盘项目、无效参数/引用/冲突）；电机主机回归通过；两种 motor TX 开关的真实 H7 编译与链接均通过。
 
 v2 当前仅提供格式与校验，不生成 C++/CMake，也不驱动现有 H7 参数。mrctl v1 的 project.yaml 主机 target 流程保持不变。后续生成器应按这份契约检查注册类型/board 能力与依赖，只更新 generated，不能覆盖 app/board。按用户要求，本批未进行板上验证。
+
+## 第 40 批：板级接入边界与 YAML 底盘生成闭环（2026-11-07）
+
+- 新增 `mrctl generate config.yaml --module chassis`，显式生成单总线 RM 四轮底盘：命令总线、电机、轮子、统一模块、几何/限速/PID/反馈超时与任务周期派生参数。依赖选择 motor/wheel/module_chassis target，再由已有 CMake 图传递；不要求用户重复填写 targets。
+- 输出仅在专属 generated 目录，包含 C++ 头、CMake 清单和 SHA256 归属清单；完整校验/冲突检查先于写入，拒绝覆盖无归属或手改文件，不更新 app/board，内容未变保持时间戳。单文件原子替换，未实现并发写入或整组跨文件事务，文档给出中断恢复边界。
+- 新增 `MrRobot.cmake` 注册 board profile/CAN 能力并向已有固件 target 接入生成配置；YAML 改变触发重新配置。新增可选 `MrStm32H7.cmake`，只为当前 H723 BSP 选择 can/uart/mrlink 源依赖，不重建 Cube 外设或启动文件，不把固定板型伪装为通用适配。
+- H7 app 改用生成底盘装配；共用循环周期、底盘 PID 频率和机械臂 dt 保持一致；发送许可改由 YAML 提供，默认 false。机械臂/DM、MRLink 和任务创建仍手写，尚未生成；整份 YAML 校验不代表其所有字段均已接入固件。
+- 将示例 `board/startup.c` 改名为 `board/main.c`，明确应用入口与 Cube 提供的真正复位启动汇编的区别。补齐板级接入文档、配置规范和使用说明；CI 增加 v2 校验/生成回归步骤（云端运行待推送后执行）。
+- 验证：20 项配置/生成测试覆盖真实协议底盘编译运行、选定依赖、改 YAML 自动重建、板级能力不符、数值边界和手改文件保护；29 项 CTest、6 项 v1 CLI 回归通过。两份 H7 YAML 配置完成真实 ELF/BIN/map 链接且无未定义符号；另仅改测试 YAML 的周期至 3 ms、轮径至 0.12 m，普通 build 自动重新生成并编译 app，固件 BIN 摘要改变。默认 Flash 99,452 B、RAM 127,072 B（含预留）。
+
+当前完成首条 YAML → RM 底盘静态装配/依赖 → 已有 Cube 固件编译链路。仍待机械臂/DM/LZ、通信、任务模板、自定义外设注册和更多 board 的生成能力；这些不在本批宣称完成。未烧录或进行板上验证，外部 zzrobot/RC_02 未修改。

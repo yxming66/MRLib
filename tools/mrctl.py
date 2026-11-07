@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free project generator and host configure/build front end."""
+"""Standard-library v1 host CLI and optional-dependency v2 assembly generator."""
 
 from __future__ import annotations
 
@@ -412,11 +412,30 @@ def main() -> int:
     init.add_argument("--name", required=True)
     init.add_argument("--library", required=True, help="MR_TestLib path relative to the new project")
     init.add_argument("--targets", required=True, help="comma-separated CMake target names")
+    generate_command = commands.add_parser("generate", help="generate selected v2 chassis assembly")
+    generate_command.add_argument("config", type=Path)
+    generate_command.add_argument("--module", required=True, help="explicitly selected chassis module")
+    generate_command.add_argument("--output-dir", type=Path, default=None)
     for name in ("configure", "build"):
         command = commands.add_parser(name)
         command.add_argument("directory", type=Path)
         command.add_argument("--build-dir", type=Path, default=None)
     args = parser.parse_args()
+    if args.command == "generate":
+        # Keep optional YAML/Schema packages out of the existing v1 CLI path.
+        sys.path.insert(0, str(ROOT))
+        try:
+            from tools.robot_config import generate
+        except ImportError as error:
+            parser.error(f"v2 generation requires tools/requirements-config.txt: {error}")
+        try:
+            output = generate(args.config, args.output_dir or args.config.parent / "generated",
+                              args.module)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        print(f"generated chassis module {args.module}: {output}")
+        print("scope: selected RM motors/wheels/chassis only; other modules and tasks remain app-owned")
+        return 0
     if args.command == "init":
         targets = [item.strip() for item in args.targets.split(",") if item.strip()]
         return init_project(args.directory, args.name, args.library, targets)
