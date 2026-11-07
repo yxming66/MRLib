@@ -11,6 +11,7 @@
 #include "device/wheel/wheel.hpp"
 #include "module/arm/arm.hpp"
 #include "module/chassis/chassis.hpp"
+#include "motor_config.hpp"
 
 namespace {
 using namespace mr::motor;
@@ -45,27 +46,11 @@ class MotorPort final : public CanPort {
 struct Robot {
   MotorPort port;
   RmCommandBus rm{port};
-  static MotorInstanceConfig<MotorKind::RM> WheelConfig(Robot& r, uint16_t id) {
-    MotorInstanceConfig<MotorKind::RM> c;
-    c.port = &r.port;
-    c.commands = &r.rm;
-    c.id = id;
-    return c;
-  }
-  static MotorInstanceConfig<MotorKind::DM> JointConfig(Robot& r, uint16_t id) {
-    MotorInstanceConfig<MotorKind::DM> c;
-    c.port = &r.port;
-    c.can_id = id;
-    c.master_id = 0x310 + id;
-    c.mit_position_range_rad = 12.5f;
-    c.mit_velocity_range_rad_s = 30;
-    c.mit_torque_range_nm = 10;
-    return c;
-  }
-  RmM3508Motor m0{WheelConfig(*this, 0x201)}, m1{WheelConfig(*this, 0x202)},
-      m2{WheelConfig(*this, 0x203)}, m3{WheelConfig(*this, 0x204)};
+  RmM3508Motor m0{app::WheelConfig(port, rm, 0x201)}, m1{app::WheelConfig(port, rm, 0x202)},
+      m2{app::WheelConfig(port, rm, 0x203)}, m3{app::WheelConfig(port, rm, 0x204)};
   mr::wheel::MotorWheel<RmM3508Motor> w0{m0, .1f}, w1{m1, .1f}, w2{m2, .1f}, w3{m3, .1f};
-  DmJ4310Motor d0{JointConfig(*this, 1)}, d1{JointConfig(*this, 2)}, d2{JointConfig(*this, 3)};
+  DmJ4310Motor d0{app::JointConfig(port, 0)}, d1{app::JointConfig(port, 1)},
+      d2{app::JointConfig(port, 2)};
   mr::DmJ4310Actuator a0{&d0}, a1{&d1}, a2{&d2};
   mr::JointT j0{0, &a0, {-1, 1, 0, 0}, 0, 1000}, j1{1, &a1, {-1, 1, 0, 0}, 0, 1000},
       j2{2, &a2, {-1, 1, 0, 0}, 0, 1000};

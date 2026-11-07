@@ -8,13 +8,15 @@
 
 ```text
 h7_integration/
+├── config.yaml              # v2 参数范本（当前只校验，尚未生成代码）
 ├── CMakeLists.txt            # 选择库 target，显式装配 Cube/BSP 实现
 ├── arm-none-eabi.cmake       # Cortex-M7 / hard float / C11 / C++17
 ├── board/
 │   ├── startup.c            # 板级时钟、外设初始化、HAL tick、RTOS 线程
 │   └── stm32h723.ld          # Flash/AXI SRAM、构造函数、heap/stack
 └── app/
-    └── robot.cpp            # 静态设备所有权、模块配置、控制循环、遥测
+    ├── robot.cpp            # 静态设备所有权、模块配置、控制循环、遥测
+    └── motor_config.hpp     # 可在主机上测试的手写电机装配参数
 ```
 
 需安装 CMake >= 3.22、GNU Arm Embedded 工具链，以及 Ninja 或 Make。`MR_CUBE_ROOT` 指向完整 STM32H723 Cube 工程，当前验证的是 `D:/STM32Projects_HAL/board-H7/zzrobot`。只读取其 `Core`、`Drivers`、`Middlewares` 和 `startup_stm32h723xx.s`，不编译旧 `main.c`、`freertos.c`、`User`，不修改外部文件。
@@ -64,3 +66,10 @@ py -3 tools/check_user_headers_h7.py --board-root D:/STM32Projects_HAL/board-H7/
 2026-11-07：GNU Arm 15.2.1 完成两种发送开关的编译和链接；默认构建检查 35 个实际实现，133 个公共头可独立编译；29 项主机 CTest 和 6 项 CLI 回归通过。ELF 保留 RobotTask、底盘控制、ArmController、逆运动学、真实 HAL/RTOS 和 BSP 分配符号，未发现未定义符号。
 
 尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。自动硬件资源绑定和 YAML 生成继续后置。
+
+
+## 统一参数格式
+
+新增 [config.yaml](config.yaml) 作为其他机器人项目的 v2 配置范本，包含 board 绑定、电机/轮子/关节、统一模块、MRLink 和任务参数。详细单位、引用关系、校验及扩展规则见 [配置规范](../../docs/ROBOT_CONFIG.md)。它目前不会驱动此 CMake 工程或覆盖手写代码；改 YAML 不会自动改变固件。
+
+整理参数时修正了本示例的 DM/RM 地址重叠：三个 DM 控制 ID 改为 `0x11/0x12/0x13`，反馈为 `0x321/0x322/0x323`，避免 DM 保留地址 `can_id+0x200` 占用 RM 反馈 `0x201..0x204`。新增主机注册回归，使用实际手写装配参数验证四个 RM 与三个 DM 可以同时注册；单纯完成固件链接无法发现这种运行期配置冲突。

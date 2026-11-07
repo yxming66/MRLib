@@ -8,6 +8,7 @@
 #include "device/wheel/wheel.hpp"
 #include "rm_chassis_cycle.hpp"
 #include "support/fake_can_port.hpp"
+#include "../../examples/h7_integration/app/motor_config.hpp"
 
 using namespace mr::motor;
 namespace {
@@ -259,7 +260,24 @@ void TestChassisExecution() {
   for (auto byte : port.sent.back().data) assert(byte == 0);
 }
 }  // namespace
+static void TestH7MotorAssembly() {
+  FakeCanPort port;
+  RmCommandBus bus(port);
+  RmM3508Motor m0(app::WheelConfig(port, bus, 0x201)), m1(app::WheelConfig(port, bus, 0x202)),
+      m2(app::WheelConfig(port, bus, 0x203)), m3(app::WheelConfig(port, bus, 0x204));
+  assert(m0.Register() == DEVICE_OK && m1.Register() == DEVICE_OK);
+  assert(m2.Register() == DEVICE_OK && m3.Register() == DEVICE_OK);
+  auto old = app::JointConfig(port, 0);
+  old.can_id = 1;  // reserves 0x201, already owned by m0.
+  DmJ4310Motor conflict(old);
+  assert(conflict.Register() != DEVICE_OK);
+  DmJ4310Motor d0(app::JointConfig(port, 0)), d1(app::JointConfig(port, 1)),
+      d2(app::JointConfig(port, 2));
+  assert(d0.Register() == DEVICE_OK && d1.Register() == DEVICE_OK && d2.Register() == DEVICE_OK);
+  assert(port.sent.empty());  // registration never enables a motor.
+}
 int main() {
+  TestH7MotorAssembly();
   TestDmUnits();
   TestLzUnits();
   TestOwnership();

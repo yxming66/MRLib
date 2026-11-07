@@ -1,5 +1,7 @@
 # 项目配置与快速构建
 
+本文描述现有 **v1 主机 target 配置**。完整机器人参数统一采用新的 [`config.yaml` v2 范本](../examples/h7_integration/config.yaml)，字段规范、校验命令和生成边界见 [机器人参数配置](ROBOT_CONFIG.md)。v2 已支持独立校验，尚未接入 `mrctl configure/build` 的固件生成；两种格式不可混用。
+
 `project.yaml` 是桌面构建工具读取的简明配置：项目名、库的位置和所选库 target。应用只列出直接需要的模块；公共 target、入口头文件和直接依赖登记在 [`cmake/targets.json`](../cmake/targets.json)，CMake 和 `mrctl.py` 共用这份清单，构建图负责传递头文件目录和模块依赖。JSON Schema 只描述配置格式，并由测试检查 target 枚举与清单同步。整个 CLI 只用 Python 标准库。
 
 需要 Python 3.10+、CMake 3.22+ 和支持 C++17 的编译器。系统安装 Ninja 后，工具自动选择它；否则由 CMake 选择默认生成器。工具不下载编译器或其他依赖。

@@ -1,0 +1,758 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/yxming66/MR_TestLib/blob/main/docs/robot.schema.json",
+  "title": "MR_TestLib robot configuration v2 (validation contract, generation pending)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "project",
+    "board",
+    "runtime",
+    "devices",
+    "modules",
+    "communications",
+    "tasks",
+    "extensions"
+  ],
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "library"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+-]*$"
+        },
+        "library": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "board": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "cube_root",
+        "bindings"
+      ],
+      "properties": {
+        "profile": {
+          "$ref": "#/$defs/identifier"
+        },
+        "cube_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "can",
+            "uart"
+          ],
+          "properties": {
+            "can": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/identifier"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/identifier"
+              },
+              "minProperties": 0
+            },
+            "uart": {
+              "type": "object",
+              "propertyNames": {
+                "$ref": "#/$defs/identifier"
+              },
+              "additionalProperties": {
+                "$ref": "#/$defs/identifier"
+              },
+              "minProperties": 0
+            }
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_motor_tx",
+        "auto_enable"
+      ],
+      "properties": {
+        "allow_motor_tx": {
+          "type": "boolean"
+        },
+        "auto_enable": {
+          "const": false
+        }
+      }
+    },
+    "devices": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "motors",
+        "wheels",
+        "joints"
+      ],
+      "properties": {
+        "motors": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/motor"
+          },
+          "minProperties": 0
+        },
+        "wheels": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "motor",
+              "radius_m"
+            ],
+            "properties": {
+              "motor": {
+                "$ref": "#/$defs/identifier"
+              },
+              "radius_m": {
+                "type": "number",
+                "exclusiveMinimum": 0
+              }
+            }
+          },
+          "minProperties": 0
+        },
+        "joints": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/identifier"
+          },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "motor",
+              "zero_offset_rad",
+              "limits"
+            ],
+            "properties": {
+              "motor": {
+                "$ref": "#/$defs/identifier"
+              },
+              "zero_offset_rad": {
+                "type": "number"
+              },
+              "limits": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "min_rad",
+                  "max_rad",
+                  "max_velocity_rad_s",
+                  "max_acceleration_rad_s2"
+                ],
+                "properties": {
+                  "min_rad": {
+                    "type": "number"
+                  },
+                  "max_rad": {
+                    "type": "number"
+                  },
+                  "max_velocity_rad_s": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "max_acceleration_rad_s2": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "minProperties": 0
+        }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/chassis"
+          },
+          {
+            "$ref": "#/$defs/arm"
+          }
+        ]
+      },
+      "minProperties": 1
+    },
+    "communications": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "protocol",
+          "transport",
+          "port",
+          "rx_slot_bytes",
+          "rx_slot_count",
+          "publish_period_ms",
+          "codec"
+        ],
+        "properties": {
+          "protocol": {
+            "const": "mrlink"
+          },
+          "transport": {
+            "const": "uart"
+          },
+          "port": {
+            "$ref": "#/$defs/identifier"
+          },
+          "rx_slot_bytes": {
+            "type": "integer",
+            "minimum": 32,
+            "maximum": 96,
+            "multipleOf": 32
+          },
+          "rx_slot_count": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 255
+          },
+          "publish_period_ms": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
+          "codec": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "minProperties": 0
+    },
+    "tasks": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "period_us",
+          "stack_bytes",
+          "priority",
+          "entry",
+          "owns_modules",
+          "services"
+        ],
+        "properties": {
+          "period_us": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000000
+          },
+          "stack_bytes": {
+            "type": "integer",
+            "minimum": 512,
+            "multipleOf": 8
+          },
+          "priority": {
+            "enum": [
+              "low",
+              "normal",
+              "high"
+            ]
+          },
+          "entry": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owns_modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/identifier"
+            },
+            "uniqueItems": true
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/identifier"
+            },
+            "uniqueItems": true
+          }
+        }
+      },
+      "minProperties": 1
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
+        "type": "object"
+      },
+      "minProperties": 0
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "transform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "translation_m",
+        "rpy_rad"
+      ],
+      "properties": {
+        "translation_m": {
+          "$ref": "#/$defs/vec3"
+        },
+        "rpy_rad": {
+          "$ref": "#/$defs/vec3"
+        }
+      }
+    },
+    "motor": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "model",
+            "bus",
+            "reverse",
+            "external_ratio",
+            "feedback_timeout_ms",
+            "feedback_id"
+          ],
+          "properties": {
+            "kind": {
+              "const": "rm"
+            },
+            "model": {
+              "enum": [
+                "M2006",
+                "M3508",
+                "M6020"
+              ]
+            },
+            "bus": {
+              "$ref": "#/$defs/identifier"
+            },
+            "reverse": {
+              "type": "boolean"
+            },
+            "external_ratio": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "feedback_timeout_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "feedback_id": {
+              "type": "integer",
+              "minimum": 513,
+              "maximum": 523
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "model",
+            "bus",
+            "reverse",
+            "external_ratio",
+            "feedback_timeout_ms",
+            "can_id",
+            "master_id",
+            "mit"
+          ],
+          "properties": {
+            "kind": {
+              "const": "dm"
+            },
+            "model": {
+              "enum": [
+                "J10010",
+                "J10010L",
+                "J10422P",
+                "J3507",
+                "J4310",
+                "J4310P",
+                "J4340",
+                "J4340P",
+                "J6006",
+                "J6248P",
+                "J8006",
+                "J8009",
+                "J8009P",
+                "H3510"
+              ]
+            },
+            "bus": {
+              "$ref": "#/$defs/identifier"
+            },
+            "reverse": {
+              "type": "boolean"
+            },
+            "external_ratio": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "feedback_timeout_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "can_id": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1279
+            },
+            "master_id": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2047
+            },
+            "mit": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "position_range_rad",
+                "velocity_range_rad_s",
+                "torque_range_nm"
+              ],
+              "properties": {
+                "position_range_rad": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "velocity_range_rad_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "torque_range_nm": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "model",
+            "bus",
+            "reverse",
+            "external_ratio",
+            "feedback_timeout_ms",
+            "motor_id",
+            "host_id",
+            "mode"
+          ],
+          "properties": {
+            "kind": {
+              "const": "lz"
+            },
+            "model": {
+              "enum": [
+                "RSO0",
+                "RSO1",
+                "RSO2",
+                "RSO3",
+                "RSO4",
+                "RSO5",
+                "RSO6"
+              ]
+            },
+            "bus": {
+              "$ref": "#/$defs/identifier"
+            },
+            "reverse": {
+              "type": "boolean"
+            },
+            "external_ratio": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "feedback_timeout_ms": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "motor_id": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "host_id": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "mode": {
+              "enum": [
+                "motion"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "chassis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "model",
+        "wheels",
+        "geometry",
+        "limits",
+        "feedback_timeout_ms",
+        "wheel_velocity_pid"
+      ],
+      "properties": {
+        "type": {
+          "const": "chassis"
+        },
+        "model": {
+          "enum": [
+            "mecanum",
+            "front_omni_rear_mecanum"
+          ]
+        },
+        "wheels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true
+        },
+        "geometry": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "half_wheelbase_m",
+            "half_trackwidth_m"
+          ],
+          "properties": {
+            "half_wheelbase_m": {
+              "type": "number",
+              "minimum": 0
+            },
+            "half_trackwidth_m": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "vx_mps",
+            "vy_mps",
+            "wz_rad_s",
+            "max_wheel_speed_mps"
+          ],
+          "properties": {
+            "vx_mps": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "vy_mps": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "wz_rad_s": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_wheel_speed_mps": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        "feedback_timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "wheel_velocity_pid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "k",
+            "p",
+            "i",
+            "d",
+            "output_limit_nm"
+          ],
+          "properties": {
+            "k": {
+              "type": "number"
+            },
+            "p": {
+              "type": "number"
+            },
+            "i": {
+              "type": "number"
+            },
+            "d": {
+              "type": "number"
+            },
+            "output_limit_nm": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      }
+    },
+    "arm_joint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "device",
+        "axis_in_joint_frame",
+        "parent_to_joint",
+        "gains"
+      ],
+      "properties": {
+        "device": {
+          "$ref": "#/$defs/identifier"
+        },
+        "axis_in_joint_frame": {
+          "$ref": "#/$defs/vec3"
+        },
+        "parent_to_joint": {
+          "$ref": "#/$defs/transform"
+        },
+        "gains": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kp_nm_per_rad",
+            "kd_nm_s_per_rad",
+            "effort_scale"
+          ],
+          "properties": {
+            "kp_nm_per_rad": {
+              "type": "number",
+              "minimum": 0
+            },
+            "kd_nm_s_per_rad": {
+              "type": "number",
+              "minimum": 0
+            },
+            "effort_scale": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "arm": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "model",
+        "base_to_world",
+        "tool_to_last_joint",
+        "gravity_world_m_s2",
+        "enable_gravity_compensation",
+        "joints"
+      ],
+      "properties": {
+        "type": {
+          "const": "arm"
+        },
+        "model": {
+          "const": "serial"
+        },
+        "base_to_world": {
+          "$ref": "#/$defs/transform"
+        },
+        "tool_to_last_joint": {
+          "$ref": "#/$defs/transform"
+        },
+        "gravity_world_m_s2": {
+          "$ref": "#/$defs/vec3"
+        },
+        "enable_gravity_compensation": {
+          "const": false,
+          "description": "Inertial parameters are not defined in this initial v2 contract."
+        },
+        "joints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/arm_joint"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}
