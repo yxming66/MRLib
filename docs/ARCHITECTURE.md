@@ -51,4 +51,4 @@
 
 ## 当前边界
 
-H723 示例有完整构建基线，但 BSP 尚未全部解耦旧板型：UART/PWM 已由 board 登记；FDCAN、SPI、GPIO 和 TIM2 仍有固定映射。详见 BSP_PORTABILITY_AUDIT.md。简化生成链路不会自动解决这些硬件移植问题。本库仍为测试版本，未进行本轮板上验证。
+H723 示例有完整构建基线，但 BSP 尚未全部解耦旧板型：UART/PWM/SPI/GPIO 已由 board 登记，BMI088 显式接收硬件配置；FDCAN 和 TIM2 仍有固定映射。GPIO 的 EXTI 适配仍面向 H7 M7，SPI 当前单所有者。详见 BSP_PORTABILITY_AUDIT.md。本库仍为测试版本，未进行本轮板上验证。

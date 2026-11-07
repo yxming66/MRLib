@@ -76,14 +76,14 @@ timer 已登记为 mr::component_timer；姿态估计与告警服务尚未登记
 
 
 MRLink 可移植协议使用导出目标 `mr_component_mrlink`，主机测试不使用 HAL/CMSIS stub。
-通道生命周期回归额外编译实际 UART/SPI/BMI088/DR16 源，用模拟 HAL 检查调用次序和所有权。
+通道生命周期回归额外编译实际 UART/SPI/GPIO/BMI088/DR16 源，用模拟 HAL 检查调用次序和所有权；包含 GPIO 单线屏蔽、SPI 端点注入以及 BMI088 初始化冲突/回滚。
 可选真实 H723/Cortex-M7 编译检查：
 
 ```powershell
 py -3 tools/check_user_io_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrobot
 ```
 
-该检查只读参考工程，以 `-Werror`、严格 C11/C++17、无异常/RTTI 编译 13 份实际源及装配例子。
+该检查只读参考工程，以 `-Werror`、严格 C11/C++17、无异常/RTTI 编译 14 份实际源及装配例子，包含显式传入 GPIO/SPI 的 BMI088 接口。
 不执行完整固件链接、烧录、Cache 实测或实时性验收。
 
 作为子目录引入库时，父工程应先声明 `project(... LANGUAGES C CXX)`，因为库含有 C 与 C++ 导出目标。

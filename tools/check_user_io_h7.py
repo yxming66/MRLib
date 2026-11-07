@@ -27,7 +27,7 @@ def main():
              "-DSTM32H723xx", "-DUSE_HAL_DRIVER", "-O1", "-Wall", "-Wextra",
              "-Wpedantic", "-pedantic-errors", "-Werror"] + ["-I" + str(p) for p in includes]
     sources = ["User/component/communication/mrlink/mrlink.c", "User/component/crc16.c",
-               "User/bsp/dma.c", "User/bsp/uart.c", "User/bsp/spi.c", "User/bsp/fdcan.c",
+               "User/bsp/dma.c", "User/bsp/uart.c", "User/bsp/spi.c", "User/bsp/gpio.c", "User/bsp/fdcan.c",
                "User/bsp/mrlink/channel.c", "User/bsp/mrlink/channel_uart.c",
                "User/bsp/mrlink/channel_usb.c", "User/bsp/mrlink/channel_fdcan.c",
                "User/device/bmi088.c", "User/device/dr16.c",

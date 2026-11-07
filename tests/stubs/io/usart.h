@@ -7,6 +7,7 @@ typedef enum { HAL_OK, HAL_ERROR, HAL_BUSY } HAL_StatusTypeDef;
 typedef struct {
   struct {
     unsigned Mode;
+    unsigned MemDataAlignment, PeriphDataAlignment;
   } Init;
 } DMA_HandleTypeDef;
 typedef struct {
@@ -26,6 +27,8 @@ extern UART_HandleTypeDef huart1, huart5, huart7, huart8, huart9, huart10;
 #define UART7 (&io_uart_instances[4])
 #define USART10 (&io_uart_instances[5])
 #define DMA_NORMAL 0u
+#define DMA_MDATAALIGN_BYTE 0u
+#define DMA_PDATAALIGN_BYTE 0u
 #define DMA_IT_HT 1u
 #define HAL_UART_STATE_READY 0u
 #define HAL_UART_ERROR_DMA 0x10u

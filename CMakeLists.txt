@@ -271,7 +271,7 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     add_test(NAME mr_mrlink_cpp_host_tests COMMAND mr_mrlink_cpp_host_tests)
 
     add_executable(mr_mrlink_channel_host_tests
-        tests/device/mrlink_channel_host_tests.c User/bsp/uart.c User/bsp/spi.c User/bsp/dma.c
+        tests/device/mrlink_channel_host_tests.c User/bsp/uart.c User/bsp/spi.c User/bsp/gpio.c User/bsp/dma.c
         User/device/bmi088.c User/device/dr16.c
         User/bsp/mrlink/channel.c
         User/bsp/mrlink/channel_uart.c

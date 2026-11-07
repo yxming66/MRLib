@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -15,14 +16,21 @@ static DMA_HandleTypeDef dma;
 UART_HandleTypeDef huart1 = {USART1, &dma, 0, 0, 0, 0}, huart5 = {UART5, &dma, 0, 0, 0, 0},
                    huart7 = {UART7, &dma, 0, 0, 0, 0}, huart8 = {UART8, &dma, 0, 0, 0, 0},
                    huart9 = {UART9, &dma, 0, 0, 0, 0}, huart10 = {USART10, &dma, 0, 0, 0, 0};
-SPI_HandleTypeDef hspi2 = {SPI2, &dma, 0};
+SPI_HandleTypeDef hspi2 = {.Instance = SPI2, .hdmarx = &dma, .hdmatx = &dma};
 static uint8_t *hal_tx, *hal_rx;
 static unsigned rx_starts, tx_starts, dma_completed, done_calls, error_calls, sync_calls;
-static bool abort_fail, reject_cache;
+static bool abort_fail, reject_cache, bad_chip_id;
+static unsigned spi_fail_after;
+static osThreadId_t current_thread = (void*)1;
 static HAL_StatusTypeDef spi_result = HAL_OK;
-static bool gpio_pins[BSP_GPIO_NUM];
+static GPIO_TypeDef ports[3];
+EXTI_Core_TypeDef io_exti;
+static const BMI088_Config_t imu_config = {BSP_SPI_1, BSP_GPIO_2, BSP_GPIO_0, BSP_GPIO_3, BSP_GPIO_1};
+static unsigned gpio_a_events, gpio_b_events;
+static void GpioA(void) { ++gpio_a_events; }
+static void GpioB(void) { ++gpio_b_events; }
 static uint32_t thread_flags;
-osThreadId_t osThreadGetId(void) { return (void*)1; }
+osThreadId_t osThreadGetId(void) { return current_thread; }
 uint32_t osThreadFlagsSet(osThreadId_t id, uint32_t flags) {
   (void)id;
   thread_flags |= flags;
@@ -40,24 +48,14 @@ uint32_t osThreadFlagsWait(uint32_t mask, uint32_t options, uint32_t timeout) {
   thread_flags &= ~result;
   return result;
 }
-int8_t BSP_GPIO_RegisterCallback(BSP_GPIO_t p, void (*fn)(void)) {
-  (void)p;
-  (void)fn;
-  return 0;
+void HAL_GPIO_WritePin(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState state) {
+  if (state == GPIO_PIN_SET) port->levels |= pin;
+  else port->levels &= (uint16_t)~pin;
 }
-int8_t BSP_GPIO_EnableIRQ(BSP_GPIO_t p) {
-  (void)p;
-  return 0;
+void HAL_GPIO_TogglePin(GPIO_TypeDef* port, uint16_t pin) { port->levels ^= pin; }
+GPIO_PinState HAL_GPIO_ReadPin(GPIO_TypeDef* port, uint16_t pin) {
+  return port->levels & pin ? GPIO_PIN_SET : GPIO_PIN_RESET;
 }
-int8_t BSP_GPIO_DisableIRQ(BSP_GPIO_t p) {
-  (void)p;
-  return 0;
-}
-int8_t BSP_GPIO_WritePin(BSP_GPIO_t p, bool value) {
-  gpio_pins[p] = value;
-  return 0;
-}
-bool BSP_GPIO_ReadPin(BSP_GPIO_t p) { return gpio_pins[p]; }
 uint64_t BSP_TIME_Get_us(void) { return 1000; }
 int8_t BSP_TIME_Delay(uint32_t ms) {
   (void)ms;
@@ -110,16 +108,14 @@ HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef* h, uint8_t* p, uint16_t n,
   (void)n;
   (void)timeout;
   spi_trace[spi_count++ % sizeof(spi_trace)] = 'T';
-  return spi_result;
+  return spi_fail_after && spi_count >= spi_fail_after ? HAL_ERROR : spi_result;
 }
 HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef* h, uint8_t* p, uint16_t n, uint32_t timeout) {
   (void)h;
   (void)timeout;
   memset(p, 0x5a, n);
-  if (n == 2) {
-    p[0] = 0x0f;
-    p[1] = 0x1e;
-  }
+  if (n == 2) { p[0] = 0; p[1] = bad_chip_id ? 0 : 0x1e; }
+  if (n == 1) p[0] = 0x0f;
   spi_trace[spi_count++ % sizeof(spi_trace)] = 'R';
   return spi_result;
 }
@@ -411,46 +407,222 @@ static void TestFdcan(void) {
   cfg.tx_id = 0x800;
   assert(MrLink_Channel_InitFdcan(&ch, &cfg) != 0);
 }
+static void TestGpio(void) {
+  assert(BSP_GPIO_WritePin(BSP_GPIO_0, true) != BSP_OK);
+  assert(BSP_GPIO_GetEndpoint((BSP_GPIO_t)-1) == NULL);
+  assert(BSP_GPIO_FindEndpoint(NULL) == BSP_GPIO_ERR);
+  BSP_GPIO_Endpoint_t bad[] = {
+    {"a", &ports[0], 1u, BSP_GPIO_OUTPUT}, {"b", &ports[0], 1u, BSP_GPIO_OUTPUT}};
+  io_exti.IMR1 = 0xffffu;
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  assert(BSP_GPIO_FindEndpoint("a") == BSP_GPIO_ERR && io_exti.IMR1 == 0xffffu);
+  bad[1].pin = 2u; bad[1].name = "a";
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  bad[1].name = "b"; bad[0].pin = 3u;
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  bad[0].pin = 0;
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  bad[0].pin = 1u; bad[0].port = NULL;
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  bad[0].port = &ports[0]; bad[0].mode = (BSP_GPIO_Mode_t)-1;
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK);
+  bad[0].mode = BSP_GPIO_EXTI; bad[1].mode = BSP_GPIO_EXTI;
+  bad[1].pin = 1u; bad[1].port = &ports[1];
+  assert(BSP_GPIO_Configure(bad, 2) != BSP_OK); // Same EXTI line, different ports.
+  assert(BSP_GPIO_Configure(NULL, 1) != BSP_OK);
+  assert(BSP_GPIO_Configure(bad, BSP_GPIO_NUM + 1) != BSP_OK);
+  const BSP_GPIO_Endpoint_t pins[] = {
+    {"gyro_cs", &ports[0], 8u, BSP_GPIO_OUTPUT},
+    {"gyro_int", &ports[1], 1u << 12, BSP_GPIO_EXTI},
+    {"accl_cs", &ports[0], 1u, BSP_GPIO_OUTPUT},
+    {"accl_int", &ports[1], 1u << 10, BSP_GPIO_EXTI},
+    {"key", &ports[2], 1u << 15, BSP_GPIO_EXTI},
+    {"valve", &ports[0], 1u << 10, BSP_GPIO_OUTPUT}, // Same bit as EXTI, different port.
+    {"sensor", &ports[1], 1u << 14, BSP_GPIO_INPUT}};
+  io_exti.PR1 = 0xffffu;
+  assert(BSP_GPIO_Configure(pins, 7) == BSP_OK);
+  const uint32_t lines = (1u << 10) | (1u << 12) | (1u << 15);
+  assert(io_exti.IMR1 == (0xffffu & ~lines) && io_exti.PR1 == (0xffffu & ~lines));
+  assert(BSP_GPIO_Configure(pins, 7) != BSP_OK);
+  assert(BSP_GPIO_FindEndpoint("accl_cs") == imu_config.accl_cs);
+  assert(BSP_GPIO_FindEndpoint("missing") == BSP_GPIO_ERR);
+  assert(BSP_GPIO_EnableIRQ(BSP_GPIO_3) != BSP_OK); // No callback yet.
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_3, GpioA) == BSP_OK);
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_1, GpioB) == BSP_OK);
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_3, GpioB) != BSP_OK);
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_2, GpioA) != BSP_OK);
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_4, NULL) != BSP_OK);
+  assert(BSP_GPIO_EnableIRQ(BSP_GPIO_3) == BSP_OK);
+  assert(BSP_GPIO_EnableIRQ(BSP_GPIO_1) == BSP_OK);
+  assert(BSP_GPIO_UnregisterCallback(BSP_GPIO_3, GpioA) != BSP_OK); // Active line.
+  HAL_GPIO_EXTI_Callback((1u << 10) | (1u << 12) | (1u << 15));
+  assert(gpio_a_events == 1 && gpio_b_events == 1);
+  assert(BSP_GPIO_DisableIRQ(BSP_GPIO_3) == BSP_OK);
+  assert((io_exti.IMR1 & (1u << 12)) != 0); // Shared NVIC sibling stays live.
+  HAL_GPIO_EXTI_Callback((1u << 10) | (1u << 12));
+  assert(gpio_a_events == 1 && gpio_b_events == 2);
+  assert(BSP_GPIO_UnregisterCallback(BSP_GPIO_3, GpioB) != BSP_OK);
+  assert(BSP_GPIO_UnregisterCallback(BSP_GPIO_3, GpioA) == BSP_OK);
+  assert(BSP_GPIO_DisableIRQ(BSP_GPIO_1) == BSP_OK);
+  assert(BSP_GPIO_UnregisterCallback(BSP_GPIO_1, GpioB) == BSP_OK);
+  assert(BSP_GPIO_WritePin(BSP_GPIO_5, true) == BSP_OK);
+  assert(BSP_GPIO_ReadPin(BSP_GPIO_5) && !(ports[1].levels & (1u << 10)));
+  assert(BSP_GPIO_TogglePin(BSP_GPIO_5) == BSP_OK && !BSP_GPIO_ReadPin(BSP_GPIO_5));
+  assert(BSP_GPIO_WritePin(BSP_GPIO_6, true) != BSP_OK);
+  assert(BSP_GPIO_WritePin((BSP_GPIO_t)-1, true) != BSP_OK);
+  assert(BSP_GPIO_TogglePin(BSP_GPIO_31) != BSP_OK);
+  assert(!BSP_GPIO_ReadPin(BSP_GPIO_ERR));
+  assert(BSP_GPIO_DisableIRQ(BSP_GPIO_5) != BSP_OK);
+  assert(BSP_GPIO_DisableIRQ((BSP_GPIO_t)-1) != BSP_OK);
+  io_primask = 1;
+  assert(BSP_GPIO_RegisterCallback(BSP_GPIO_4, GpioA) == BSP_OK && io_primask == 1);
+  assert(BSP_GPIO_UnregisterCallback(BSP_GPIO_4, GpioA) == BSP_OK && io_primask == 1);
+  io_primask = 0;
+}
+static void TestSpiRegistration(void) {
+  assert(BSP_SPI_GetHandle(BSP_SPI_1) == NULL);
+  uint8_t data = 0;
+  assert(BSP_SPI_Transmit(BSP_SPI_1, &data, 1, false) != BSP_OK);
+  SPI_HandleTypeDef another = {.Instance = (void*)3, .hdmarx = &dma, .hdmatx = &dma};
+  BSP_SPI_Endpoint_t bad[] = {{"bus", &hspi2}, {"bus", &another}};
+  assert(BSP_SPI_Configure(bad, 2) != BSP_OK);
+  assert(BSP_SPI_FindEndpoint("bus") == BSP_SPI_ERR);
+  bad[1].name = "other"; another.Instance = hspi2.Instance;
+  assert(BSP_SPI_Configure(bad, 2) != BSP_OK); // Alias handles.
+  another.Instance = (void*)3; hspi2.State = 1;
+  assert(BSP_SPI_Configure(bad, 2) != BSP_OK);
+  hspi2.State = HAL_SPI_STATE_READY;
+  hspi2.Init.DataSize = 1;
+  assert(BSP_SPI_Configure(bad, 2) != BSP_OK);
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CRCCalculation = 1;
+  assert(BSP_SPI_Configure(bad, 2) != BSP_OK);
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  bad[0].name = "";
+  assert(BSP_SPI_Configure(bad, 1) != BSP_OK);
+  bad[0].name = "bus"; bad[0].handle = NULL;
+  assert(BSP_SPI_Configure(bad, 1) != BSP_OK);
+  assert(BSP_SPI_Configure(NULL, 1) != BSP_OK);
+  assert(BSP_SPI_Configure(bad, BSP_SPI_NUM + 1) != BSP_OK);
+  // Persisted handles, deliberately unrelated to bus numbering.
+  static SPI_HandleTypeDef spare = {.Instance = (void*)4, .hdmarx = &dma, .hdmatx = &dma};
+  const BSP_SPI_Endpoint_t buses[] = {{"spare", &spare}, {"sensor_bus", &hspi2}};
+  assert(BSP_SPI_Configure(buses, 2) == BSP_OK);
+  assert(BSP_SPI_Configure(buses, 2) != BSP_OK);
+  assert(BSP_SPI_FindEndpoint("sensor_bus") == BSP_SPI_1);
+  assert(BSP_SPI_FindEndpoint(NULL) == BSP_SPI_ERR);
+  assert(BSP_SPI_GetHandle((BSP_SPI_t)-1) == NULL);
+}
 static void TestSpi(void) {
   uint8_t p[8];
   spi_count = 0;
-  assert(BSP_SPI_MemRead(BSP_SPI_BMI088, 1, p, 8) == BSP_OK);
+  assert(BSP_SPI_MemRead(BSP_SPI_1, 1, p, 8) == BSP_OK);
   assert(spi_count == 2 && spi_trace[0] == 'T' && spi_trace[1] == 'R');
   spi_result = HAL_ERROR;
   spi_count = 0;
-  assert(BSP_SPI_MemWrite(BSP_SPI_BMI088, 1, p, 8) != BSP_OK && spi_count == 1);
+  assert(BSP_SPI_MemWrite(BSP_SPI_1, 1, p, 8) != BSP_OK && spi_count == 1);
   spi_result = HAL_OK;
-  assert(BSP_SPI_RegisterCallback(BSP_SPI_BMI088, BSP_SPI_RX_CPLT_CB, SpiDone) == BSP_OK);
-  assert(BSP_SPI_RegisterCallback(BSP_SPI_BMI088, BSP_SPI_ERROR_CB, SpiError) == BSP_OK);
-  assert(BSP_SPI_Receive(BSP_SPI_BMI088, p, 8, true) == BSP_OK);
+  unsigned untouched = sync_calls;
+  dma.Init.Mode = 1;
+  assert(BSP_SPI_Transmit(BSP_SPI_1, p, 8, true) != BSP_OK);
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) != BSP_OK);
+  dma.Init.Mode = DMA_NORMAL;
+  dma.Init.MemDataAlignment = 1;
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 7, true) != BSP_OK);
+  dma.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+  assert(BSP_SPI_TransmitReceive(BSP_SPI_1, p, p + 1, 7, true) != BSP_OK);
+  assert(sync_calls == untouched);
+  assert(BSP_SPI_RegisterCallback(BSP_SPI_1, BSP_SPI_RX_CPLT_CB, SpiDone) == BSP_OK);
+  assert(BSP_SPI_RegisterCallback(BSP_SPI_1, BSP_SPI_ERROR_CB, SpiError) == BSP_OK);
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) == BSP_OK);
   unsigned before = done_calls;
+  untouched = sync_calls;
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) != BSP_OK && sync_calls == untouched);
+  assert(BSP_SPI_MemRead(BSP_SPI_1, 1, p, 8) != BSP_OK);
+  assert(BSP_SPI_UnregisterCallback(BSP_SPI_1, BSP_SPI_RX_CPLT_CB, SpiDone) != BSP_OK);
   HAL_SPI_RxCpltCallback(&hspi2);
   assert(done_calls == before + 1);
-  assert(BSP_SPI_Receive(BSP_SPI_BMI088, p, 8, true) == BSP_OK);
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) == BSP_OK);
   before = done_calls;
   unsigned errors = error_calls;
   reject_cache = true;
   HAL_SPI_RxCpltCallback(&hspi2);
   assert(done_calls == before && error_calls == errors + 1);
-  assert(BSP_SPI_Receive(BSP_SPI_BMI088, p, 8, true) != BSP_OK);
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) != BSP_OK);
   reject_cache = false;
   hspi2.State = 1;
   unsigned sync_before = sync_calls;
-  assert(BSP_SPI_Receive(BSP_SPI_BMI088, p, 8, true) != BSP_OK && sync_calls == sync_before);
+  assert(BSP_SPI_Receive(BSP_SPI_1, p, 8, true) != BSP_OK && sync_calls == sync_before);
   hspi2.State = 0;
   assert(BSP_SPI_RegisterCallback((BSP_SPI_t)-1, BSP_SPI_RX_CPLT_CB, SpiDone) != BSP_OK);
+  assert(BSP_SPI_RegisterCallback(BSP_SPI_1, BSP_SPI_RX_CPLT_CB, SpiError) != BSP_OK);
+  assert(BSP_SPI_UnregisterCallback(BSP_SPI_1, BSP_SPI_RX_CPLT_CB, SpiError) != BSP_OK);
+  SPI_HandleTypeDef alias = hspi2;
+  before = done_calls;
+  HAL_SPI_RxCpltCallback(&alias);
+  assert(done_calls == before); // Same Instance is insufficient; exact registered handle required.
+  assert(BSP_SPI_UnregisterCallback(BSP_SPI_1, BSP_SPI_RX_CPLT_CB, SpiDone) == BSP_OK);
+  assert(BSP_SPI_UnregisterCallback(BSP_SPI_1, BSP_SPI_ERROR_CB, SpiError) == BSP_OK);
 }
 static void TestBmiDma(void) {
-  BMI088_t imu;
+  BMI088_t imu = {0};
   const BMI088_Cali_t cali = {{0, 0, 0}};
-  assert(BMI088_Init(&imu, &cali) == DEVICE_OK);
+  BMI088_Config_t invalid = imu_config;
+  assert(BMI088_AcclWaitDmaCplt(0) == osFlagsErrorResource);
+  assert(BMI088_WaitNew(0) == osFlagsErrorResource);
+  invalid.spi = BSP_SPI_ERR;
+  assert(BMI088_Init(&imu, &cali, &invalid) != DEVICE_OK);
+  invalid = imu_config; invalid.accl_cs = invalid.gyro_cs;
+  assert(BMI088_Init(&imu, &cali, &invalid) != DEVICE_OK);
+  invalid = imu_config; invalid.accl_int = invalid.accl_cs;
+  assert(BMI088_Init(&imu, &cali, &invalid) != DEVICE_OK);
+  BMI088_Cali_t invalid_cali = {{NAN, 0, 0}};
+  assert(BMI088_Init(&imu, &invalid_cali, &imu_config) != DEVICE_OK);
+  assert(BMI088_Init(&imu, &cali, NULL) != DEVICE_OK);
+  current_thread = NULL;
+  assert(BMI088_Init(&imu, &cali, &imu_config) != DEVICE_OK);
+  current_thread = (void*)1;
+  // A late GPIO conflict rolls back only the resources this attempt acquired.
+  assert(BSP_GPIO_RegisterCallback(imu_config.gyro_int, GpioB) == BSP_OK);
+  assert(BSP_GPIO_EnableIRQ(imu_config.gyro_int) == BSP_OK);
+  const unsigned spi_before = spi_count, events = gpio_b_events;
+  assert(BMI088_Init(&imu, &cali, &imu_config) != DEVICE_OK && spi_count == spi_before);
+  HAL_GPIO_EXTI_Callback(1u << 12);
+  assert(gpio_b_events == events + 1);
+  assert(BSP_GPIO_DisableIRQ(imu_config.gyro_int) == BSP_OK);
+  assert(BSP_GPIO_UnregisterCallback(imu_config.gyro_int, GpioB) == BSP_OK);
+  // A SPI callback conflict also must remain owned by its original consumer.
+  assert(BSP_SPI_RegisterCallback(imu_config.spi, BSP_SPI_ERROR_CB, SpiError) == BSP_OK);
+  assert(BMI088_Init(&imu, &cali, &imu_config) != DEVICE_OK);
+  assert(BSP_SPI_UnregisterCallback(imu_config.spi, BSP_SPI_ERROR_CB, SpiError) == BSP_OK);
+  spi_result = HAL_ERROR;
+  assert(BMI088_Init(&imu, &cali, &imu_config) != DEVICE_OK && !imu.header.online);
+  spi_result = HAL_OK;
+  assert(BSP_GPIO_ReadPin(imu_config.accl_cs) && BSP_GPIO_ReadPin(imu_config.gyro_cs));
+  assert((io_exti.IMR1 & ((1u << 10) | (1u << 12))) == 0);
+  bad_chip_id = true;
+  assert(BMI088_Init(&imu, &cali, &imu_config) == DEVICE_ERR_NO_DEV);
+  bad_chip_id = false;
+  spi_count = 0; spi_fail_after = 10; // Configuration write after successful chip ID reads.
+  assert(BMI088_Init(&imu, &cali, &imu_config) != DEVICE_OK);
+  spi_fail_after = 0;
+  assert(BMI088_Init(&imu, &cali, &imu_config) == DEVICE_OK);
+  BMI088_t second = {0};
+  assert(BMI088_Init(&second, &cali, &imu_config) == DEVICE_ERR_INITED);
+  current_thread = (void*)2;
+  assert(BMI088_AcclStartDmaRecv() != DEVICE_OK);
+  assert(BMI088_GyroWaitDmaCplt(0) == osFlagsErrorResource);
+  current_thread = (void*)1;
+  HAL_GPIO_EXTI_Callback((1u << 10) | (1u << 12));
+  assert((BMI088_WaitNew(0) & (SIGNAL_BMI088_ACCL_NEW_DATA | SIGNAL_BMI088_GYRO_NEW_DATA)) ==
+         (SIGNAL_BMI088_ACCL_NEW_DATA | SIGNAL_BMI088_GYRO_NEW_DATA));
   assert(BMI088_AcclStartDmaRecv() == DEVICE_OK);
   assert(((uintptr_t)hal_rx % 32u) == 0u);
   assert(BMI088_GyroStartDmaRecv() != DEVICE_OK);
   memset(hal_rx, 0, 19);
   HAL_SPI_RxCpltCallback(&hspi2);
   assert((BMI088_AcclWaitDmaCplt(0) & SIGNAL_BMI088_ACCL_RAW_REDY) != 0);
-  assert(BSP_GPIO_ReadPin(BSP_GPIO_ACCL_CS));
+  assert(BSP_GPIO_ReadPin(imu_config.accl_cs));
   assert(BMI088_GyroStartDmaRecv() == DEVICE_OK);
   assert(((uintptr_t)hal_rx % 32u) == 0u);
   memset(hal_rx, 0, 6);
@@ -459,7 +631,7 @@ static void TestBmiDma(void) {
   assert(BMI088_ParseGyro(&imu) == DEVICE_OK && imu.gyro.x == 0);
   assert(BMI088_AcclStartDmaRecv() == DEVICE_OK);
   assert(BMI088_AcclWaitDmaCplt(0) == osFlagsErrorResource);
-  assert(BSP_GPIO_ReadPin(BSP_GPIO_ACCL_CS));
+  assert(BSP_GPIO_ReadPin(imu_config.accl_cs));
   assert(BMI088_GyroStartDmaRecv() == DEVICE_OK);
   spi_result = HAL_ERROR;
   assert(BMI088_GyroWaitDmaCplt(0) == osFlagsErrorResource);
@@ -475,7 +647,7 @@ static void TestBmiDma(void) {
   reject_cache = true;
   assert(BMI088_GyroStartDmaRecv() != DEVICE_OK);
   reject_cache = false;
-  assert(BSP_GPIO_ReadPin(BSP_GPIO_GYRO_CS));
+  assert(BSP_GPIO_ReadPin(imu_config.gyro_cs));
 }
 static void TestDr16(void) {
   DR16_t dr16;
@@ -509,6 +681,8 @@ int main(void) {
   TestUart();
   TestUsb();
   TestFdcan();
+  TestGpio();
+  TestSpiRegistration();
   TestSpi();
   TestBmiDma();
   TestDr16();

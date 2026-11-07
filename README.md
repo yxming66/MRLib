@@ -28,7 +28,7 @@ module 保留统一接口：底盘注册时选择 robotics 模型、绑定 Wheel
 
 ## 开始使用
 
-UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。PWM 也已改为 board 登记，详见 [PWM 接入](docs/PWM_BINDINGS.md)。SPI/GPIO/FDCAN 等仍有旧板型映射，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
+UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。PWM、GPIO/SPI 也已改为 board 登记，BMI088 显式接收总线与引脚，详见 [PWM 接入](docs/PWM_BINDINGS.md)、[GPIO/SPI 接入](docs/GPIO_SPI_BINDINGS.md)。FDCAN 和时基仍有旧板型依赖，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
 
 ```sh
 git clone https://github.com/yxming66/MR_TestLib.git

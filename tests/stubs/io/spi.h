@@ -4,10 +4,16 @@ typedef struct {
   void* Instance;
   DMA_HandleTypeDef* hdmarx;
   unsigned State;
+  DMA_HandleTypeDef* hdmatx;
+  struct { unsigned DataSize, Mode, Direction, CRCCalculation; } Init;
 } SPI_HandleTypeDef;
 extern SPI_HandleTypeDef hspi2;
 #define SPI2 ((void*)2)
 #define HAL_SPI_STATE_READY 0u
+#define SPI_DATASIZE_8BIT 0u
+#define SPI_MODE_MASTER 0u
+#define SPI_DIRECTION_2LINES 0u
+#define SPI_CRCCALCULATION_DISABLE 0u
 HAL_StatusTypeDef HAL_SPI_Transmit(SPI_HandleTypeDef*, uint8_t*, uint16_t, uint32_t);
 HAL_StatusTypeDef HAL_SPI_Receive(SPI_HandleTypeDef*, uint8_t*, uint16_t, uint32_t);
 HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef*, uint8_t*, uint8_t*, uint16_t,

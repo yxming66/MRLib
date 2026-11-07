@@ -4,24 +4,14 @@
 extern "C" {
 #endif
 
-/* Includes ----------------------------------------------------------------- */
 #include <stdbool.h>
 #include <stdint.h>
 
 #include "component/ahrs.h"
 #include "device/device.h"
+#include "bsp/gpio.h"
+#include "bsp/spi.h"
 
-/* USER INCLUDE BEGIN */
-
-/* USER INCLUDE END */
-
-/* USER DEFINE BEGIN */
-
-/* USER DEFINE END */
-
-/* Exported constants ------------------------------------------------------- */
-/* Exported macro ----------------------------------------------------------- */
-/* Exported types ----------------------------------------------------------- */
 typedef struct {
   struct {
     float x;
@@ -40,13 +30,19 @@ typedef struct {
   const BMI088_Cali_t *cali;
 } BMI088_t;
 
-/* USER STRUCT BEGIN */
+typedef struct {
+  BSP_SPI_t spi;
+  BSP_GPIO_t accl_cs;
+  BSP_GPIO_t gyro_cs;
+  BSP_GPIO_t accl_int;
+  BSP_GPIO_t gyro_int;
+} BMI088_Config_t;
 
-/* USER STRUCT END */
-
-/* Exported functions prototypes -------------------------------------------- */
-int8_t BMI088_Init(BMI088_t *bmi088, const BMI088_Cali_t *cali);
-int8_t BMI088_Restart(void);
+/* Single instance/task, exclusive SPI bus. Config is copied, calibration stays
+ * valid. Board supplies two output CS and two EXTI inputs, initially masked.
+ * No heap allocation. Does not support runtime rebinding or a second instance. */
+int8_t BMI088_Init(BMI088_t *bmi088, const BMI088_Cali_t *cali,
+                   const BMI088_Config_t *config);
 
 bool BMI088_GyroStable(AHRS_Gyro_t *gyro);
 
@@ -72,10 +68,6 @@ bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms);
 int8_t BMI088_ParseAccl(BMI088_t *bmi088);
 int8_t BMI088_ParseGyro(BMI088_t *bmi088);
 float BMI088_GetUpdateFreq(BMI088_t *bmi088);
-
-/* USER FUNCTION BEGIN */
-
-/* USER FUNCTION END */
 
 #ifdef __cplusplus
 }

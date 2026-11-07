@@ -11,6 +11,7 @@
 
 extern int Board_RegisterUartEndpoints(void);
 extern int Board_RegisterPwmEndpoints(void);
+extern int Board_RegisterIoEndpoints(void);
 
 #ifdef MR_CHASSIS_TASK_EXAMPLE
 extern int App_CreateChassisTask(void);
@@ -77,6 +78,7 @@ int main(void) {
   MX_TIM1_Init();
   if (!Board_RegisterUartEndpoints()) Error_Handler();
   if (!Board_RegisterPwmEndpoints()) Error_Handler();
+  if (!Board_RegisterIoEndpoints()) Error_Handler();
   if (osKernelInitialize() != osOK) Error_Handler();
 #ifdef MR_CHASSIS_TASK_EXAMPLE
   if (!App_CreateChassisTask()) Error_Handler();

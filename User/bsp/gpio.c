@@ -1,140 +1,117 @@
-/* Includes ----------------------------------------------------------------- */
 #include "bsp/gpio.h"
+#include <stddef.h>
+#include <string.h>
 
-#include <gpio.h>
-#include <main.h>
+static BSP_GPIO_Endpoint_t endpoints[BSP_GPIO_NUM];
+static void (*callbacks[BSP_GPIO_NUM])(void);
+static uint8_t endpoint_count;
+static bool configured;
 
-/* USER INCLUDE BEGIN */
-
-/* USER INCLUDE END */
-
-/* Private define ----------------------------------------------------------- */
-/* USER DEFINE BEGIN */
-
-/* USER DEFINE END */
-
-/* Private macro ------------------------------------------------------------ */
-/* Private typedef ---------------------------------------------------------- */
-typedef struct {
-  uint16_t pin;
-  GPIO_TypeDef *gpio;
-} BSP_GPIO_MAP_t;
-
-/* USER STRUCT BEGIN */
-
-/* USER STRUCT END */
-
-/* Private variables -------------------------------------------------------- */
-static const BSP_GPIO_MAP_t GPIO_Map[BSP_GPIO_NUM] = {
-    {ACCL_CS_Pin, ACCL_CS_GPIO_Port},
-    {Power_OUT2_EN_Pin, Power_OUT2_EN_GPIO_Port},
-    {Power_OUT1_EN_Pin, Power_OUT1_EN_GPIO_Port},
-    {Power_5V_EN_Pin, Power_5V_EN_GPIO_Port},
-    {GYRO_CS_Pin, GYRO_CS_GPIO_Port},
-    {USER_KEY_Pin, USER_KEY_GPIO_Port},
-    {ACCL_INT_Pin, ACCL_INT_GPIO_Port},
-    {GYRO_INT_Pin, GYRO_INT_GPIO_Port},
-    {ore_relay_Pin, ore_relay_GPIO_Port},
-    {spearhead_relay_Pin, spearhead_relay_GPIO_Port},
-    {ore_relay_Pin, ore_relay_GPIO_Port},
-    {spearhead_relay_Pin, spearhead_relay_GPIO_Port},
-    {0, NULL},
-};
-
-static void (*GPIO_Callback[16])(void);
-
-/* Private function  -------------------------------------------------------- */
-/* USER FUNCTION BEGIN */
-
-/* USER FUNCTION END */
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-  for (uint8_t i = 0; i < 16; i++) {
-    if (GPIO_Pin & (1 << i)) {
-      if (GPIO_Callback[i]) {
-        GPIO_Callback[i]();
-      }
-    }
-  }
+const BSP_GPIO_Endpoint_t* BSP_GPIO_GetEndpoint(BSP_GPIO_t gpio) {
+  return (unsigned)gpio < endpoint_count ? &endpoints[gpio] : NULL;
 }
-
-/* Exported functions ------------------------------------------------------- */
+int8_t BSP_GPIO_Configure(const BSP_GPIO_Endpoint_t* table, uint8_t count) {
+  if (configured || !table || !count || count > BSP_GPIO_NUM) return BSP_ERR;
+  uint32_t exti_mask = 0;
+  for (uint8_t i = 0; i < count; ++i) {
+    const BSP_GPIO_Endpoint_t* p = &table[i];
+    if (!p->name || !p->name[0] || !p->port || !p->pin ||
+        (p->pin & (p->pin - 1u)) != 0 || (unsigned)p->mode > BSP_GPIO_EXTI)
+      return BSP_ERR;
+    if (p->mode == BSP_GPIO_EXTI) {
+      if (exti_mask & p->pin) return BSP_ERR; // EXTI line cannot route two ports.
+      exti_mask |= p->pin;
+    }
+    for (uint8_t j = 0; j < i; ++j)
+      if (strcmp(p->name, table[j].name) == 0 ||
+          (p->port == table[j].port && p->pin == table[j].pin)) return BSP_ERR;
+  }
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  EXTI_D1->IMR1 &= ~exti_mask;
+  __HAL_GPIO_EXTI_CLEAR_IT(exti_mask);
+  memcpy(endpoints, table, count * sizeof(*table));
+  endpoint_count = count;
+  configured = true;
+  if (!token) __enable_irq();
+  return BSP_OK;
+}
+BSP_GPIO_t BSP_GPIO_FindEndpoint(const char* name) {
+  if (name)
+    for (uint8_t i = 0; i < endpoint_count; ++i)
+      if (strcmp(name, endpoints[i].name) == 0) return (BSP_GPIO_t)i;
+  return BSP_GPIO_ERR;
+}
 int8_t BSP_GPIO_RegisterCallback(BSP_GPIO_t gpio, void (*callback)(void)) {
-  if (callback == NULL) return BSP_ERR_NULL;
-  if (gpio >= BSP_GPIO_NUM) return BSP_ERR;
-
-  // 从GPIO映射中获取对应的pin值
-  uint16_t pin = GPIO_Map[gpio].pin;
-  
-  for (uint8_t i = 0; i < 16; i++) {
-    if (pin & (1 << i)) {
-      GPIO_Callback[i] = callback;
-      break;
-    }
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_EXTI || !callback) return BSP_ERR;
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  int8_t result = BSP_ERR;
+  if (!(EXTI_D1->IMR1 & p->pin) && !callbacks[gpio]) {
+    callbacks[gpio] = callback;
+    result = BSP_OK;
   }
-  return BSP_OK;
+  if (!token) __enable_irq();
+  return result;
 }
-
+int8_t BSP_GPIO_UnregisterCallback(BSP_GPIO_t gpio, void (*callback)(void)) {
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_EXTI || !callback) return BSP_ERR;
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  int8_t result = BSP_ERR;
+  if (!(EXTI_D1->IMR1 & p->pin) && callbacks[gpio] == callback) {
+    callbacks[gpio] = NULL;
+    result = BSP_OK;
+  }
+  if (!token) __enable_irq();
+  return result;
+}
 int8_t BSP_GPIO_EnableIRQ(BSP_GPIO_t gpio) {
-  switch (gpio) {
-    case BSP_GPIO_USER_KEY:
-#if defined(USER_KEY_EXTI_IRQn)
-  HAL_NVIC_EnableIRQ(USER_KEY_EXTI_IRQn);
-#endif
-  return BSP_OK;
-    case BSP_GPIO_ACCL_INT:
-#if defined(ACCL_INT_EXTI_IRQn)
-      HAL_NVIC_EnableIRQ(ACCL_INT_EXTI_IRQn);
-#endif
-      return BSP_OK;
-    case BSP_GPIO_GYRO_INT:
-#if defined(GYRO_INT_EXTI_IRQn)
-      HAL_NVIC_EnableIRQ(GYRO_INT_EXTI_IRQn);
-#endif
-      return BSP_OK;
-    default:
-      return BSP_ERR;
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_EXTI) return BSP_ERR;
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  int8_t result = BSP_ERR;
+  if (callbacks[gpio]) {
+    if (!(EXTI_D1->IMR1 & p->pin)) __HAL_GPIO_EXTI_CLEAR_IT(p->pin);
+    EXTI_D1->IMR1 |= p->pin;
+    result = BSP_OK;
   }
-  return BSP_OK;
+  if (!token) __enable_irq();
+  return result;
 }
-
 int8_t BSP_GPIO_DisableIRQ(BSP_GPIO_t gpio) {
-  switch (gpio) {
-    case BSP_GPIO_USER_KEY:
-#if defined(USER_KEY_EXTI_IRQn)
-  HAL_NVIC_DisableIRQ(USER_KEY_EXTI_IRQn);
-#endif
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_EXTI) return BSP_ERR;
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  EXTI_D1->IMR1 &= ~(uint32_t)p->pin;
+  __HAL_GPIO_EXTI_CLEAR_IT(p->pin);
+  if (!token) __enable_irq();
   return BSP_OK;
-    case BSP_GPIO_ACCL_INT:
-#if defined(ACCL_INT_EXTI_IRQn)
-      HAL_NVIC_DisableIRQ(ACCL_INT_EXTI_IRQn);
-#endif
-      return BSP_OK;
-    case BSP_GPIO_GYRO_INT:
-#if defined(GYRO_INT_EXTI_IRQn)
-      HAL_NVIC_DisableIRQ(GYRO_INT_EXTI_IRQn);
-#endif
-      return BSP_OK;
-    default:
-      return BSP_ERR;
+}
+void HAL_GPIO_EXTI_Callback(uint16_t pins) {
+  for (uint8_t i = 0; i < endpoint_count; ++i) {
+    const BSP_GPIO_Endpoint_t* p = &endpoints[i];
+    if (p->mode == BSP_GPIO_EXTI && (pins & p->pin) &&
+        (EXTI_D1->IMR1 & p->pin) && callbacks[i]) callbacks[i]();
   }
+}
+int8_t BSP_GPIO_WritePin(BSP_GPIO_t gpio, bool value) {
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_OUTPUT) return BSP_ERR;
+  HAL_GPIO_WritePin(p->port, p->pin, value ? GPIO_PIN_SET : GPIO_PIN_RESET);
   return BSP_OK;
 }
-int8_t BSP_GPIO_WritePin(BSP_GPIO_t gpio, bool value){
-  if (gpio == BSP_GPIO_NONE) return BSP_OK;
-  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return BSP_ERR;
-  HAL_GPIO_WritePin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin, value);
+int8_t BSP_GPIO_TogglePin(BSP_GPIO_t gpio) {
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  if (!p || p->mode != BSP_GPIO_OUTPUT) return BSP_ERR;
+  HAL_GPIO_TogglePin(p->port, p->pin);
   return BSP_OK;
 }
-
-int8_t BSP_GPIO_TogglePin(BSP_GPIO_t gpio){
-  if (gpio == BSP_GPIO_NONE) return BSP_OK;
-  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return BSP_ERR;
-  HAL_GPIO_TogglePin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin);
-  return BSP_OK;
-}
-
-bool BSP_GPIO_ReadPin(BSP_GPIO_t gpio){
-  if (gpio >= BSP_GPIO_NUM || GPIO_Map[gpio].gpio == NULL) return false;
-  return HAL_GPIO_ReadPin(GPIO_Map[gpio].gpio, GPIO_Map[gpio].pin) == GPIO_PIN_SET;
+bool BSP_GPIO_ReadPin(BSP_GPIO_t gpio) {
+  const BSP_GPIO_Endpoint_t* p = BSP_GPIO_GetEndpoint(gpio);
+  return p && HAL_GPIO_ReadPin(p->port, p->pin) == GPIO_PIN_SET;
 }
