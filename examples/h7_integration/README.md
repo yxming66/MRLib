@@ -2,13 +2,13 @@
 
 这个工程把当前库的真实代码接成完整 ELF/BIN：四个 RM M3508 → MotorWheel → 统一 Chassis，以及三个 DM J4310 → MotorActuatorAdapter → JointT → Arm<3>；MRLink 使用 USART1 DMA；一个 CMSIS-RTOS2 任务按 1 ms 调度控制、100 ms 发布遥测。
 
-这是部分生成装配基线，用来验证接口、依赖、启动文件、HAL/RTOS 和链接布局。RM 四轮底盘及控制参数从 YAML 生成；机械臂、通信和任务创建仍手写。没有移植 zzrobot 的遥控策略、机械标定或整机业务。
+这是部分生成装配基线，用来验证接口、依赖、启动文件、HAL/RTOS 和链接布局。RM 四轮底盘和 DM/LZ 串联机械臂的装配及参数从 YAML 生成；通信和任务创建仍手写。没有移植 zzrobot 的遥控策略、机械标定或整机业务。
 
 ## 文件与依赖
 
 ```text
 h7_integration/
-├── config.yaml              # v2 参数范本（生成 RM 底盘装配及参数）
+├── config.yaml              # v2 参数范本（生成底盘和机械臂装配及参数）
 ├── CMakeLists.txt            # 选择库 target，显式装配 Cube/BSP 实现
 ├── arm-none-eabi.cmake       # Cortex-M7 / hard float / C11 / C++17
 ├── board/
@@ -16,7 +16,7 @@ h7_integration/
 │   └── stm32h723.ld          # Flash/AXI SRAM、构造函数、heap/stack
 └── app/
     ├── robot.cpp            # 静态设备所有权、模块配置、控制循环、遥测
-    └── motor_config.hpp     # 可在主机上测试的手写电机装配参数
+    └── motor_config.hpp     # 仅供主机协议回归使用的手写测试 fixture
 ```
 
 `board/main.c` 是应用入口；真正的向量表和复位入口由 Cube 的 `startup_stm32h723xx.s` 提供。默认生成产物在仓库 `build/h7-integration/generated/`。
@@ -71,11 +71,11 @@ py -3 tools/check_user_headers_h7.py --board-root D:/STM32Projects_HAL/board-H7/
 
 2026-11-07：GNU Arm 15.2.1 完成两种发送开关的编译和链接；默认构建检查 35 个实际实现，133 个公共头可独立编译；29 项主机 CTest 和 6 项 CLI 回归通过。ELF 保留 RobotTask、底盘控制、ArmController、逆运动学、真实 HAL/RTOS 和 BSP 分配符号，未发现未定义符号。
 
-尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。机械臂/通信/任务生成、任意硬件资源绑定仍待实现。
+尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。通信/任务生成、任意硬件资源绑定仍待实现。
 
 
 ## 统一参数格式
 
-新增 [config.yaml](config.yaml) 作为其他机器人项目的 v2 配置范本，包含 board 绑定、电机/轮子/关节、统一模块、MRLink 和任务参数。详细单位、引用关系、校验及扩展规则见 [配置规范](../../docs/ROBOT_CONFIG.md)。它已驱动底盘静态装配与参数，修改后运行 `cmake --build build/h7-integration` 会自动重新配置并编译。底盘周期也用于当前共用控制循环的机械臂 dt；通信周期、任务栈/优先级、机械臂模型和 DM 参数仍手写。示例只接入名为 chassis 的模块，变更名称需同步修改 CMake 的 MODULE 参数。板级边界与依赖选择见 [板级接入](../../docs/BOARD_INTEGRATION.md)。
+新增 [config.yaml](config.yaml) 作为其他机器人项目的 v2 配置范本，包含 board 绑定、电机/轮子/关节、统一模块、MRLink 和任务参数。详细单位、引用关系、校验及扩展规则见 [配置规范](../../docs/ROBOT_CONFIG.md)。它已驱动底盘和机械臂静态装配与参数，修改后运行 `cmake --build build/h7-integration` 会自动重新配置并编译。示例 CMake 使用 `MODULE all`，最多一个底盘和一个机械臂共享 CAN 端点；两个模块在同一个任务中运行，周期必须相同。通信周期、任务栈/优先级、消息 codec 和任务入口仍手写。板级边界与依赖选择见 [板级接入](../../docs/BOARD_INTEGRATION.md)。
 
 整理参数时修正了本示例的 DM/RM 地址重叠：三个 DM 控制 ID 改为 `0x11/0x12/0x13`，反馈为 `0x321/0x322/0x323`，避免 DM 保留地址 `can_id+0x200` 占用 RM 反馈 `0x201..0x204`。新增主机注册回归，使用实际手写装配参数验证四个 RM 与三个 DM 可以同时注册；单纯完成固件链接无法发现这种运行期配置冲突。

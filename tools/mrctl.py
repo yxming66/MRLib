@@ -412,9 +412,10 @@ def main() -> int:
     init.add_argument("--name", required=True)
     init.add_argument("--library", required=True, help="MR_TestLib path relative to the new project")
     init.add_argument("--targets", required=True, help="comma-separated CMake target names")
-    generate_command = commands.add_parser("generate", help="generate selected v2 chassis assembly")
+    generate_command = commands.add_parser("generate", help="generate selected v2 robot assemblies")
     generate_command.add_argument("config", type=Path)
-    generate_command.add_argument("--module", required=True, help="explicitly selected chassis module")
+    generate_command.add_argument("--module", required=True,
+                                  help="module name, comma-separated names, or all")
     generate_command.add_argument("--output-dir", type=Path, default=None)
     for name in ("configure", "build"):
         command = commands.add_parser(name)
@@ -433,8 +434,8 @@ def main() -> int:
                               args.module)
         except (OSError, ValueError) as error:
             parser.error(str(error))
-        print(f"generated chassis module {args.module}: {output}")
-        print("scope: selected RM motors/wheels/chassis only; other modules and tasks remain app-owned")
+        print(f"generated robot modules {args.module}: {output}")
+        print("scope: selected RM chassis and DM/LZ serial arm; communication and tasks remain app-owned")
         return 0
     if args.command == "init":
         targets = [item.strip() for item in args.targets.split(",") if item.strip()]

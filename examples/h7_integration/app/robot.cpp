@@ -5,19 +5,16 @@
 #include "bsp/time.h"
 #include "cmsis_os2.h"
 #include "component/time/periodic.hpp"
-#include "device/joint/joint.hpp"
-#include "device/joint/motor_actuator_adapter.hpp"
 #include "device/motor/bus/rm_command_bus.hpp"
 #include "device/wheel/wheel.hpp"
 #include "module/arm/arm.hpp"
 #include "module/chassis/chassis.hpp"
-#include "motor_config.hpp"
 #include "robot_config.hpp"
 
 namespace {
 using namespace mr::motor;
 using mr::module::chassis::ChassisStatus;
-using Arm = mr::module::arm::Arm<3>;
+using Arm = mr::generated::ArmAssembly::ArmType;
 constexpr float kDtSeconds = mr::generated::ChassisAssembly::kDtSeconds;
 
 // Development request only: no remote message can enable this example.
@@ -45,36 +42,16 @@ class MotorPort final : public CanPort {
 struct Robot {
   MotorPort port;
   mr::generated::ChassisAssembly drive{port};
+  mr::generated::ArmAssembly manipulator{port};
   RmCommandBus& rm = drive.commands;
-  DmJ4310Motor d0{app::JointConfig(port, 0)}, d1{app::JointConfig(port, 1)},
-      d2{app::JointConfig(port, 2)};
-  mr::DmJ4310Actuator a0{&d0}, a1{&d1}, a2{&d2};
-  mr::JointT j0{0, &a0, {-1, 1, 0, 0}, 0, 1000}, j1{1, &a1, {-1, 1, 0, 0}, 0, 1000},
-      j2{2, &a2, {-1, 1, 0, 0}, 0, 1000};
   mr::module::chassis::Chassis& chassis = drive.chassis;
-  Arm arm;
+  Arm& arm = manipulator.arm;
   board::ChannelAndLink telemetry;
   bool running = false, previous_request = false, fault = false;
 
   bool Init() {
     if (drive.Register() != ChassisStatus::kOk) return false;
-    // Representative chain only. No zzrobot calibration or mass model is implied.
-    mr::robotics::arm::JointModel joints[3];
-    for (int i = 0; i < 3; ++i) {
-      joints[i].limits.max_velocity = 1;
-      joints[i].limits.max_acceleration = 2;
-      joints[i].limits.position_enabled = true;
-      joints[i].limits.position_min = -1;
-      joints[i].limits.position_max = 1;
-      joints[i].parent_to_joint[0][3] = .1f;
-    }
-    using mr::component::math::matrix::identity;
-    Arm::Config cfg;
-    cfg.controller.default_dt_s = kDtSeconds;
-    cfg.model = {joints, identity<4>(), identity<4>(), mr::component::math::matrix::zeros<3, 1>()};
-    cfg.output.actuators = {&j0, &j1, &j2};
-    for (auto& gain : cfg.output.gains) gain = {5, .2f, 0};
-    if (arm.Init(cfg) != DEVICE_OK) return false;
+    if (manipulator.Init() != DEVICE_OK) return false;
     return telemetry.Begin(BSP_UART_PC) == MRLINK_OK;
   }
   void Stop() {
@@ -139,6 +116,9 @@ board::DmaPolicy dma_policy{regions, 1};
 }  // namespace
 
 extern "C" void RobotTask(void*) {
+  static_assert(mr::generated::ArmAssembly::kPeriodUs ==
+                    mr::generated::ChassisAssembly::kPeriodUs,
+                "Example uses one task for chassis and arm; periods must match");
   static_assert(mr::generated::ChassisAssembly::kPeriodUs % 1000u == 0u,
                 "Example scheduler requires whole milliseconds at 1000 Hz");
   constexpr uint32_t kPeriodTicks = mr::generated::ChassisAssembly::kPeriodUs / 1000u;

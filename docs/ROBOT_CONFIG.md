@@ -2,7 +2,7 @@
 
 新项目以 [`examples/h7_integration/config.yaml`](../examples/h7_integration/config.yaml) 为完整范本，保持字段含义、层次和单位一致，修改名称、实例、机构和参数即可。文件名统一建议 `config.yaml`，`version: 2` 标识这份完整机器人配置契约。
 
-**当前支持：整份配置校验，以及显式选定的单 CAN 总线 RM 四轮底盘生成。** H7 示例已接入：底盘型号、轮序、轮径、几何尺寸、限速、PID、方向、外部传动比、反馈超时、控制周期和电机发送许可会改变生成结果及固件。机械臂、通信和任务创建仍在 app/board 手写；这些配置目前只校验，不生成。v1 `project.yaml` 的主机流程保持独立。
+**当前支持：整份配置校验，以及显式选定的单 CAN 总线 RM 四轮底盘和 DM/LZ 串联机械臂生成。** H7 示例已接入底盘参数、机械臂电机/执行器/关节链、零点、限位、运动学变换、输出增益、反馈超时和周期。通信及任务创建仍在 app/board 手写；这些配置目前只校验，不生成。v1 `project.yaml` 的主机流程保持独立。
 
 ## 配置分层
 
@@ -20,7 +20,7 @@
 
 未使用的设备类别、通信等填写空映射 `{}`；模块和任务至少各一个。例如仅做底盘的项目可以删除 arm 模块、三个关节及相应电机，并从任务的 `owns_modules` 中移除 arm，保留其余格式。不要每个项目另起一套字段名称。
 
-每个设备的 CAN ID 只在 motors 中写一次；轮子/关节引用电机名，模块引用轮子/关节名，任务引用模块名。v2 不要求同时填写 `project.targets`；当前底盘生成器选择 motor、wheel、module_chassis target，由已有 CMake target 图传递其底层依赖。
+每个设备的 CAN ID 只在 motors 中写一次；轮子/关节引用电机名，模块引用轮子/关节名，任务引用模块名。v2 不要求同时填写 `project.targets`；生成器按选定模块选择 motor/wheel/module_chassis 或 motor/joint/module_arm target，由已有 CMake target 图传递其底层依赖。
 
 ## 单位与模型约定
 
@@ -31,7 +31,7 @@
 - 四轮顺序固定为右前、左前、左后、右后。车体系 +x 向前、+y 向左、+z 向上，正角速度按右手规则。
 - 变换中的平移以父坐标系表达；`T_parent_child` 把子坐标变换到父坐标，`rpy_rad=[roll,pitch,yaw]`，旋转为 `Rz(yaw)*Ry(pitch)*Rx(roll)`。机械臂 `axis_in_joint_frame` 必须是单位向量。
 - 机械臂关节列表的条目数决定 `Arm<N>` 的 N，列表顺序决定串联顺序；轴与变换属于算法模型，关节零点与执行器映射属于设备参数，不重复校正同一个偏差。
-- 底盘控制器采样周期由所属任务的 `period_us` 推导，不再维护第二个频率字段。生成器限制周期不超过 100 ms；H7 示例额外要求 1000 Hz RTOS 下的整数毫秒周期。任务栈、优先级和入口仍需在 board 中维护。
+- 底盘和机械臂控制器采样周期由各自所属任务的 `period_us` 推导，不再维护第二个频率字段。生成器限制周期不超过 100 ms；H7 示例额外要求 1000 Hz RTOS 下的整数毫秒周期。任务栈、优先级和入口仍需在 board 中维护。
 
 首版契约覆盖库中两种四轮模型、独立旋转关节的串联机械臂、RM/DM/LZ 电机参数和 UART MRLink。机械臂执行器要求 DM/LZ 原生 MIT 能力，排除 H3510；尚未定义惯性模型，故要求关闭重力补偿。耦合关节、直线关节、更多外设和自定义适配器登记后续通过明确类型扩展，不能用不受检查的任意字段假装已经支持。
 
@@ -46,6 +46,8 @@ py -3 -m venv .venv
 .venv/Scripts/python.exe -m unittest tools.test_robot_config
 .venv/Scripts/python.exe tools/mrctl.py generate examples/h7_integration/config.yaml `
   --module chassis --output-dir build/config-preview/generated
+.venv/Scripts/python.exe tools/mrctl.py generate examples/h7_integration/config.yaml `
+  --module all --output-dir build/config-preview/generated
 ```
 
 校验器只读文件，不生成、复制、覆盖代码，也不调用 CMake。格式规则由 [`robot.schema.json`](robot.schema.json) 描述：未知公共字段报错，重复键报错，类型、单位字段和枚举保持一致。示例第一行的 yaml-language-server 注释可让支持 JSON Schema 的 YAML 编辑器使用该规则；复制到其他项目时需调整 Schema 相对路径或在编辑器中关联它。
@@ -71,7 +73,18 @@ robot_project/
 
 输出为 `robot_config.hpp`、`robot.cmake` 和 `.mrctl-manifest.json`。`ChassisAssembly` 拥有一组 RM 命令总线、四电机、四轮与统一 Chassis；构造时注入项目的 CanPort，显式调用 `Register()`，再由 app 调度反馈、控制与输出。注册不自动 Enable，发送许可常量需要 app 的端口适配执行（H7 已执行），不能把它当作通用 CanPort 的隐式限制。
 
-生成器会校验整份 YAML，但只生成 `--module` 选中的底盘，拒绝其他模块类型、非 RM 轮电机及跨 CAN 总线装配。Arm/DM/LZ、MRLink、任务模板、自定义外设注册尚未生成；选定底盘以外的对象与依赖由 app 继续维护。`board.cube_root` 不会隐式加载或扫描外部工程，实际 Cube 输入由项目 CMake 显式指定。
+`ArmAssembly` 根据关节列表推导 `Arm<N>`，拥有 DM/LZ 电机、`MotorActuatorAdapter`、`JointT` 和 `Arm<N>`，按此顺序构造并反序销毁。电机总线、地址、方向、额外传动比、反馈超时及 DM MIT 量程来自 motors；JointT 读取零点、位置限位，保持默认单位传动，避免重复换算；模型读取关节轴、父子变换、基座/工具变换、关节速度/加速度限位，模型 position_offset 保持零。
+
+```cpp
+mr::generated::ArmAssembly manipulator{port};  // port 的生命周期长于装配
+if (manipulator.Init() != DEVICE_OK) { /* 处理初始化失败 */ }
+// Init 只注册，不发送使能；任务显式 UpdateFeedback -> Enable。
+// 周期执行 UpdateFeedback -> Step(ArmAssembly::kDtSeconds) -> CommitOutput。
+```
+
+机械臂各关节增益按字段名绑定，和 YAML 字典键的顺序无关。RPY 使用库的 `Rz(yaw)*Ry(pitch)*Rx(roll)` 实现；零点只在设备层减一次，DM/LZ 内部减速不再参与换算。当前关节为独立旋转关节，重力补偿关闭；笛卡尔限速、IK 选项等尚未定义的配置沿用库默认值。本版各模块周期限制为不超过 100 ms；H7 共用任务额外要求两个模块周期相同。所选关节数最多 256（JointT 使用 uint8_t ID），实际 RAM/栈和控制带宽需项目评估。
+
+生成器会校验整份 YAML，只生成 `--module` 选中的模块；可用模块名称、逗号分隔的名称或 `all`。每个输出最多一个底盘和一个串联机械臂，所选模块共用一条 CAN 总线。底盘要求 RM 轮电机，机械臂要求 DM/LZ MIT 电机；跨总线和重复模块类型会被拒绝。MRLink、任务模板和自定义外设注册尚未生成；未选模块仍由 app 维护。`board.cube_root` 不会隐式加载或扫描外部工程，实际 Cube 输入由项目 CMake 显式指定。
 
 重新生成只更新名为 `generated` 的目录中的固定产物，不覆盖 `app/`、`board/` 和原始配置。摘要清单检查已有产物归属及内容，遇到手改或没有清单的同名文件会失败，且在检查完成前不写入；内容不变保留时间戳。单个文件采用原子替换，整组产物不是跨文件事务，请勿并发写同一输出目录。中断后若摘要不匹配，应保留需要的手改，再删除专属 generated 目录并重新生成。输出路径不接受符号链接/目录联接。
 

@@ -25,7 +25,7 @@ mr_target_robot_config(TARGET robot_firmware
 
 配置阶段校验并生成 `${CMAKE_CURRENT_BINARY_DIR}/generated`，核对 board profile、CAN 端点，再把生成头文件路径、`MR_ROBOT_CAN_BINDING` 宏及库 target 加入固件。YAML 和生成器/Schema 的改变会触发 CMake 重新配置。可以用 OUTPUT_DIRECTORY 改为另一个专属 generated 目录，每个固件配置使用独立目录。
 
-当前只支持选定的单总线 RM 四轮底盘。将生成的 `mr::generated::ChassisAssembly` 作为静态对象，注入该总线的 CanPort，调用 Register；app 继续负责反馈、命令、Step、CommitOutput 与 RM 分组 Flush。它不创建任务或自动使能；周期常量供 app 调度使用。完整调用顺序参考 H7 app 和 `examples/device_execution`。
+当前支持选定的单总线 RM 四轮底盘和 DM/LZ 串联机械臂。将生成的 `mr::generated::ChassisAssembly` 作为静态对象，注入该总线的 CanPort，调用 Register；app 继续负责反馈、命令、Step、CommitOutput 与 RM 分组 Flush。它不创建任务或自动使能；周期常量供 app 调度使用。生成的 `ArmAssembly` 持有电机 → MotorActuatorAdapter → JointT → Arm<N>，注入同一 CanPort 后调用 Init，再由 app 继续 UpdateFeedback、显式 Enable、Step 和 CommitOutput。N 按关节列表长度推导，零点仅在 JointT 处理，模型 position_offset 保持零。完整调用顺序参考 H7 app 和 `examples/device_execution`。
 
 ## 当前 H723 BSP 的可选帮助函数
 

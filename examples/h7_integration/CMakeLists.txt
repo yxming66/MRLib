@@ -71,10 +71,9 @@ target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 target_link_libraries(mr_h7_integration PRIVATE cube_platform cube_sources
-    mr::device_joint
-    mr::module_arm mr::component_mrlink mr::component_timer m)
+    mr::component_mrlink mr::component_timer m)
 mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
-    MODULE chassis BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
+    MODULE all BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
 target_link_options(mr_h7_integration PRIVATE
     "-T${CMAKE_CURRENT_SOURCE_DIR}/board/stm32h723.ld"
     --specs=nano.specs --specs=nosys.specs

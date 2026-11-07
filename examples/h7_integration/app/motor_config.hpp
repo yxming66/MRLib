@@ -3,7 +3,7 @@
 #include "device/motor/core/motor_instance_config.hpp"
 
 namespace app {
-// Handwritten counterpart of config.yaml until v2 generation is implemented.
+// Legacy address-conflict regression fixture only. Firmware uses generated assembly.
 inline mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM> WheelConfig(
     mr::motor::CanPort& port, mr::motor::RmCommandBus& commands, uint16_t feedback_id) {
   mr::motor::MotorInstanceConfig<mr::motor::MotorKind::RM> config;

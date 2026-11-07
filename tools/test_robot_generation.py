@@ -71,13 +71,49 @@ class RobotGenerationTests(unittest.TestCase):
             generate(self.path, self.output, "chassis")
 
     def test_invalid_config_and_scope_never_write(self):
-        with self.assertRaisesRegex(ValueError, "must be a chassis"):
-            generate(self.path, self.output, "arm")
+        with self.assertRaisesRegex(ValueError, "not present"):
+            generate(self.path, self.output, "missing")
         self.assertFalse(self.output.exists())
         self.config["devices"]["motors"]["arm_0"]["can_id"] = 1
         self.write_config()
         with self.assertRaisesRegex(ValueError, "conflict"):
             generate(self.path, self.output, "chassis")
+        self.assertFalse(self.output.exists())
+
+    def test_arm_only_and_combined_selection(self):
+        header = generate(self.path, self.output, "arm")
+        self.assertIn("class ArmAssembly", header.read_text())
+        self.assertNotIn("class ChassisAssembly", header.read_text())
+        self.assertNotIn("mr::module_chassis", (self.output / "robot.cmake").read_text())
+        generate(self.path, self.output, "all")
+        before = header.read_bytes()
+        self.assertIn("class ChassisAssembly", header.read_text())
+        generate(self.path, self.output, "chassis,arm")
+        self.assertEqual(before, header.read_bytes())
+        header.write_text("// manual edit", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
+            generate(self.path, self.output, "all")
+
+    def test_arm_bus_and_numeric_boundaries(self):
+        self.config["board"]["bindings"]["can"]["second_bus"] = "BSP_CAN_2"
+        self.config["devices"]["motors"]["arm_0"]["bus"] = "second_bus"
+        self.write_config()
+        with self.assertRaisesRegex(ValueError, "one CAN port"):
+            generate(self.path, self.output, "arm")
+        for name in ("arm_1", "arm_2"):
+            self.config["devices"]["motors"][name]["bus"] = "second_bus"
+        self.write_config()
+        with self.assertRaisesRegex(ValueError, "shared CAN port"):
+            generate(self.path, self.output, "all")
+        self.config["tasks"]["robot"]["period_us"] = 100001
+        self.write_config()
+        with self.assertRaisesRegex(ValueError, "period must be"):
+            generate(self.path, self.output, "arm")
+        self.config["tasks"]["robot"]["period_us"] = 1000
+        self.config["devices"]["joints"]["shoulder"]["zero_offset_rad"] = 1e100
+        self.write_config()
+        with self.assertRaisesRegex(ValueError, "float32"):
+            generate(self.path, self.output, "arm")
         self.assertFalse(self.output.exists())
 
     def test_output_role_and_library_mismatch(self):
@@ -160,7 +196,7 @@ message(FATAL_ERROR "capabilities_checked")
 #include <cmath>
 #include "robot_config.hpp"
 #include "support/fake_can_port.hpp"
-int main() {
+int main(int argc, char**) {
   using mr::module::chassis::ChassisStatus;
   FakeCanPort port;
   mr::generated::ChassisAssembly assembly(port);
@@ -169,7 +205,7 @@ int main() {
   assert(assembly.wheel_0.RadiusM() == .125f);
   assert(assembly.motor_0.GetInstallConfig().external_ratio == 2.0f);
   assert(assembly.Config().wheel_velocity_pid.control_freq_hz == 500.0f);
-  assert(assembly.Config().kinematics.geometry.wheelbase_m == .4f);
+  assert(assembly.Config().kinematics.geometry.wheelbase_m == (argc > 1 ? .3f : .4f));
   assert(assembly.chassis.Enable() == ChassisStatus::kOk);
   for (uint32_t id=0x201; id<=0x204; ++id) {
     mr::motor::CanFrame frame; frame.id=id; frame.dlc=8; frame.sequence=1;
@@ -217,16 +253,91 @@ add_test(NAME generated_probe COMMAND probe)
         self.write_config()
         log = self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
         self.assertIn("Robot module 'chassis'", log)
-        self.project.joinpath("main.cpp").write_text(
-            self.project.joinpath("main.cpp").read_text().replace("wheelbase_m == .4f", "wheelbase_m == .3f"),
-            encoding="utf-8")
-        self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
-        self.run_command(["ctest", "--test-dir", str(build), "--output-on-failure"])
+        executable = build / ("probe.exe" if os.name == "nt" else "probe")
+        self.run_command([str(executable), "updated"])
         # A board mismatch must fail configure, even with valid YAML.
         self.config["board"]["bindings"]["can"]["motor_can"] = "BSP_CAN_2"
         self.write_config()
         log = self.run_command(["cmake", "--build", str(build)], success=False)
         self.assertIn("does not provide CAN endpoint", log)
+
+    def test_mixed_dm_lz_arm_compiles_runs_and_rebuilds(self):
+        arm = self.config["modules"]["arm"]
+        arm["joints"] = arm["joints"][:2]
+        arm["base_to_world"] = {"translation_m": [.5, 0, 0], "rpy_rad": [0, 0, 1.57079632679]}
+        arm["tool_to_last_joint"]["translation_m"] = [0, 0, .25]
+        arm["gravity_world_m_s2"] = [0, 0, -9.81]
+        arm["joints"][0]["gains"] = {"effort_scale": .75, "kd_nm_s_per_rad": 4,
+                                      "kp_nm_per_rad": 40}  # key order must not affect output.
+        arm["joints"][1]["axis_in_joint_frame"] = [0, 1, 0]
+        arm["joints"][1]["parent_to_joint"] = {
+            "translation_m": [.4, 0, 0], "rpy_rad": [1.57079632679, 0, 0]}
+        joints = self.config["devices"]["joints"]
+        joints["shoulder"]["zero_offset_rad"] = .2
+        joints["shoulder"]["limits"]["max_velocity_rad_s"] = 1.5
+        joints["shoulder"]["limits"]["max_acceleration_rad_s2"] = 3
+        joints["elbow"]["zero_offset_rad"] = -.1
+        motors = self.config["devices"]["motors"]
+        motors["arm_0"].update(model="J3507", external_ratio=2, reverse=True,
+                                feedback_timeout_ms=7, mit={"position_range_rad": 6,
+                                "velocity_range_rad_s": 8, "torque_range_nm": 12})
+        motors["arm_1"] = {"kind": "lz", "model": "RSO3", "bus": "motor_can", "motor_id": 22,
+                           "host_id": 253, "mode": "motion", "reverse": False,
+                           "external_ratio": 3, "feedback_timeout_ms": 7}
+        self.config["tasks"]["robot"]["period_us"] = 2000
+        self.write_config()
+        cmake = f'''cmake_minimum_required(VERSION 3.22)
+project(arm_generated_probe LANGUAGES C CXX)
+set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory("{ROOT.as_posix()}" mr_library)
+include("{ROOT.as_posix()}/cmake/MrRobot.cmake")
+add_library(board_probe INTERFACE)
+mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot CAN_ENDPOINTS BSP_CAN_1)
+add_executable(probe "{ROOT.as_posix()}/tests/generation/arm_probe.cpp")
+target_include_directories(probe PRIVATE "{ROOT.as_posix()}/tests")
+target_compile_options(probe PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)
+mr_target_robot_config(TARGET probe CONFIG "${{CMAKE_CURRENT_SOURCE_DIR}}/config.yaml"
+    MODULE all BOARD_TARGET board_probe PYTHON "{Path(sys.executable).as_posix()}")
+'''
+        self.project.joinpath("CMakeLists.txt").write_text(cmake, encoding="utf-8")
+        build = self.project / "build"
+        command = ["cmake", "-S", str(self.project), "-B", str(build)]
+        if os.name == "nt":
+            command += ["-G", "MinGW Makefiles",
+                        "-DCMAKE_MAKE_PROGRAM=D:/Drivers/MSYS2/ucrt64/bin/mingw32-make.exe",
+                        "-DCMAKE_C_COMPILER=D:/Drivers/MSYS2/ucrt64/bin/gcc.exe",
+                        "-DCMAKE_CXX_COMPILER=D:/Drivers/MSYS2/ucrt64/bin/g++.exe"]
+        self.run_command(command)
+        self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
+        executable = build / ("probe.exe" if os.name == "nt" else "probe")
+        self.run_command([str(executable)])
+        arm["base_to_world"]["translation_m"][0] = .7
+        self.config["tasks"]["robot"]["period_us"] = 4000
+        self.write_config()
+        log = self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
+        self.assertIn("Robot module 'all'", log)
+        self.run_command([str(executable), "updated"])
+        # An independent one-joint arm must compile without the chassis assembly.
+        arm["joints"] = arm["joints"][:1]
+        self.write_config()
+        self.project.joinpath("main.cpp").write_text('''
+#include <cassert>
+#include "robot_config.hpp"
+#include "support/fake_can_port.hpp"
+int main() {
+  FakeCanPort port;
+  mr::generated::ArmAssembly assembly(port);
+  static_assert(decltype(assembly)::kJointCount == 1);
+  assert(assembly.Init() == DEVICE_OK);
+  assert(port.sent.empty());
+}
+''', encoding="utf-8")
+        self.project.joinpath("CMakeLists.txt").write_text(
+            cmake.replace(f'"{ROOT.as_posix()}/tests/generation/arm_probe.cpp"', 'main.cpp')
+            .replace("MODULE all", "MODULE arm"), encoding="utf-8")
+        self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
+        self.run_command([str(executable)])
+        self.assertNotIn("class ChassisAssembly", (build / "generated/robot_config.hpp").read_text())
 
 
 if __name__ == "__main__":
