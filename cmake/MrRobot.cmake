@@ -15,9 +15,9 @@ function(mr_register_board_adapter)
 endfunction()
 
 # Add generated assembly usage to an EXISTING firmware target. Main/startup,
-# linker, CubeMX peripheral initialization and task creation remain project-owned.
+# linker and CubeMX peripheral initialization remain project-owned.
 function(mr_target_robot_config)
-    cmake_parse_arguments(MR "" "TARGET;CONFIG;MODULE;BOARD_TARGET;PYTHON;OUTPUT_DIRECTORY" "" ${ARGN})
+    cmake_parse_arguments(MR "" "TARGET;CONFIG;MODULE;TASK;BOARD_TARGET;PYTHON;OUTPUT_DIRECTORY" "" ${ARGN})
     # PYTHON may be an empty optional cache entry.
     list(REMOVE_ITEM MR_KEYWORDS_MISSING_VALUES PYTHON)
     if(MR_UNPARSED_ARGUMENTS OR MR_KEYWORDS_MISSING_VALUES OR NOT MR_TARGET
@@ -41,9 +41,15 @@ function(mr_target_robot_config)
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
         "${_mr_config}" "${_mr_library}/docs/robot.schema.json"
         "${_mr_library}/tools/mrctl.py" "${_mr_library}/tools/robot_config.py"
+        "${_mr_library}/tools/task_generator.py"
         "${_mr_library}/tools/validate_robot_config.py" "${_mr_library}/cmake/targets.json")
+    set(_mr_task_args)
+    if(MR_TASK)
+        list(APPEND _mr_task_args --task "${MR_TASK}")
+    endif()
     execute_process(COMMAND "${MR_PYTHON}" "${_mr_library}/tools/mrctl.py"
         generate "${_mr_config}" --module "${MR_MODULE}" --output-dir "${MR_OUTPUT_DIRECTORY}"
+        ${_mr_task_args}
         RESULT_VARIABLE _mr_result OUTPUT_VARIABLE _mr_output ERROR_VARIABLE _mr_error)
     if(NOT _mr_result EQUAL 0)
         message(FATAL_ERROR "Robot configuration generation failed:\n${_mr_output}${_mr_error}")
@@ -63,6 +69,9 @@ function(mr_target_robot_config)
         endif()
     endforeach()
     target_include_directories(${MR_TARGET} PRIVATE "${MR_GENERATED_INCLUDE_DIR}")
+    if(MR_GENERATED_TASK_SOURCES)
+        target_sources(${MR_TARGET} PRIVATE ${MR_GENERATED_TASK_SOURCES})
+    endif()
     target_compile_definitions(${MR_TARGET} PRIVATE "MR_ROBOT_CAN_BINDING=${MR_GENERATED_CAN_BINDING}")
     target_link_libraries(${MR_TARGET} PRIVATE ${MR_BOARD_TARGET} ${MR_GENERATED_TARGETS})
     message(STATUS "Robot module '${MR_MODULE}': ${MR_GENERATED_TARGETS}; board ${_mr_profile}/${MR_GENERATED_CAN_BINDING}")

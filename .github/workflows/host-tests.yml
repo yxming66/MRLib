@@ -29,4 +29,4 @@ jobs:
       - name: Install robot config dependencies
         run: python -m pip install -r tools/requirements-config.txt
       - name: Run robot config and assembly tests
-        run: python -m unittest tools.test_robot_config tools.test_robot_generation -v
+        run: python -m unittest tools.test_robot_config tools.test_robot_generation tools.test_task_generation -v

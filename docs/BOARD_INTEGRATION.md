@@ -27,6 +27,12 @@ mr_target_robot_config(TARGET robot_firmware
 
 当前支持选定的单总线 RM 四轮底盘和 DM/LZ 串联机械臂。将生成的 `mr::generated::ChassisAssembly` 作为静态对象，注入该总线的 CanPort，调用 Register；app 继续负责反馈、命令、Step、CommitOutput 与 RM 分组 Flush。它不创建任务或自动使能；周期常量供 app 调度使用。生成的 `ArmAssembly` 持有电机 → MotorActuatorAdapter → JointT → Arm<N>，注入同一 CanPort 后调用 Init，再由 app 继续 UpdateFeedback、显式 Enable、Step 和 CommitOutput。N 按关节列表长度推导，零点仅在 JointT 处理，模型 position_offset 保持零。完整调用顺序参考 H7 app 和 `examples/device_execution`。
 
+## 可选的单周期任务
+
+在 `mr_target_robot_config()` 中额外传入 `TASK chassis`，等价于 CLI 的 `--task chassis`。生成器输出任务配置与创建连接并自动将 `robot_tasks.cpp` 加入固件编译；board 提供 CMSIS-RTOS2/FreeRTOS 头文件和实现。app 必须实现入口绑定及 Init/Step/Fault，board 在内核初始化后、启动前调用生成的 `MR_CreateConfiguredTask()` 并检查结果。此时不要重复创建同一个手写任务。
+
+首版只支持一个恰好拥有所选模块、services 为空的周期任务；动态分配需要 board 提供足够 heap。业务初始化仍在任务内运行，未生成多任务资源就绪屏障、通信或队列。具体文件、命令和边界见 [chassis_task](../examples/chassis_task/README.md)。默认 H7 整机示例继续使用原来的手写 RobotTask。
+
 ## 当前 H723 BSP 的可选帮助函数
 
 当前 User/bsp 的 HAL 句柄与端点映射属于既有 H723/zzrobot 板型，可用：

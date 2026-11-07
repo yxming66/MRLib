@@ -1,5 +1,7 @@
 # H723 独立固件集成示例
 
+如果先想看 YAML 如何生成一个 FreeRTOS 底盘任务，见 [chassis_task 示例](../chassis_task/README.md)。它通过本工程的 `MR_CHASSIS_TASK_EXAMPLE=ON` 选项独立构建；本页默认的底盘 + 机械臂 + 遥测装配仍使用手写 RobotTask。
+
 这个工程把当前库的真实代码接成完整 ELF/BIN：四个 RM M3508 → MotorWheel → 统一 Chassis，以及三个 DM J4310 → MotorActuatorAdapter → JointT → Arm<3>；MRLink 使用 USART1 DMA；一个 CMSIS-RTOS2 任务按 1 ms 调度控制、100 ms 发布遥测。
 
 这是部分生成装配基线，用来验证接口、依赖、启动文件、HAL/RTOS 和链接布局。RM 四轮底盘和 DM/LZ 串联机械臂的装配及参数从 YAML 生成；通信和任务创建仍手写。没有移植 zzrobot 的遥控策略、机械标定或整机业务。

@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.22)
 project(mr_h7_integration LANGUAGES C CXX ASM)
-set(MR_ROBOT_CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml" CACHE FILEPATH "Robot YAML input")
+option(MR_CHASSIS_TASK_EXAMPLE "Build the standalone generated chassis task example" OFF)
+if(MR_CHASSIS_TASK_EXAMPLE)
+    set(_mr_default_config "${CMAKE_CURRENT_SOURCE_DIR}/../chassis_task/config.yaml")
+else()
+    set(_mr_default_config "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml")
+endif()
+set(MR_ROBOT_CONFIG "${_mr_default_config}" CACHE FILEPATH "Robot YAML input")
 set(MR_CONFIG_PYTHON "" CACHE FILEPATH "Python interpreter with config validation dependencies")
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -65,15 +71,25 @@ target_include_directories(user_all_compile_check PRIVATE "${MR_LIBRARY_ROOT}/Us
 target_compile_options(user_all_compile_check PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 
-add_executable(mr_h7_integration board/main.c app/robot.cpp)
+if(MR_CHASSIS_TASK_EXAMPLE)
+    add_executable(mr_h7_integration board/main.c ../chassis_task/app/chassis_task.cpp)
+    target_compile_definitions(mr_h7_integration PRIVATE MR_CHASSIS_TASK_EXAMPLE)
+else()
+    add_executable(mr_h7_integration board/main.c app/robot.cpp)
+endif()
 set_target_properties(mr_h7_integration PROPERTIES SUFFIX ".elf")
 target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 target_link_libraries(mr_h7_integration PRIVATE cube_platform cube_sources
     mr::component_mrlink mr::component_timer m)
-mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
-    MODULE all BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
+if(MR_CHASSIS_TASK_EXAMPLE)
+    mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
+        MODULE chassis TASK chassis BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
+else()
+    mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
+        MODULE all BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
+endif()
 target_link_options(mr_h7_integration PRIVATE
     "-T${CMAKE_CURRENT_SOURCE_DIR}/board/stm32h723.ld"
     --specs=nano.specs --specs=nosys.specs

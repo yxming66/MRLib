@@ -2,6 +2,8 @@
 
 本目录的旧整机任务、配置和 `user_task.h` 已移除。库不再默认创建某台机器人的线程、队列、电源和全局对象。
 
+`periodic_task.hpp` 提供显式选择的 CMSIS-RTOS2 周期任务外壳，用于项目的 FreeRTOS 内核。调用者提供 Init/Step/Fault 回调和配置；只有项目调用 Create 才会创建线程。任务在内核启动前创建，初始化和业务回调在任务内执行；不拥有机器人模块或板级资源。具体的 YAML → 配置 → 手写底盘业务例子见 [chassis_task](../../examples/chassis_task/README.md)。首版只有单个周期任务生成，不恢复旧的全局队列和整机任务集合。
+
 提取出的可复用能力：
 
 - `module/attitude/attitude.hpp`：接收 IMU 快照的姿态估计；`component/attitude/gyro_bias.hpp`：连续静止样本的零偏校准。

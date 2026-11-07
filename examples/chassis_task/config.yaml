@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../docs/robot.schema.json
+# 单独的底盘任务示例。所有数值仅用于演示；默认禁止电机发送和自动使能。
+version: 2
+project:
+  name: mr_chassis_task_example
+  library: ../..
+board:
+  profile: h723_zzrobot
+  cube_root: ../../../../board-H7/zzrobot
+  bindings:
+    can: {motor_can: BSP_CAN_1}
+    uart: {}
+runtime:
+  allow_motor_tx: false
+  auto_enable: false
+devices:
+  motors:
+    wheel_fr: {kind: rm, model: M3508, bus: motor_can, feedback_id: 0x201, reverse: false, external_ratio: 1.0, feedback_timeout_ms: 20}
+    wheel_fl: {kind: rm, model: M3508, bus: motor_can, feedback_id: 0x202, reverse: false, external_ratio: 1.0, feedback_timeout_ms: 20}
+    wheel_rl: {kind: rm, model: M3508, bus: motor_can, feedback_id: 0x203, reverse: false, external_ratio: 1.0, feedback_timeout_ms: 20}
+    wheel_rr: {kind: rm, model: M3508, bus: motor_can, feedback_id: 0x204, reverse: false, external_ratio: 1.0, feedback_timeout_ms: 20}
+  wheels:
+    front_right: {motor: wheel_fr, radius_m: 0.1}
+    front_left: {motor: wheel_fl, radius_m: 0.1}
+    rear_left: {motor: wheel_rl, radius_m: 0.1}
+    rear_right: {motor: wheel_rr, radius_m: 0.1}
+  joints: {}
+modules:
+  chassis:
+    type: chassis
+    model: mecanum
+    wheels: [front_right, front_left, rear_left, rear_right]
+    geometry: {half_wheelbase_m: 0.4, half_trackwidth_m: 0.4}
+    limits: {vx_mps: 2.0, vy_mps: 2.0, wz_rad_s: 2.0, max_wheel_speed_mps: 3.0}
+    feedback_timeout_ms: 20
+    wheel_velocity_pid: {k: 1.0, p: 1.0, i: 0.0, d: 0.0, output_limit_nm: 2.0}
+communications: {}
+tasks:
+  chassis:
+    period_us: 2000         # 每 2 ms 调用一次 app 的 Step，dt=0.002 s
+    stack_bytes: 4096       # 字节，不是 FreeRTOS 的栈字数
+    priority: normal
+    entry: app.chassis_cycle
+    owns_modules: [chassis]
+    services: []
+extensions: {}

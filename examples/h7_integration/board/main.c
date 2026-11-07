@@ -7,7 +7,11 @@
 #include "tim.h"
 #include "usart.h"
 
+#ifdef MR_CHASSIS_TASK_EXAMPLE
+#include "robot_tasks.h"
+#else
 extern void RobotTask(void* argument);
+#endif
 _Static_assert(HSE_VALUE == 24000000UL, "This board clock requires a 24 MHz HSE");
 
 /* Clock parameters match the read-only zzrobot H723 Cube board (24 MHz HSE).
@@ -67,8 +71,12 @@ int main(void) {
   MX_TIM4_Init();
   MX_TIM1_Init();
   if (osKernelInitialize() != osOK) Error_Handler();
+#ifdef MR_CHASSIS_TASK_EXAMPLE
+  if (!MR_CreateConfiguredTask()) Error_Handler();
+#else
   const osThreadAttr_t task = {.name = "robot", .stack_size = 32768, .priority = osPriorityNormal};
   if (!osThreadNew(RobotTask, NULL, &task)) Error_Handler();
+#endif
   if (osKernelStart() != osOK) Error_Handler();
   Error_Handler();
   return 0;

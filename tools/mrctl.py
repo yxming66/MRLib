@@ -417,6 +417,7 @@ def main() -> int:
     generate_command.add_argument("--module", required=True,
                                   help="module name, comma-separated names, or all")
     generate_command.add_argument("--output-dir", type=Path, default=None)
+    generate_command.add_argument("--task", help="generate one periodic task owning the selected modules")
     for name in ("configure", "build"):
         command = commands.add_parser(name)
         command.add_argument("directory", type=Path)
@@ -431,11 +432,11 @@ def main() -> int:
             parser.error(f"v2 generation requires tools/requirements-config.txt: {error}")
         try:
             output = generate(args.config, args.output_dir or args.config.parent / "generated",
-                              args.module)
+                              args.module, args.task)
         except (OSError, ValueError) as error:
             parser.error(str(error))
         print(f"generated robot modules {args.module}: {output}")
-        print("scope: selected RM chassis and DM/LZ serial arm; communication and tasks remain app-owned")
+        print("scope: selected assemblies and optional periodic task; business logic remains app-owned")
         return 0
     if args.command == "init":
         targets = [item.strip() for item in args.targets.split(",") if item.strip()]
