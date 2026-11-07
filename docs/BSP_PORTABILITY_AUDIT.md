@@ -8,7 +8,9 @@
 | FDCAN | 项目可选择 BSP_CAN_1/2/3，具体 hfdcan1/2/3、过滤与资源布局仍在 H723 BSP | 待迁移句柄及控制器参数到 board，不承诺任意板型 |
 | SPI | BSP_SPI_BMI088 固定 hspi2/SPI2，BMI088 使用固定 SPI/CS | 待拆端点登记、设备注入及总线/CS 所有权 |
 | GPIO | GPIO_Map 包含 IMU CS/IRQ、电源、按键和矿石/矛头继电器等用途 | 待移入 board 并整理重复项 |
-| PWM | 固定蜂鸣器、加热、两路舵机的 TIM/通道 | 待移入 board，处理共享定时器频率约束 |
+| PWM | 已删除业务枚举和固定 htim，board 登记时钟/通道，设备显式选择 | 共享 timer 禁止单通道改频；当前支持 PWM1 向上计数、CH1..4；不支持波形 DMA |
 | 时基 | time.c 依赖 H723 TIM2 + HAL tick | 其他板型需提供明确实现 |
 
-本批只完成 UART。其他行是已确认待办，不应归为“板级配置已完成”。外部 rm_balance/zzrobot/RC_02 未修改。
+UART/PWM 已完成板级登记拆分；FDCAN/SPI/GPIO/时基仍是已确认待办，不应归为“板级配置已完成”。外部 rm_balance/zzrobot/RC_02 未修改。
+
+PWM 接入与迁移见 [PWM_BINDINGS.md](PWM_BINDINGS.md)。

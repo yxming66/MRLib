@@ -12,6 +12,8 @@ typedef struct {
   BSP_PWM_Channel_t channel;
 } BUZZER_t;
 // Hardware output only; scheduling and playlists live in module/audio.
+// Channel must be board-registered. Tone changes need an exclusive timer with
+// allow_frequency_change; init fails if its initial stop fails.
 int8_t BUZZER_Init(BUZZER_t* buzzer, BSP_PWM_Channel_t channel);
 int8_t BUZZER_Start(BUZZER_t* buzzer);
 int8_t BUZZER_Stop(BUZZER_t* buzzer);

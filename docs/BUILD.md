@@ -11,7 +11,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 31 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 32 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
 
 滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试未验证真实 CAN 外设、STM32 固件链接与板级运行。
 
@@ -98,3 +98,5 @@ py -3 tools/check_user_io_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrob
 H7 使用普通 C++ 手写装配：app/robot_params.hpp 管理参数，app/chassis_assembly.hpp、arm_assembly.hpp 连接设备，board/bindings.hpp 选择硬件。任务与线程存储由项目显式维护。库 target 自动传递编译依赖；详见 [板级接入](BOARD_INTEGRATION.md)。
 
 旧 GUI 勾选配置、两套项目 YAML/Schema、Python 装配/任务生成、JSON target 清单及 mrctl 已删除。公共依赖只在 CMake 中维护；初始来源 manifest 仍保留历史记录。
+
+PWM/蜂鸣器回归编译真实源，覆盖端点登记、共享 timer 改频拒绝、16/32 位计数、脉宽/占空比边界和 HAL 错误。板级登记和迁移见 [PWM 接入](PWM_BINDINGS.md)。

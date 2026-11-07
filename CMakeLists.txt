@@ -21,6 +21,16 @@ include("${CMAKE_CURRENT_LIST_DIR}/cmake/MrTargets.cmake")
 if(MR_TESTLIB_BUILD_HOST_TESTS)
     enable_testing()
 
+    add_executable(mr_pwm_host_tests tests/bsp/pwm_host_tests.c User/bsp/pwm.c User/device/buzzer.c)
+    target_include_directories(mr_pwm_host_tests BEFORE PRIVATE tests/stubs/pwm User)
+    target_compile_features(mr_pwm_host_tests PRIVATE c_std_11)
+    target_compile_options(mr_pwm_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)
+    if(UNIX)
+        target_link_libraries(mr_pwm_host_tests PRIVATE m)
+    endif()
+    add_test(NAME mr_pwm_host_tests COMMAND mr_pwm_host_tests)
+
     add_executable(mr_manual_assembly_host_tests tests/integration/manual_assembly_host_tests.cpp)
     target_include_directories(mr_manual_assembly_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/tests")
     target_link_libraries(mr_manual_assembly_host_tests PRIVATE

@@ -51,7 +51,7 @@ set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${MR_LIBRARY_ROOT}" mr_library)
 include("${MR_LIBRARY_ROOT}/cmake/MrStm32H7.cmake")
 mr_add_stm32h7_bsp(TARGET user_board PLATFORM cube_platform PROFILE h723_zzrobot
-    COMPONENTS can mrlink)
+    COMPONENTS can mrlink pwm)
 target_compile_options(user_board PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 
 # Compile every production User implementation, including optional peripherals.
@@ -71,7 +71,7 @@ else()
     add_executable(mr_h7_integration board/main.c app/robot.cpp)
 endif()
 set_target_properties(mr_h7_integration PROPERTIES SUFFIX ".elf")
-target_sources(mr_h7_integration PRIVATE board/uart_endpoints.c)
+target_sources(mr_h7_integration PRIVATE board/uart_endpoints.c board/pwm_endpoints.c)
 target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)

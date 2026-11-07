@@ -1,6 +1,6 @@
 # 音乐项目接入示例
 
-1. board 初始化 PWM，app 调用 `BUZZER_Init` 并检查结果。
+1. board 初始化并通过 BSP_PWM_Configure 登记 PWM；蜂鸣器选择允许变频的独占 timer，app 将 BSP_PWM_FindEndpoint 的结果传给 BUZZER_Init 并检查结果。见 [PWM 接入](../../docs/PWM_BINDINGS.md)。
 2. 链接 `mr::module_cloudmusic`，将 `resources/music/nokia.c` 等选用的曲目添加到应用 target。
 3. app 保存播放器和播放列表，并提供同步输出回调。`app/buzzer_sink.h` 展示了现有蜂鸣器设备的接法。
 

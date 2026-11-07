@@ -14,6 +14,7 @@ h7_integration/
 │  ├─ main.c                # 时钟、Cube 初始化、静态线程创建
 │  ├─ bindings.hpp          # CAN 和遥测 UART 用途
 │  ├─ uart_endpoints.c      # 已初始化的真实 UART 句柄清单
+│  ├─ pwm_endpoints.c       # PWM 通道、时钟及共享 timer 约束
 │  └─ stm32h723.ld           # 链接布局
 └─ app/
    ├─ robot_params.hpp      # 几何、PID、限位、零点、周期、发送许可
@@ -69,10 +70,12 @@ Flash 从 0x08000000 起 1 MiB，数据/BSS/RTOS heap/应用静态栈/MSP 在 0x
 
 应用线程栈/控制块静态提供：robot 32 KiB；独立底盘任务 4 KiB。外部 FreeRTOS heap 仍为 72 KiB，供 BSP 队列等现有分配使用，链接另预留 newlib heap 8 KiB 与 MSP 16 KiB。静态栈不会减少现有 heap 预留，因此本轮 RAM 总量比原动态任务版本增加；项目可在实测后调整 heap/栈预算，不能据此宣称全工程无堆。
 
-UART 在 main 的 Cube 初始化后登记；其他 BSP/设备注册在任务内。控制对象静态持有，注册不使能。默认 app::params::kAllowMotorTx=false，端口拒绝电机 TX，遥测仍工作。若显式修改发送许可，仍须新的 request_run 请求及真实有效反馈才能使能；没有串口使能命令。故障停止并锁住，需要撤销请求后重新请求。示例仅零底盘速度与机械臂保持。
+UART/PWM 在 main 的 Cube 初始化后登记；其他 BSP/设备注册在任务内。控制对象静态持有，注册不使能。默认 app::params::kAllowMotorTx=false，端口拒绝电机 TX，遥测仍工作。若显式修改发送许可，仍须新的 request_run 请求及真实有效反馈才能使能；没有串口使能命令。故障停止并锁住，需要撤销请求后重新请求。示例仅零底盘速度与机械臂保持。
 
 参数均为演示值；DM MIT 量程必须匹配固件，external_ratio 仅表示额外机构减速；厂家内部减速已体现在 DM/LZ 协议物理量，不重复相乘。机械臂无重力补偿。
 
 ## 验证边界
 
 手写装配使用同一代码参与主机真实电机协议集成回归；HAL/RTOS 通过目标固件编译与链接验证。未烧录、未测量栈高水位、任务时序、DMA/IRQ 或真实故障停机；仍需对应板级验收。其他 BSP 固定映射见 [核查表](../../docs/BSP_PORTABILITY_AUDIT.md)。
+
+PWM 清单与用途分开：pwm_endpoints.c 只登记 tim12_ch2/tim3_ch4/tim1_ch1/tim1_ch3，bindings.hpp 选择蜂鸣器/加热/舵机用途。共享 TIM1 不允许单路改频。登记不启动输出；详见 [PWM 接入](../../docs/PWM_BINDINGS.md)。

@@ -14,12 +14,10 @@ int8_t BUZZER_Init(BUZZER_t *buzzer, BSP_PWM_Channel_t channel) {
         return DEVICE_ERR;
     }
 
+    buzzer->header.online = false;
+    if (!BSP_PWM_GetHandle(channel) || BSP_PWM_Stop(channel) != BSP_OK) return DEVICE_ERR;
     buzzer->channel = channel;
-    buzzer->header.online = true;
-    buzzer->header.last_online_time = BSP_TIME_Get_ms();
-
-    BUZZER_Stop(buzzer);
-
+    BUZZER_Update(buzzer);
     return DEVICE_OK;
 }
 
@@ -46,17 +44,11 @@ int8_t BUZZER_Set(BUZZER_t *buzzer, float freq, float duty_cycle) {
         return DEVICE_ERR;
     }
 
-    int result = DEVICE_OK;
+    if (!isfinite(freq) || freq <= 0 || !isfinite(duty_cycle)) return DEVICE_ERR;
+    if (BSP_PWM_SetFreq(buzzer->channel, freq) != BSP_OK) return DEVICE_ERR;
+    if (BSP_PWM_SetComp(buzzer->channel, duty_cycle) != BSP_OK) return DEVICE_ERR;
     BUZZER_Update(buzzer);
-    if (BSP_PWM_SetFreq(buzzer->channel, freq) != BSP_OK) {
-        result = DEVICE_ERR;
-    }
-
-    if (BSP_PWM_SetComp(buzzer->channel, duty_cycle) != BSP_OK) {
-        result = DEVICE_ERR;
-    }
-
-    return result;
+    return DEVICE_OK;
 }
 
 float BUZZER_CalcFreq(NOTE_t note, uint8_t octave) {
