@@ -1,5 +1,5 @@
 // Board-owned hardware inventory. Cube initializes these handles/peripherals.
-// This table has no RC/PC/referee roles; config.yaml assigns project uses.
+// This table has no RC/PC/referee roles; bindings.hpp assigns project uses.
 #include "bsp/uart.h"
 #include "usart.h"
 

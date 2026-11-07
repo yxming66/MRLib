@@ -1,10 +1,13 @@
-// 手写业务文件：修改这里，重新生成不会覆盖。
+// Project-owned task and business logic. Copy and edit directly.
 #include <array>
-#include <cstring>
 #include "bsp/adapters/can_port.hpp"
 #include "bsp/time.h"
-#include "robot_config.hpp"
-#include "robot_tasks.hpp"
+#include "../../h7_integration/app/chassis_assembly.hpp"
+#include "../../h7_integration/board/bindings.hpp"
+#include "task/periodic_task.hpp"
+#include "task_params.hpp"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "../../device_execution/app/rm_chassis_cycle.hpp"
 
 namespace {
@@ -18,7 +21,7 @@ volatile bool stop_failed = false;
 
 class MotorPort final : public mr::motor::CanPort {
  public:
-  mr::board::BspCanPort actual{MR_ROBOT_CAN_BINDING, BSP_TIME_Get_ms};
+  mr::board::BspCanPort actual{board::bindings::kMotorCan, BSP_TIME_Get_ms};
   uint32_t NowMs() const override { return actual.NowMs(); }
   int8_t RegisterLatest(uint32_t id) override { return actual.RegisterLatest(id); }
   int8_t RegisterQueue(uint32_t id, uint8_t n) override { return actual.RegisterQueue(id, n); }
@@ -26,7 +29,7 @@ class MotorPort final : public mr::motor::CanPort {
   int8_t ReadLatest(uint32_t id, mr::motor::CanFrame& frame) override { return actual.ReadLatest(id, frame); }
   int8_t ReadNext(uint32_t id, mr::motor::CanFrame& frame) override { return actual.ReadNext(id, frame); }
   int8_t Send(const mr::motor::CanFrame& frame) override {
-    if constexpr (mr::generated::ChassisAssembly::kAllowMotorTx) return actual.Send(frame);
+    if constexpr (app::params::kAllowMotorTx) return actual.Send(frame);
     (void)frame;
     return DEVICE_ERR;
   }
@@ -42,7 +45,7 @@ class ChassisApplication {
   // 在任务内执行一次；这里不使能电机。
   bool Init() {
     if (BSP_FDCAN_Init() != BSP_OK) return false;
-    return drive_.Register() == ChassisStatus::kOk;
+    return drive_.Register(chassis_example::kTaskConfig.period_us) == ChassisStatus::kOk;
   }
 
   // 每个周期执行一次：读命令 → 检查使能 → 反馈/控制/提交。
@@ -72,10 +75,9 @@ class ChassisApplication {
   bool HasFreshFeedback() {
     mr::wheel::WheelFeedback feedback;
     const uint32_t now = port_.NowMs();
-    for (auto* wheel : std::array<mr::wheel::WheelDevice*, 4>{
-             &drive_.wheel_0, &drive_.wheel_1, &drive_.wheel_2, &drive_.wheel_3}) {
+    for (auto* wheel : drive_.Wheels()) {
       if (wheel->UpdateFeedback(feedback) != DEVICE_OK || !feedback.online ||
-          now - feedback.timestamp_ms > drive_.Config().feedback_timeout_ms)
+          now - feedback.timestamp_ms > app::params::kMotorFeedbackTimeoutMs)
         return false;
     }
     return true;
@@ -89,20 +91,27 @@ class ChassisApplication {
     return relaxed && sent;
   }
   MotorPort port_;
-  mr::generated::ChassisAssembly drive_{port_};
+  app::ChassisAssembly drive_{port_};
   bool running_ = false;
 };
 
 ChassisApplication chassis;
 }  // namespace
 
-// YAML 中 app.chassis_cycle 对应的明确绑定。拼错入口会使创建失败。
-namespace mr::app {
-mr::task::TaskHooks BindPeriodicTask(const char* entry) {
-  if (std::strcmp(entry, "app.chassis_cycle") != 0) return {};
-  return {&chassis,
-          [](void* p) { return static_cast<ChassisApplication*>(p)->Init(); },
-          [](void* p, float dt_s) { return static_cast<ChassisApplication*>(p)->Step(dt_s); },
-          [](void* p, mr::task::TaskFault reason) { static_cast<ChassisApplication*>(p)->Fault(reason); }};
+// Direct typed wiring: no entry-name registry or generated binding function.
+extern "C" int App_CreateChassisTask(void) {
+  static mr::task::PeriodicTask task;
+  static StaticTask_t control_block;
+  alignas(8) static StackType_t stack[chassis_example::kTaskConfig.stack_bytes / sizeof(StackType_t)];
+  osThreadAttr_t storage{};
+  storage.cb_mem = &control_block;
+  storage.cb_size = sizeof(control_block);
+  storage.stack_mem = stack;
+  storage.stack_size = sizeof(stack);
+  const mr::task::TaskHooks hooks{
+      &chassis,
+      [](void* p) { return static_cast<ChassisApplication*>(p)->Init(); },
+      [](void* p, float dt_s) { return static_cast<ChassisApplication*>(p)->Step(dt_s); },
+      [](void* p, mr::task::TaskFault reason) { static_cast<ChassisApplication*>(p)->Fault(reason); }};
+  return task.Create(chassis_example::kTaskConfig, hooks, storage) ? 1 : 0;
 }
-}  // namespace mr::app

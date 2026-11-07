@@ -28,12 +28,17 @@ class PeriodicTask final {
   PeriodicTask& operator=(const PeriodicTask&) = delete;
 
   // Call once between osKernelInitialize and osKernelStart. No worker can run
-  // before all project startup calls have completed. Dynamic kernel allocation;
-  // FreeRTOS heap capacity remains the board project's responsibility.
-  bool Create(const PeriodicTaskConfig& config, TaskHooks hooks) {
+  // before all project startup calls have completed. The project supplies the
+  // static thread control block and stack through CMSIS attributes. No heap
+  // fallback. Buffer alignment/control-block size follow the selected RTOS port.
+  bool Create(const PeriodicTaskConfig& config, TaskHooks hooks,
+              const osThreadAttr_t& storage) {
     if (created_ || osKernelGetState() != osKernelReady || !config.name ||
         !config.name[0] || !config.period_us || config.stack_bytes < 512u ||
-        config.stack_bytes % 8u || !hooks.init || !hooks.step || !hooks.fault)
+        config.stack_bytes % 8u || !hooks.init || !hooks.step || !hooks.fault ||
+        !storage.cb_mem || !storage.cb_size || !storage.stack_mem ||
+        storage.stack_size < config.stack_bytes ||
+        reinterpret_cast<uintptr_t>(storage.stack_mem) % 8u)
       return false;
     const uint64_t scaled = uint64_t{config.period_us} * osKernelGetTickFreq();
     if (!scaled || scaled % 1000000u || scaled / 1000000u >= 0x80000000u)
@@ -45,6 +50,9 @@ class PeriodicTask final {
     attr.name = config.name;
     attr.stack_size = config.stack_bytes;
     attr.priority = config.priority;
+    attr.cb_mem = storage.cb_mem;
+    attr.cb_size = storage.cb_size;
+    attr.stack_mem = storage.stack_mem;
     handle_ = osThreadNew(Entry, this, &attr);
     created_ = handle_ != nullptr;
     return created_;

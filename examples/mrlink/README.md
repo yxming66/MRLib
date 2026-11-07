@@ -9,7 +9,7 @@
 1. HAL/Cube 初始化 UART、normal DMA 和相关中断；board 调用 BSP_UART_Configure 登记命名硬件端点，详见 [UART 绑定](../../docs/UART_BINDINGS.md)。中断优先级应满足所用 RTOS 的 ISR API 限制。
 2. 把 ChannelAndLink、BMI088/DR16 等 DMA 缓冲放在控制器可达内存，Cacheable 缓冲独占整行。
    初始化静态 DmaPolicy 与 DmaRegion 表，调用 BSP_DMA_Configure(board::SynchronizeDma, &policy)。
-3. 声明长期存活且禁止复制的 board::ChannelAndLink，检查 Begin(BSP_UART_FindEndpoint("usart1")) 返回值；使用 YAML 时可传生成的逻辑端点查找结果。
+3. 声明长期存活且禁止复制的 board::ChannelAndLink，检查 Begin(BSP_UART_FindEndpoint("usart1")) 返回值；用途名称可在项目 board/bindings.hpp 集中定义。
    若它在初始化通道后启动失败，仍须 Stop 成功才能释放。
 4. 在同一消费任务注册 link.OnLatest<app::Telemetry>()，循环调用 link.Poll()，
    通过 CopyLatest(&value, &sequence) 获取新快照。要发送时调用 link.Publish(app::Telemetry{...})，

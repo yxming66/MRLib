@@ -11,7 +11,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 29 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 31 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
 
 滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试未验证真实 CAN 外设、STM32 固件链接与板级运行。
 
@@ -21,15 +21,15 @@ RM 命令组测试检查 M2006/M3508/GM6020 的地址映射、四槽大端帧编
 
 ## 新建主机项目
 
-```powershell
-py -3 tools/mrctl.py init build/demo --name robot_demo `
-  --library ../.. `
-  --targets mr_robotics_arm,mr_module_chassis
-py -3 tools/mrctl.py configure build/demo
-py -3 tools/mrctl.py build build/demo
+复制或阅读 examples/host_project 的普通 CMakeLists.txt 和 app/main.cpp，设置库路径，直接运行：
+
+```sh
+cmake -S examples/host_project -B build/manual-consumer -G Ninja
+cmake --build build/manual-consumer
+ctest --test-dir build/manual-consumer --output-on-failure
 ```
 
-`project.yaml` 保存选定的 target；`mrctl configure` 将它们对应的 public header 检查生成到 build 目录，再运行普通的 CMake 配置。生成文件只放在构建目录，`init` 不覆盖已有源文件。更多 target、配置校验和限制见 [项目快速构建](PROJECT_CONFIG.md)。
+不需要 Python、YAML、生成头或 CLI。所有 target 的源、include 与依赖直接定义在 cmake/MrTargets.cmake；新增功能只更新对应 CMake 声明。
 
 ## 作为子目录使用
 
@@ -59,7 +59,7 @@ target_link_libraries(robot_firmware PRIVATE
 
 库 target 会传递 `User` 头文件路径和已声明的依赖。目标工程仍负责 HAL、RTOS、启动文件、链接脚本、BSP 与具体设备适配。
 
-timer 已登记为 mr::component_timer；姿态估计与告警服务尚未登记为 CLI 可选 target；手工接入时显式添加所需实现。C++ 低通/陷波和告警为头文件实现；C 滤波 API 需编译 `User/component/filter/filter.c`，timer 需 `User/component/timer.cpp`，姿态估计需 `User/component/ahrs.c`，并设置 `User` 为 include 路径。详细接口、单位和迁移变化见 [基础服务接口](USER_SERVICES.md)。
+timer 已登记为 mr::component_timer；姿态估计与告警服务尚未登记为独立 target；手工接入时显式添加所需实现。C++ 低通/陷波和告警为头文件实现；C 滤波 API 需编译 `User/component/filter/filter.c`，timer 需 `User/component/timer.cpp`，姿态估计需 `User/component/ahrs.c`，并设置 `User` 为 include 路径。详细接口、单位和迁移变化见 [基础服务接口](USER_SERVICES.md)。
 
 共享 PID 核心为 `component/controller/pid_core.h`，C11 和 C++17 均可使用，无需额外源文件；C++ `pid.hpp` 通过既有 `mr::component_controller` 使用。旧 `PID_Init/Calc/Reset` 入口需显式编译 `User/component/pid.c`；PID 自身不再需要链接 `filter.c`，滤波计算直接复用头文件核心。
 
@@ -95,6 +95,6 @@ py -3 tools/check_user_io_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrob
 
 完整链接已经验证；烧录、Cache 开启与真实控制验收尚未完成。这个示例只覆盖选定的实际装配，不表示所有可选功能组合都已链接验证。详细构建步骤、板级前提与待验收项目见示例 README。
 
-H7 已接入 config.yaml v2 生成：RM 四轮底盘、DM/LZ 串联机械臂设备/模型/增益/周期和库 target 自动装配，修改 YAML 后普通 CMake build 即可更新。`cmake/MrRobot.cmake` 为已有固件 target 接入生成配置，`cmake/MrStm32H7.cmake` 可选取当前 H723 BSP 源依赖。通信、任务创建与 Cube/HAL/启动/链接继续由项目维护；详见 [板级接入](BOARD_INTEGRATION.md)。
+H7 使用普通 C++ 手写装配：app/robot_params.hpp 管理参数，app/chassis_assembly.hpp、arm_assembly.hpp 连接设备，board/bindings.hpp 选择硬件。任务与线程存储由项目显式维护。库 target 自动传递编译依赖；详见 [板级接入](BOARD_INTEGRATION.md)。
 
-旧 GUI 使用的 `User/bsp/bsp_config.yaml`、`User/component/component_config.yaml`、`User/device/device_config.yaml` 已删除；它们与当前 BSP 不匹配且没有仓库内消费者。当前 target 与依赖清单以 `cmake/targets.json` 为准，项目 YAML 以 `docs/project.schema.json` 为准；来源 manifest 仍保留历史文件记录。
+旧 GUI 勾选配置、两套项目 YAML/Schema、Python 装配/任务生成、JSON target 清单及 mrctl 已删除。公共依赖只在 CMake 中维护；初始来源 manifest 仍保留历史记录。

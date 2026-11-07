@@ -9,14 +9,15 @@
 #include "device/wheel/wheel.hpp"
 #include "module/arm/arm.hpp"
 #include "module/chassis/chassis.hpp"
-#include "robot_config.hpp"
-#include "board_bindings.hpp"
+#include "arm_assembly.hpp"
+#include "chassis_assembly.hpp"
+#include "../board/bindings.hpp"
 
 namespace {
 using namespace mr::motor;
 using mr::module::chassis::ChassisStatus;
-using Arm = mr::generated::ArmAssembly::ArmType;
-constexpr float kDtSeconds = mr::generated::ChassisAssembly::kDtSeconds;
+using Arm = app::ArmAssembly::ArmType;
+constexpr float kDtSeconds = app::params::kControlPeriodUs / 1000000.0f;
 
 // Development request only: no remote message can enable this example.
 // The default build rejects motor TX at the port as well as keeping Enable off.
@@ -25,7 +26,7 @@ volatile uint32_t cycles = 0, faults = 0, tx_rejected = 0, link_tx_failed = 0;
 volatile int8_t last_error = 0;
 class MotorPort final : public CanPort {
  public:
-  mr::board::BspCanPort actual{MR_ROBOT_CAN_BINDING, BSP_TIME_Get_ms};
+  mr::board::BspCanPort actual{board::bindings::kMotorCan, BSP_TIME_Get_ms};
   uint32_t NowMs() const override { return actual.NowMs(); }
   int8_t RegisterLatest(uint32_t id) override { return actual.RegisterLatest(id); }
   int8_t RegisterQueue(uint32_t id, uint8_t n) override { return actual.RegisterQueue(id, n); }
@@ -33,7 +34,7 @@ class MotorPort final : public CanPort {
   int8_t ReadLatest(uint32_t id, CanFrame& f) override { return actual.ReadLatest(id, f); }
   int8_t ReadNext(uint32_t id, CanFrame& f) override { return actual.ReadNext(id, f); }
   int8_t Send(const CanFrame& f) override {
-    if constexpr (mr::generated::ChassisAssembly::kAllowMotorTx) return actual.Send(f);
+    if constexpr (app::params::kAllowMotorTx) return actual.Send(f);
     (void)f;
     ++tx_rejected;
     return DEVICE_ERR;
@@ -42,8 +43,8 @@ class MotorPort final : public CanPort {
 
 struct Robot {
   MotorPort port;
-  mr::generated::ChassisAssembly drive{port};
-  mr::generated::ArmAssembly manipulator{port};
+  app::ChassisAssembly drive{port};
+  app::ArmAssembly manipulator{port};
   RmCommandBus& rm = drive.commands;
   mr::module::chassis::Chassis& chassis = drive.chassis;
   Arm& arm = manipulator.arm;
@@ -51,10 +52,9 @@ struct Robot {
   bool running = false, previous_request = false, fault = false;
 
   bool Init() {
-    if (drive.Register() != ChassisStatus::kOk) return false;
+    if (drive.Register(app::params::kControlPeriodUs) != ChassisStatus::kOk) return false;
     if (manipulator.Init() != DEVICE_OK) return false;
-    return mr::generated::ValidateUartBindings() &&
-           telemetry.Begin(mr::generated::CommunicationUart("telemetry")) == MRLINK_OK;
+    return telemetry.Begin(BSP_UART_FindEndpoint(board::bindings::kTelemetryUart)) == MRLINK_OK;
   }
   void Stop() {
     running = false;
@@ -68,8 +68,7 @@ struct Robot {
   bool Start() {
     // Reuse the same fresh-feedback clock as BSP reception. Do not fabricate it.
     mr::wheel::WheelFeedback feedback;
-    for (auto* wheel : std::array<mr::wheel::WheelDevice*, 4>{
-             &drive.wheel_0, &drive.wheel_1, &drive.wheel_2, &drive.wheel_3})
+    for (auto* wheel : drive.Wheels())
       if (wheel->UpdateFeedback(feedback) != DEVICE_OK || !feedback.online) return false;
     if (arm.UpdateFeedback() != DEVICE_OK || arm.Enable() != DEVICE_OK) return false;
     return chassis.Enable() == ChassisStatus::kOk;
@@ -118,19 +117,16 @@ board::DmaPolicy dma_policy{regions, 1};
 }  // namespace
 
 extern "C" void RobotTask(void*) {
-  static_assert(mr::generated::ArmAssembly::kPeriodUs ==
-                    mr::generated::ChassisAssembly::kPeriodUs,
-                "Example uses one task for chassis and arm; periods must match");
-  static_assert(mr::generated::ChassisAssembly::kPeriodUs % 1000u == 0u,
+  static_assert(app::params::kControlPeriodUs % 1000u == 0u,
                 "Example scheduler requires whole milliseconds at 1000 Hz");
-  constexpr uint32_t kPeriodTicks = mr::generated::ChassisAssembly::kPeriodUs / 1000u;
+  constexpr uint32_t kPeriodTicks = app::params::kControlPeriodUs / 1000u;
   BSP_DMA_Configure(board::SynchronizeDma, &dma_policy);
   if (osKernelGetTickFreq() != 1000u || BSP_FDCAN_Init() != BSP_OK || !robot.Init()) {
     last_error = DEVICE_ERR;
     for (;;) (void)osDelay(1000);
   }
   mr::component::time::Periodic telemetry_period;
-  telemetry_period.Configure(100, BSP_TIME_Get_ms(), false);
+  telemetry_period.Configure(app::params::kTelemetryPeriodMs, BSP_TIME_Get_ms(), false);
   uint16_t sequence = 0;
   uint32_t next = osKernelGetTickCount();
   for (;;) {

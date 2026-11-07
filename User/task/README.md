@@ -2,7 +2,7 @@
 
 本目录的旧整机任务、配置和 `user_task.h` 已移除。库不再默认创建某台机器人的线程、队列、电源和全局对象。
 
-`periodic_task.hpp` 提供显式选择的 CMSIS-RTOS2 周期任务外壳，用于项目的 FreeRTOS 内核。调用者提供 Init/Step/Fault 回调和配置；只有项目调用 Create 才会创建线程。任务在内核启动前创建，初始化和业务回调在任务内执行；不拥有机器人模块或板级资源。具体的 YAML → 配置 → 手写底盘业务例子见 [chassis_task](../../examples/chassis_task/README.md)。首版只有单个周期任务生成，不恢复旧的全局队列和整机任务集合。
+`periodic_task.hpp` 是可选的 CMSIS-RTOS2 周期执行器，项目直接提供配置、Init/Step/Fault 回调、静态栈与控制块。它不拥有模块或板级资源，不使用入口名称注册或 Python 生成连接。调用者在内核初始化后、启动前创建任务，业务在任务内执行。可复制修改的例子见 [chassis_task](../../examples/chassis_task/README.md)。任务也可以完全手写，不要求使用该外壳。
 
 提取出的可复用能力：
 

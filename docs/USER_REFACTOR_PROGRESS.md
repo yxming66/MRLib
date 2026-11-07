@@ -1,6 +1,6 @@
 # User 重构进度
 
-目标和完整顺序见 [重构方案](USER_REFACTOR_PLAN.md)。本文件只记录已经执行的工作；各批状态是当时快照，最新情况见最后一批。
+当前设计见 [架构与维护原则](ARCHITECTURE.md)，早期方案见 [历史重构方案](USER_REFACTOR_PLAN.md)。本文件按时间记录；各批是当时快照，生成路线已在第 44 批撤销。
 
 ## 第一批：共享数学与基础可编译入口（2026-11-05）
 
@@ -596,3 +596,18 @@ v2 当前仅提供格式与校验，不生成 C++/CMake，也不驱动现有 H7 
 - 验证：29 项主机 CTest 通过，新增断言后的 UART/MRLink/DR16 定向复验通过；配置、生成与任务测试覆盖 27 项，Windows 临时 manifest 替换失败的任务用例复跑通过。真实驱动回归仅改 YAML 从 USART1 切到 UART9 后正常重建、发送和分发回调，board 未声明端点构建失败。134/134 公共头独立编译通过；默认、TX 开启和独立底盘任务三份 H723 固件均链接成功且无未定义符号，Flash/RAM 分别为 100820/127360 B、100820/127360 B、59084/120512 B（RAM 含预留）。
 
 本批完成 UART 配置链路，未进行板上验证。FDCAN 句柄/资源布局、SPI、GPIO、PWM 与 TIM2 时基仍有旧板型或业务映射，详见 BSP_PORTABILITY_AUDIT.md，不能据此认为所有 BSP 已完成移植拆分。外部 rm_balance/zzrobot/RC_02 均未修改。
+
+## 第 44 批：转为易维护的手写项目装配（2026-11-07）
+
+根据用户确认的新目标，以普通 C/C++ 库与项目装配为主，不再追求整机 YAML 自动生成。保留已收敛的 User 统一接口，未来自动配置只能作为可选工具。
+
+- 删除 mrctl v1/v2、YAML 解析/校验、装配/任务生成、Schema、配置包依赖和相应生成测试。删除项目 YAML 和 MrRobot.cmake，取消 Python 构建依赖；JSON target 清单改为直接维护 cmake/MrTargets.cmake，不再同步维护枚举与生成代码。
+- H7 使用 robot_params.hpp 保存类型化参数，motor_config.hpp 由真实固件与测试共用；chassis_assembly.hpp、arm_assembly.hpp 手写对象连接，board/bindings.hpp 选择 CAN/UART。没有 generated 依赖，换参数后直接编译。
+- 机械臂保持 Arm<N> 编译期固定关节数；模型、向量、轨迹、输出和 optional 原位控制器使用固定存储。三关节示例静态持有电机/执行器/JointT，不使用运行期工厂、动态关节列表或堆控制器。
+- 底盘任务改为普通配置与直接回调连接，不再通过字符串入口登记。周期执行器要求项目提供静态线程栈与控制块，缺失或不足时拒绝创建；H7 整机任务同样静态创建。API 迁移：PeriodicTask::Create(config, hooks, storage)，storage 使用对应 FreeRTOS port 的 StaticTask_t/StackType_t。
+- 新增普通 host_project 示例，直接 add_subdirectory/target_link_libraries；CI 改为库回归和普通消费工程构建。重写架构、板级接入、UART 和任务说明，协作规范明确新增功能只维护接口、CMake、示例与适用验证，不强制自动配置支持。
+- 保留用户此前编辑过的 H7 YAML 原始字节到本地 build/migration-preserved/h7-config-before-manual-assembly.yaml 后，移除旧配置输入；该备份不纳入 Git。外部 rm_balance/zzrobot/RC_02 未修改。
+
+验证：31/31 主机 CTest 通过，包含真实手写七电机装配、Arm<3> 反馈/控制/输出/超时以及静态任务存储与故障契约；最终参数头依赖整理后相关装配/电机回归复验通过。普通消费项目独立配置、编译、运行通过，无 Python/YAML；134/134 公共头独立 H723 编译通过。新的空 build 目录完成 H7 整机严格构建，Flash 100828 B / RAM 160224 B；独立底盘任务 Flash 58836 B / RAM 124704 B（RAM 含原 heap/MSP 预留）。两个 ELF 均无未定义符号。未烧录或进行板上验证。
+
+静态应用线程不会自动缩减原 FreeRTOS heap，故 RAM 比原动态线程版增加；当前 BSP 队列等仍有启动期动态分配，不宣称全工程无堆。FDCAN/SPI/GPIO/PWM/TIM2 的旧板型映射继续列为独立待办，不属于本批删除生成逻辑即可解决的问题。

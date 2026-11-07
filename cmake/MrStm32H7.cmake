@@ -1,10 +1,9 @@
 include_guard(GLOBAL)
-include("${CMAKE_CURRENT_LIST_DIR}/MrRobot.cmake")
 
 # Optional adapter for the CURRENT H723 BSP implementation. Cube owns hardware
 # configuration/IRQ files; this helper only chooses MR sources and their closure.
 function(mr_add_stm32h7_bsp)
-    cmake_parse_arguments(MR "" "TARGET;PLATFORM;PROFILE" "COMPONENTS;UART_ENDPOINTS" ${ARGN})
+    cmake_parse_arguments(MR "" "TARGET;PLATFORM;PROFILE" "COMPONENTS" ${ARGN})
     if(MR_UNPARSED_ARGUMENTS OR MR_KEYWORDS_MISSING_VALUES OR NOT MR_TARGET OR NOT MR_PLATFORM
             OR NOT MR_PROFILE STREQUAL "h723_zzrobot")
         message(FATAL_ERROR "mr_add_stm32h7_bsp requires TARGET, existing PLATFORM and PROFILE h723_zzrobot")
@@ -52,17 +51,4 @@ function(mr_add_stm32h7_bsp)
         target_link_libraries(${MR_TARGET} PUBLIC mr::component_mrlink)
     endif()
     target_compile_features(${MR_TARGET} PUBLIC c_std_11)
-    set(_mr_endpoints)
-    if(can IN_LIST _mr_parts)
-        set(_mr_endpoints CAN_ENDPOINTS BSP_CAN_1 BSP_CAN_2 BSP_CAN_3)
-    endif()
-    if(MR_UART_ENDPOINTS AND NOT uart IN_LIST _mr_parts)
-        message(FATAL_ERROR "UART_ENDPOINTS requires uart or mrlink COMPONENTS")
-    endif()
-    set(_mr_uart_args)
-    if(MR_UART_ENDPOINTS)
-        set(_mr_uart_args UART_ENDPOINTS ${MR_UART_ENDPOINTS})
-    endif()
-    mr_register_board_adapter(TARGET ${MR_TARGET} PROFILE "${MR_PROFILE}" ${_mr_endpoints}
-        ${_mr_uart_args})
 endfunction()

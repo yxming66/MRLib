@@ -18,19 +18,17 @@
 
 依赖方向应尽量保持：任务 → 模块 → 设备/算法 → 通用组件；底层 BSP 提供硬件接口。通用算法不要反向依赖任务、HAL 或具体电机。
 
-## 长期设计目标
+## 设计目标
 
-这个库的目标是让新机器人项目能从板级工程模板快速组装，而不是让开发者手动挑选大量源文件。项目用 YAML 声明板级适配、外设、设备型号、机器人模型、模块参数和任务配置；命令行工具解析依赖并检查配置，逐步生成项目装配代码和构建入口。生成物应与手写业务代码分开，重复生成不能覆盖用户代码；自定义外设通过清晰的适配接口接入。
+优先保证库易读、易组合、易维护。User 提供完整的普通 C/C++ 接口，项目通过 board、app、参数文件和任务代码完成装配；CMake 自动传递所选能力的编译依赖。不需要勾选复制源文件，也不要求 Python、YAML 或生成器。
 
-`module` 面向机器人能力提供统一接口。例如底盘或云台模块不为每个型号复制一套控制入口；注册时选择具体类型，再连接 `robotics` 层相应的模型和算法。项目任务负责调度和业务逻辑，不承担手工拼装所有库文件的工作。
+module 保留统一接口：底盘注册时选择 robotics 模型、绑定 WheelDevice；机械臂使用编译期固定的 Arm<N>，项目静态持有电机/关节，模型与控制存储不使用堆分配。任务、遥控和整机业务归项目所有。
 
-期望的新建项目流程是：准备 STM32 板级工程，在项目配置中选择所需能力，运行工具检查依赖并生成装配，再编译、烧录和标定。工具应指出缺少或冲突的依赖；开发者不应靠反复勾选文件来修复 include 缺失，也不应担心重新生成覆盖手写代码。VS Code 插件可以在命令行和配置格式稳定后提供图形入口，核心构建流程不依赖插件。
-
-当前已支持主机项目脚手架，以及 [config.yaml v2](docs/ROBOT_CONFIG.md) 的单 CAN 总线 RM 四轮底盘及 DM/LZ 串联机械臂装配生成：自动连接设备、轮子/关节、模块参数和库依赖，修改 YAML 后重新构建即更新。H723 示例已接入并完成真实固件链接。另有 [FreeRTOS 底盘任务示例](examples/chassis_task/README.md)，可生成单个周期任务的配置和创建连接，业务逻辑仍手写；通信、多任务拓扑、自定义外设注册与通用板级模板尚未实现。接入方法见 [板级集成](docs/BOARD_INTEGRATION.md)，主机脚手架见 [旧版项目配置](docs/PROJECT_CONFIG.md)。
+新增模块只维护功能、配置类型、CMake 直接依赖、最小手写示例与适用验证，不需要同步维护生成模板或 Schema。旧 YAML 配置/装配/任务生成与 CLI 已删除。未来自动配置可以在稳定接口上单独实现，不作为库使用前提。详见 [架构与维护工作](docs/ARCHITECTURE.md)。
 
 ## 开始使用
 
-UART 已支持 board 硬件登记与 YAML 用途绑定，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。SPI/GPIO/PWM 等仍有旧板型映射，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
+UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。SPI/GPIO/PWM 等仍有旧板型映射，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
 
 ```sh
 git clone https://github.com/yxming66/MR_TestLib.git
@@ -78,23 +76,21 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前已有 29 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
+当前已有 31 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 
 ### 新建项目
 
-Python 3.10+、CMake 3.22+ 和 C++17 编译器就绪后，可以生成一个只选择所需库 target 的普通 CMake 工程：
+先准备可构建的 Cube 工程，引入完整库，在 CMake 链接所用 target；board 连接硬件，app 参数文件填写标定值，普通 C++ 创建并连接对象，任务显式调度。新增功能可以立即由 app 调用，不受自动配置工具支持范围限制。
 
-```powershell
-py -3 tools/mrctl.py init build/demo --name robot_demo `
-  --library ../.. `
-  --targets mr_robotics_arm,mr_module_chassis
-py -3 tools/mrctl.py configure build/demo
-py -3 tools/mrctl.py build build/demo
-```
+可阅读或复制以下示例：
 
-工程配置保存在 `project.yaml`，生成器只写入不存在的 starter 文件；添加或删去库 target 后再次 configure 即可。完整配置格式、现有限制与 STM32 工程的接入边界见 [项目快速构建](docs/PROJECT_CONFIG.md)。这是 CMake 工程脚手架与主机接口检查，不代替板级 HAL、RTOS、启动文件和链接脚本。
+- [普通 CMake 消费项目](examples/host_project/README.md)：最小 target 引入与链接，无 Python。
+- [H723 完整工程](examples/h7_integration/README.md)：手写底盘/Arm<3>/遥测装配、参数和板级启动。
+- [底盘周期任务](examples/chassis_task/README.md)：直接修改周期、栈和业务的小型 FreeRTOS 示例。
+
+示例复制后归项目维护，不存在再次生成覆盖。板级前提和接入步骤见 [板级集成](docs/BOARD_INTEGRATION.md)。
 
 ## 多人开发
 
@@ -110,7 +106,7 @@ py -3 tools/mrctl.py build build/demo
 
 2026-10-26 初始整理时，RC_02/User 为主体，合入 zzrobot/User 的 10 个机械臂及共享旋转数学差异文件，共 283 个文件。当时保存的旧版 User_code 参考目录已在后续清理中移除，历史来源可从 Git 记录追溯。
 
-初始导入完成了文件哈希核对和机械臂主机回归测试；不代表整个库已通过固件编译或实机测试。CI 配置运行全部 CMake 主机回归和项目 CLI 检查，不覆盖 STM32 固件及实机验证。
+初始导入完成了文件哈希核对和机械臂主机回归测试；不代表整个库已通过固件编译或实机测试。CI 配置运行 CMake 主机回归和普通消费项目构建，不覆盖 STM32 固件及实机验证。
 
 [SOURCE_MANIFEST.csv](SOURCE_MANIFEST.csv) 和 [BASELINE_MANIFEST.csv](BASELINE_MANIFEST.csv) 是**初始导入快照**，后续开发以 Git 提交记录为准，不要求每次改动重算历史清单。详细记录见 [导入说明](docs/IMPORT_NOTES.md)。
 

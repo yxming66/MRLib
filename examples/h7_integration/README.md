@@ -1,85 +1,78 @@
-# H723 独立固件集成示例
+# H723 手写固件集成示例
 
-如果先想看 YAML 如何生成一个 FreeRTOS 底盘任务，见 [chassis_task 示例](../chassis_task/README.md)。它通过本工程的 `MR_CHASSIS_TASK_EXAMPLE=ON` 选项独立构建；本页默认的底盘 + 机械臂 + 遥测装配仍使用手写 RobotTask。
+完整的普通 C/C++ 项目：四个 RM M3508 → MotorWheel → 统一 Chassis，三个 DM J4310 → MotorActuatorAdapter → JointT → Arm<3>，以及 USART1 DMA MRLink。一个手写任务按 1 ms 控制、100 ms 遥测。设备、关节和机械臂固定存储，没有运行期关节工厂。
 
-这个工程把当前库的真实代码接成完整 ELF/BIN：四个 RM M3508 → MotorWheel → 统一 Chassis，以及三个 DM J4310 → MotorActuatorAdapter → JointT → Arm<3>；MRLink 使用 USART1 DMA；一个 CMSIS-RTOS2 任务按 1 ms 调度控制、100 ms 发布遥测。
+本示例用于验证接口、依赖、HAL/RTOS、启动和链接布局，不包含 zzrobot 的遥控策略、机械标定或整机业务。默认禁止电机发送，运行请求初始关闭。
 
-这是部分生成装配基线，用来验证接口、依赖、启动文件、HAL/RTOS 和链接布局。RM 四轮底盘和 DM/LZ 串联机械臂的装配及参数从 YAML 生成；通信和任务创建仍手写。没有移植 zzrobot 的遥控策略、机械标定或整机业务。
-
-## 文件与依赖
+## 文件职责
 
 ```text
 h7_integration/
-├── config.yaml              # v2 参数范本（生成底盘和机械臂装配及参数）
-├── CMakeLists.txt            # 选择库 target，显式装配 Cube/BSP 实现
-├── arm-none-eabi.cmake       # Cortex-M7 / hard float / C11 / C++17
-├── board/
-│   ├── main.c               # 应用入口、板级时钟和 RTOS 启动
-│   └── stm32h723.ld          # Flash/AXI SRAM、构造函数、heap/stack
-└── app/
-    ├── robot.cpp            # 静态设备所有权、模块配置、控制循环、遥测
-    └── motor_config.hpp     # 仅供主机协议回归使用的手写测试 fixture
+├─ CMakeLists.txt            # 显式链接库与 Cube/BSP，无 Python
+├─ arm-none-eabi.cmake       # Cortex-M7 工具链
+├─ board/
+│  ├─ main.c                # 时钟、Cube 初始化、静态线程创建
+│  ├─ bindings.hpp          # CAN 和遥测 UART 用途
+│  ├─ uart_endpoints.c      # 已初始化的真实 UART 句柄清单
+│  └─ stm32h723.ld           # 链接布局
+└─ app/
+   ├─ robot_params.hpp      # 几何、PID、限位、零点、周期、发送许可
+   ├─ motor_config.hpp      # 实际使用的电机配置函数
+   ├─ chassis_assembly.hpp  # 四电机/轮子/底盘对象连接
+   ├─ arm_assembly.hpp      # 三电机/执行器/关节/Arm<3> 连接
+   └─ robot.cpp             # 状态机、故障与控制循环、遥测
 ```
 
-`board/main.c` 是应用入口；真正的向量表和复位入口由 Cube 的 `startup_stm32h723xx.s` 提供。默认生成产物在仓库 `build/h7-integration/generated/`。
+这些文件直接编辑、编译，没有 generated 目录或 YAML 输入。示例可作为项目起点，复制后由项目维护。底盘任务的小型版本见 [chassis_task](../chassis_task/README.md)，通过 MR_CHASSIS_TASK_EXAMPLE=ON 选择。
 
-需安装 CMake >= 3.22、GNU Arm Embedded 工具链，以及 Ninja 或 Make。`MR_CUBE_ROOT` 指向完整 STM32H723 Cube 工程，当前验证的是 `D:/STM32Projects_HAL/board-H7/zzrobot`。只读取其 `Core`、`Drivers`、`Middlewares` 和 `startup_stm32h723xx.s`，不编译旧 `main.c`、`freertos.c`、`User`，不修改外部文件。
+board/main.c 是应用入口，不是芯片启动汇编。向量表/复位入口使用 Cube 的 startup_stm32h723xx.s。
 
-板级输入并非任意 STM32 Cube 工程：要求 H723XG、24 MHz HSE、相同的 GPIO/SPI2/TIM/UART/FDCAN 句柄及初始化函数、TIM2 的 1 MHz/999 HAL 时基、1000 Hz FreeRTOS/CMSIS-RTOS2，以及相同引脚配置。换板必须替换 board 和 Cube 配置。
+## 板级前提
+
+MR_CUBE_ROOT 指向完整 Cube 工程，当前验证 D:/STM32Projects_HAL/board-H7/zzrobot。只读 Core、Drivers、Middlewares 和启动汇编，不编译外部旧 main/freertos/User，不修改外部工程。
+
+不是任意 Cube 工程都能直接使用：当前要求 H723XG、24 MHz HSE、相同 GPIO/SPI2/TIM/UART/FDCAN 句柄与初始化函数、TIM2 的 1 MHz/999 HAL 时基、1000 Hz FreeRTOS/CMSIS-RTOS2 和对应引脚。换板应调整 board/Cube 及仍受板型限制的 BSP，不能只改路径。
 
 ## 构建
 
-从 MR_TestLib 根目录执行。PowerShell 的 `-D...` 参数整体加引号，避免路径、扩展名被重新拆分：
+安装 CMake >= 3.22、GNU Arm Embedded 工具链及 Ninja/Make。无需 Python 或配置依赖包。建议从新的 build 目录开始，避免旧生成链路的缓存。
 
 ```powershell
-py -3 -m venv .venv
-.venv/Scripts/python.exe -m pip install -r tools/requirements-config.txt
-$configPython = (Resolve-Path .venv/Scripts/python.exe).Path
-cmake -S examples/h7_integration -B build/h7-integration -G "MinGW Makefiles" `
-  "-DMR_CONFIG_PYTHON=$configPython" `
-  "-DCMAKE_MAKE_PROGRAM=D:/Drivers/MSYS2/ucrt64/bin/mingw32-make.exe" `
+cmake -S examples/h7_integration -B build/h7-manual -G Ninja `
   "-DCMAKE_TOOLCHAIN_FILE=arm-none-eabi.cmake" `
   "-DMR_CUBE_ROOT=D:/STM32Projects_HAL/board-H7/zzrobot" `
   -DCMAKE_BUILD_TYPE=Release
-cmake --build build/h7-integration --parallel 4
-arm-none-eabi-nm -u build/h7-integration/mr_h7_integration.elf
-arm-none-eabi-size build/h7-integration/mr_h7_integration.elf
+cmake --build build/h7-manual --parallel 4
+arm-none-eabi-nm -u build/h7-manual/mr_h7_integration.elf
 ```
 
-其他系统可以使用 `-G Ninja`，省略 `CMAKE_MAKE_PROGRAM`。`arm-none-eabi-gcc/g++/objcopy/size` 必须在 PATH 中。构建产物在 `build/h7-integration/`：`mr_h7_integration.elf`、`.bin`、`.map`。`nm -u` 应没有输出。命令只构建，不烧录。
+Windows 使用 MinGW Makefiles 时，将 -G Ninja 换为 -G "MinGW Makefiles"，并按实际位置提供 CMAKE_MAKE_PROGRAM。arm-none-eabi-gcc/g++/objcopy/size 应在 PATH。输出 ELF/BIN/map；nm -u 应无输出。命令不烧录。
 
-默认构建还会严格编译全部 35 个 User 生产 `.c/.cpp` 文件；`user_all_compile_check` 不链接进固件，以免未选功能产生重复定义。这能发现可选驱动的 include/语法问题，不能验证所有模板实例和所有功能的链接依赖。
-
-公共头文件单独验证：
+默认还严格编译全部 35 个 User 生产实现，检查未链接可选驱动的语法/include；不表示所有组合均已链接或运行验证。公共头检查仍可用可选验证脚本：
 
 ```powershell
 py -3 tools/check_user_headers_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrobot
 ```
 
-`.hpp` 按 C++17 检查，`.h` 额外按 C11 检查，不额外加入 `User/device` 等搜索路径掩盖缺失 include。
+## 如何修改与维护
 
-## 内存和运行约定
+- 改 PID/几何/零点/限位：编辑 robot_params.hpp，直接编译。
+- 换遥测 UART：改 board/bindings.hpp，确保 Cube 已初始化、uart_endpoints.c 已登记；无需改驱动或平行能力清单。
+- 换电机或设备连接：改对应 assembly/motor_config；模块保持统一接口。
+- 改关节数：编译期修改类型和参数，并显式调整装配的电机、关节与输出指针，不使用动态关节列表。
+- 改任务/业务：直接编辑 robot.cpp 或底盘任务示例，不需要模板语言。
+- 新模块：先实现 User 接口，添加必要 CMake 直接依赖和最小示例，即可在 app 使用，不需要生成器登记。
 
-- Flash 为 `0x08000000` 起 1 MiB；数据、BSS、FreeRTOS heap、线程栈、MSP 都在 `0x24000000` 起 320 KiB 的 AXI SRAM，DMA1/2 缓冲不放 DTCM。启动代码复制 data、清零 BSS 并运行 C++ 构造函数。
-- D-cache/I-cache 显式关闭；DMA hook 只接受上述 AXI SRAM。当前不是 Cache 开启后的性能模板。开启 Cache 时需独占缓存行、MPU/Cache 策略及实机一致性验证。
-- FreeRTOS heap 72 KiB，robot 线程栈 32 KiB；链接额外预留 newlib heap 8 KiB、MSP 16 KiB。后续应实测任务栈高水位和最坏周期耗时。
-- UART 硬件端点在 main 中完成 Cube 初始化后、内核启动前登记；其余 BSP 启动、设备注册与控制在 robot 任务中完成。CanPort、RM 分组总线、执行器、关节、模块和 MRLink 对象均为静态生命周期。UART/FD CAN IRQ 由 Cube 文件提供，HAL 完成回调由本库接管。
-- 默认 YAML `runtime.allow_motor_tx: false`，MotorPort 拒绝所有电机 TX；`request_run=false`，不会自动 Enable。FDCAN 接收和串口遥测仍会启动。
-- 允许电机发送的独立构建使用另一份 config.yaml，将 `runtime.allow_motor_tx` 改为 true，用 `-DMR_ROBOT_CONFIG=配置绝对路径` 指定，并使用另一个 build 目录。复制 YAML 后须调整 project.library 指向本库。旧 `MR_H7_ALLOW_MOTOR_TX` CMake 开关已移除。仍须人工请求 `request_run` 的上升沿才能尝试启动；串口没有使能命令。启动前要求真实轮/关节反馈，运行中故障停止并锁住，需撤销请求后重新请求。例子只发零底盘速度和机械臂保持命令，停止路径只重试零/禁用命令。
+## 内存与行为
 
-示例 CAN 地址、轮径、底盘几何、关节范围、PID、DM MIT 范围均是演示值。DM 配置范围必须与电机固件一致；内置减速比已经计入厂家协议物理量，只有额外外部机构传动才填 external_ratio。机械臂是无重力补偿的示意串联模型，不能视为 zzrobot 标定。
+Flash 从 0x08000000 起 1 MiB，数据/BSS/RTOS heap/应用静态栈/MSP 在 0x24000000 起 320 KiB AXI SRAM，DMA 不放 DTCM。启动汇编负责 data/BSS 与 C++ 构造。Cache 显式关闭，DMA hook 只接受实际 AXI 区间；开启 Cache 要另行设计与验证。
 
-## 已验证与待验收
+应用线程栈/控制块静态提供：robot 32 KiB；独立底盘任务 4 KiB。外部 FreeRTOS heap 仍为 72 KiB，供 BSP 队列等现有分配使用，链接另预留 newlib heap 8 KiB 与 MSP 16 KiB。静态栈不会减少现有 heap 预留，因此本轮 RAM 总量比原动态任务版本增加；项目可在实测后调整 heap/栈预算，不能据此宣称全工程无堆。
 
-2026-11-07：GNU Arm 15.2.1 完成两种发送开关的编译和链接；默认构建检查 35 个实际实现，133 个公共头可独立编译；29 项主机 CTest 和 6 项 CLI 回归通过。ELF 保留 RobotTask、底盘控制、ArmController、逆运动学、真实 HAL/RTOS 和 BSP 分配符号，未发现未定义符号。
+UART 在 main 的 Cube 初始化后登记；其他 BSP/设备注册在任务内。控制对象静态持有，注册不使能。默认 app::params::kAllowMotorTx=false，端口拒绝电机 TX，遥测仍工作。若显式修改发送许可，仍须新的 request_run 请求及真实有效反馈才能使能；没有串口使能命令。故障停止并锁住，需要撤销请求后重新请求。示例仅零底盘速度与机械臂保持。
 
-尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。完整通信服务、多任务拓扑和其他外设绑定仍待实现。
+参数均为演示值；DM MIT 量程必须匹配固件，external_ratio 仅表示额外机构减速；厂家内部减速已体现在 DM/LZ 协议物理量，不重复相乘。机械臂无重力补偿。
 
+## 验证边界
 
-## 统一参数格式
-
-UART 的硬件清单在 board/uart_endpoints.c，Cube 初始化后由 main 登记；用途由 YAML 的 board.bindings.uart 分配。telemetry_uart 默认 usart1，改为 uart9/uart7 等已登记端点后重新构建，MRLink 实际句柄及回调随之变化，无需改库或 app。新增硬件时同步更新 board 表及 CMake UART_ENDPOINTS，波特率/引脚/DMA 仍由 Cube 配置。见 [UART 绑定及迁移](../../docs/UART_BINDINGS.md)。其他外设仍有板型限制，见 [核查表](../../docs/BSP_PORTABILITY_AUDIT.md)。
-
-新增 [config.yaml](config.yaml) 作为其他机器人项目的 v2 配置范本，包含 board 绑定、电机/轮子/关节、统一模块、MRLink 和任务参数。详细单位、引用关系、校验及扩展规则见 [配置规范](../../docs/ROBOT_CONFIG.md)。它已驱动底盘和机械臂静态装配与参数，修改后运行 `cmake --build build/h7-integration` 会自动重新配置并编译。示例 CMake 使用 `MODULE all`，最多一个底盘和一个机械臂共享 CAN 端点；两个模块在同一个任务中运行，周期必须相同。通信周期、任务栈/优先级、消息 codec 和任务入口仍手写。板级边界与依赖选择见 [板级接入](../../docs/BOARD_INTEGRATION.md)。
-
-整理参数时修正了本示例的 DM/RM 地址重叠：三个 DM 控制 ID 改为 `0x11/0x12/0x13`，反馈为 `0x321/0x322/0x323`，避免 DM 保留地址 `can_id+0x200` 占用 RM 反馈 `0x201..0x204`。新增主机注册回归，使用实际手写装配参数验证四个 RM 与三个 DM 可以同时注册；单纯完成固件链接无法发现这种运行期配置冲突。
+手写装配使用同一代码参与主机真实电机协议集成回归；HAL/RTOS 通过目标固件编译与链接验证。未烧录、未测量栈高水位、任务时序、DMA/IRQ 或真实故障停机；仍需对应板级验收。其他 BSP 固定映射见 [核查表](../../docs/BSP_PORTABILITY_AUDIT.md)。

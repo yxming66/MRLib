@@ -1,71 +1,54 @@
-# 库架构与构建边界
+# 库架构与维护原则
 
-## 层次
+当前设计以 C/C++ 库的易维护性为首要目标。项目通过普通代码完成装配，CMake 处理编译依赖。不要求 Python、YAML 或代码生成器；旧的两套 YAML 配置、Schema、mrctl 与装配/任务生成链路已删除。未来自动配置只能作为独立可选工具，不能成为新增功能的前置工作。
+
+## 分层
 
 ```text
-app/task
-    ↓
-module
-    ↓
-robotics     device
-    ↓           ↓
-component   board adapter
+项目 app/task → module → robotics / device → component
+                                   device → board 适配
 ```
 
-- `component` 提供硬件无关的数学、滤波、PID、轨迹和容器；滤波器、控制器等可以有状态。
-- `robotics` 只描述硬件无关的模型和算法。它不 include HAL、RTOS、CAN 或具体电机头文件。
-- `device` 把电机、轮子、关节和传感器封装成稳定的设备接口。板级工程提供具体总线和外设适配。
-- `module` 组合算法和设备，负责生命周期、模式、命令、故障处理及输出提交。
-- `task/app` 负责调度和机器人业务，不直接实现运动学，也不直接操作底层电机协议。
+- component：数学、滤波、控制器、轨迹、容器和协议等通用能力。
+- robotics：机构模型和算法，不依赖 HAL、RTOS 或具体电机。
+- device：电机、执行器、轮子、关节、传感器；通过传入的总线接口访问硬件。
+- module：统一机器人能力接口，管理初始化、命令、反馈、控制及故障。底盘构形由配置选择 robotics 模型，设备由项目传入。
+- 项目 board：Cube 初始化、硬件端点、时钟、DMA/Cache、IRQ 和 BSP 实现。
+- 项目 app/task：静态对象所有权、装配、参数、任务、遥控与业务状态机。
 
-## 底盘示例
+统一接口服务于手写项目，也为将来的可选自动配置保留清楚的装配边界。不要为尚未实现的工具增加全局注册中心、运行期工厂或平行配置表。
 
-`User/robotics/chassis` 包含麦轮和前全向后麦轮两种运动学实现。`ChassisKinematics` 用固定存储按注册配置选择模型：
+## 固定容量与所有权
 
-```cpp
-mr::robotics::chassis::ChassisKinematics model;
-mr::robotics::chassis::ChassisKinematicsConfig config{};
-config.model = mr::robotics::chassis::ChassisModel::kMecanum;
-config.geometry = {0.25f, 0.20f};
-model.Configure(config);
-```
+机械臂使用 `mr::module::arm::Arm<N>`，N 编译期固定。模型、关节向量、轨迹、输出数组和控制器都使用固定存储；`std::optional<Controller>` 在对象内部原位构造，不分配堆内存。关节、电机和模块由项目静态持有，借用引用/指针的对象必须比使用者活得更久。更改关节数需要重新编译，并显式调整项目的设备连接。
 
-`User/module/chassis/chassis.hpp` 提供统一控制入口。它只依赖 `WheelDevice` 接口，因此模块不绑定 M3508 或其他具体电机：
+底盘通过 WheelDevice 接口连接具体轮子；机械臂通过 IActuator 连接关节。方向、传动比与零点只在约定层换算一次。模块不自动创建线程、初始化 HAL 或使能电机。
 
-```cpp
-mr::module::chassis::Chassis chassis;
-chassis.Register(chassis_config, wheel_devices);
-chassis.Enable();
-chassis.UpdateFeedback(board_time_ms);
-chassis.SetCommand({1.0f, 0.0f, 0.0f});
-chassis.Step(0.002f);
-chassis.CommitOutput();
-```
+固定容量模块不等于整个固件无堆：当前 H723 BSP 的消息管理、队列等仍使用启动期分配，参考 FreeRTOS 也保留 heap。示例显式静态分配应用线程栈与控制块；更严格的全工程无堆目标需要单独审查。
 
-轮子设备由应用工程创建并以非 owning 指针注册。设备负责电机型号、齿轮比、方向、轮半径和总线细节；模块只使用 m/s、rad/s 和 N·m 的标准单位。
+## 参数和装配
 
-模块在以下情况进入 `kFault` 并尝试让已注册设备进入安全状态：设备注册或使能失败、反馈无效、命令为非有限值、运动学失败、控制器输出无效或提交失败。
+示例 `examples/h7_integration/app/robot_params.hpp` 保存有类型的配置值，`chassis_assembly.hpp` 和 `arm_assembly.hpp` 直接创建并连接设备。它们是项目文件，复制后直接修改。几何/限位/PID 等属于 app 参数，UART/CAN 用途选择属于 board/bindings.hpp，波特率/引脚仍由 Cube 配置。
 
-`board_time_ms` 必须使用与轮子反馈时间戳相同的单调毫秒时钟。`ChassisConfig.feedback_timeout_ms` 限制接受的最大反馈年龄，默认 20 ms；超过时限会清除反馈、尝试放松所有已注册轮子并进入 `kFault`。无参 `UpdateFeedback()` 仅为迁移保留，缺少年龄检查，新项目应传入当前时间。
+项目可以拆分参数文件，按功能独立管理；不要求所有项目使用相同的一套巨型配置结构。模块必须提供可直接调用的类型化接口、明确的单位和有效性检查。
 
-## CMake 边界
+## 编译依赖
 
-每个可复用层通过 target 暴露依赖。应用链接 `mr_module_chassis` 时会自动获得底盘运动学、控制器、滤波器和数学头文件；应用不需要复制源文件或手动追加 include 目录。
+`cmake/MrTargets.cmake` 直接声明公共 target、源文件、include、编译标准和依赖。不再维护 JSON target 清单或 Schema 枚举。项目通过 add_subdirectory 和 target_link_libraries 选择能力，传递依赖自动跟随；BSP/HAL 由 board target 提供。
 
-`cmake/targets.json` 登记当前公共 target 的名称、别名、入口头文件、编译源和直接依赖。顶层 CMake 用它创建 target，`mrctl.py` 用它校验 YAML 选择并展开编译检查头文件。项目配置只需列出直接使用的模块；新增 target 时同步更新 JSON Schema 的枚举，CLI 测试会检查两者一致。
+## 新增功能的维护工作
 
-当前 target 只覆盖已经能在无 HAL 环境中验证的部分。电机协议、UART、FDCAN、USB 和具体板级实现仍由目标工程提供，等设备接口稳定后再加入对应 target。
+| 场景 | 需要维护 | 不要求维护 |
+| --- | --- | --- |
+| 新算法 | 实现、接口说明、适用验证；有编译源时登记 target | Python、Schema、生成模板 |
+| 新设备 | 驱动与既有接口适配、编译依赖、使用示例 | 模块的型号分支、全局工厂 |
+| 新构形 | robotics 算法及统一模型选择逻辑、验证 | 复制整套 module 控制入口 |
+| 新模块 | 配置/生命周期/控制接口、直接依赖、最小手写示例 | 自动装配生成支持 |
+| 新参数 | 配置类型、默认值/有效性检查、使用位置 | 平行 YAML 字段与生成字符串 |
+| 项目业务 | 项目 app 的状态机、任务、命令来源 | 共用库的项目专属分支 |
 
-## 快速组装项目的目标
+维护者优先让功能直接可用。只有多个项目反复使用且接口稳定的装配，才重新评估可选工具的收益。
 
-项目配置应描述“这个机器人由什么组成”，而不是列出要复制或勾选的源文件。长期目标是用 YAML 声明板级外设、设备类型与参数、机器人模型、模块及任务配置；工具解析配置和依赖图，报告缺项或冲突，并生成独立的装配代码与构建入口。生成区域和手写应用、板级适配区域必须分开，重复生成应当可重复且不覆盖用户文件。
+## 当前边界
 
-模块层统一表示机器人能力。底盘、云台等模块对上提供稳定一致的配置和控制接口；注册时选择具体类型，并组合 `robotics` 层对应的模型与算法。模块不应随着底盘布局、云台种类或电机型号不断复制专用入口。定制外设通过板级适配实现设备接口，再由项目配置完成注册。
-
-期望的项目体验是：从现有 STM32 板级模板新建目录，填写配置，运行 CLI，得到经过依赖检查的项目装配，再编译和实机验证。依赖检查应定位缺少的模块或头文件；项目维护者无需人工反复挑选传递依赖文件。VS Code 插件是 CLI 流程稳定后的可选界面，不能成为构建流程的唯一入口。
-
-当前完成度有限：已登记的 CMake target 和 CLI 主要用于主机脚手架、target 依赖传递及公共头文件编译检查；STM32 外设、设备、模块和任务的 YAML 装配生成仍未实现。设计目标不可作为现成功能宣传。
-
-## 当前范围
-
-这一阶段建立的是架构基础，不替换 `User/module/chassis` 中现有重装机器人专用 Controller。旧 Controller 可以继续用于现有工程；新项目可先使用统一接口和模拟设备测试，再把真实轮子设备接入。这样可以逐步迁移控制逻辑，并保留行为回退路径。
+H723 示例有完整构建基线，但 BSP 尚未全部解耦旧板型：UART 已由 board 登记；FDCAN、SPI、GPIO、PWM 和 TIM2 仍有固定映射。详见 BSP_PORTABILITY_AUDIT.md。简化生成链路不会自动解决这些硬件移植问题。本库仍为测试版本，未进行本轮板上验证。

@@ -1,4 +1,6 @@
 #include "cmsis_os2.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "dma.h"
 #include "fdcan.h"
 #include "gpio.h"
@@ -10,7 +12,7 @@
 extern int Board_RegisterUartEndpoints(void);
 
 #ifdef MR_CHASSIS_TASK_EXAMPLE
-#include "robot_tasks.h"
+extern int App_CreateChassisTask(void);
 #else
 extern void RobotTask(void* argument);
 #endif
@@ -75,9 +77,13 @@ int main(void) {
   if (!Board_RegisterUartEndpoints()) Error_Handler();
   if (osKernelInitialize() != osOK) Error_Handler();
 #ifdef MR_CHASSIS_TASK_EXAMPLE
-  if (!MR_CreateConfiguredTask()) Error_Handler();
+  if (!App_CreateChassisTask()) Error_Handler();
 #else
-  const osThreadAttr_t task = {.name = "robot", .stack_size = 32768, .priority = osPriorityNormal};
+  static StaticTask_t robot_control;
+  _Alignas(8) static StackType_t robot_stack[32768 / sizeof(StackType_t)];
+  const osThreadAttr_t task = {.name = "robot", .cb_mem = &robot_control,
+                              .cb_size = sizeof(robot_control), .stack_mem = robot_stack,
+                              .stack_size = sizeof(robot_stack), .priority = osPriorityNormal};
   if (!osThreadNew(RobotTask, NULL, &task)) Error_Handler();
 #endif
   if (osKernelStart() != osOK) Error_Handler();

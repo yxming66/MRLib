@@ -11,22 +11,19 @@ permissions:
 
 jobs:
   host-tests:
-    name: Host and project builder tests
+    name: Host and manual integration tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
       - name: Configure host tests
         run: cmake -S . -B build/cmake-host -G Ninja -DMR_TESTLIB_BUILD_HOST_TESTS=ON
       - name: Build host tests
         run: cmake --build build/cmake-host --parallel
       - name: Run library regression tests
         run: ctest --test-dir build/cmake-host --output-on-failure
-      - name: Run new-project CLI tests
-        run: python tools/test_mrctl.py
-      - name: Install robot config dependencies
-        run: python -m pip install -r tools/requirements-config.txt
-      - name: Run robot config and assembly tests
-        run: python -m unittest tools.test_robot_config tools.test_robot_generation tools.test_task_generation -v
+      - name: Configure ordinary consumer project
+        run: cmake -S examples/host_project -B build/manual-consumer -G Ninja
+      - name: Build ordinary consumer project
+        run: cmake --build build/manual-consumer --parallel
+      - name: Run ordinary consumer project
+        run: ctest --test-dir build/manual-consumer --output-on-failure

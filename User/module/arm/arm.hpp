@@ -7,9 +7,12 @@
 namespace mr::module::arm {
 enum class Lifecycle { kUninitialized, kReady, kEnabled, kFault };
 
-// Fixed storage; no motor factory, HAL, RTOS, remote mapping or robot preset.
+// N is fixed at compile time. Model, optional controller (in-place) and all
+// joint/output buffers live inside the object; no allocation or runtime resizing.
+// No motor factory, HAL, RTOS, remote mapping or robot preset.
 template <int N>
 class Arm final {
+  static_assert(N > 0, "Arm requires at least one joint");
  public:
   using Model = robotics::arm::ArmModel<N>;
   using Command = robotics::arm::ArmCommand<N>;

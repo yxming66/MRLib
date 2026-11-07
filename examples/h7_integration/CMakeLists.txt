@@ -1,13 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(mr_h7_integration LANGUAGES C CXX ASM)
-option(MR_CHASSIS_TASK_EXAMPLE "Build the standalone generated chassis task example" OFF)
-if(MR_CHASSIS_TASK_EXAMPLE)
-    set(_mr_default_config "${CMAKE_CURRENT_SOURCE_DIR}/../chassis_task/config.yaml")
-else()
-    set(_mr_default_config "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml")
-endif()
-set(MR_ROBOT_CONFIG "${_mr_default_config}" CACHE FILEPATH "Robot YAML input")
-set(MR_CONFIG_PYTHON "" CACHE FILEPATH "Python interpreter with config validation dependencies")
+option(MR_CHASSIS_TASK_EXAMPLE "Build the standalone handwritten chassis task example" OFF)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -58,7 +51,7 @@ set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${MR_LIBRARY_ROOT}" mr_library)
 include("${MR_LIBRARY_ROOT}/cmake/MrStm32H7.cmake")
 mr_add_stm32h7_bsp(TARGET user_board PLATFORM cube_platform PROFILE h723_zzrobot
-    COMPONENTS can mrlink UART_ENDPOINTS uart5 uart9 usart1 uart8 uart7 usart10)
+    COMPONENTS can mrlink)
 target_compile_options(user_board PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 
 # Compile every production User implementation, including optional peripherals.
@@ -83,13 +76,10 @@ target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 target_link_libraries(mr_h7_integration PRIVATE cube_platform cube_sources
-    mr::component_mrlink mr::component_timer m)
-if(MR_CHASSIS_TASK_EXAMPLE)
-    mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
-        MODULE chassis TASK chassis BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
-else()
-    mr_target_robot_config(TARGET mr_h7_integration CONFIG "${MR_ROBOT_CONFIG}"
-        MODULE all BOARD_TARGET user_board PYTHON "${MR_CONFIG_PYTHON}")
+    user_board mr::component_mrlink mr::component_timer
+    mr::device_motor mr::device_wheel mr::module_chassis m)
+if(NOT MR_CHASSIS_TASK_EXAMPLE)
+    target_link_libraries(mr_h7_integration PRIVATE mr::device_joint mr::module_arm)
 endif()
 target_link_options(mr_h7_integration PRIVATE
     "-T${CMAKE_CURRENT_SOURCE_DIR}/board/stm32h723.ld"
