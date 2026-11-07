@@ -42,7 +42,8 @@
 
 static osThreadId_t thread_alert;
 static bool inited = false;
-static uint8_t rx_buf[sizeof(DR16_RawData_t)];
+_Static_assert(sizeof(DR16_RawData_t) <= 32u, "DR16 frame exceeds DMA staging buffer");
+_Alignas(32) static uint8_t rx_buf[32];
 static volatile uint16_t rx_size = 0;
 static volatile bool rx_error = false;
 
@@ -125,10 +126,15 @@ int8_t DR16_Init(DR16_t *dr16) {
   if (inited) return DEVICE_ERR_INITED;
   if ((thread_alert = osThreadGetId()) == NULL) return DEVICE_ERR_NULL;
 
-  BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_RX_CPLT_CB,
-                            DR16_RxCpltCallback);
-  BSP_UART_RegisterRxEventCallback(BSP_UART_RC, DR16_RxEventCallback);
-  BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_ERROR_CB, DR16_ErrorCallback);
+  if (BSP_UART_Claim(BSP_UART_RC, rx_buf) != BSP_OK) return DEVICE_ERR;
+  if (BSP_UART_RegisterOwnedCallback(BSP_UART_RC, rx_buf, BSP_UART_RX_CPLT_CB,
+                                     DR16_RxCpltCallback) != BSP_OK ||
+      BSP_UART_RegisterOwnedRxEvent(BSP_UART_RC, rx_buf, DR16_RxEventCallback) != BSP_OK ||
+      BSP_UART_RegisterOwnedCallback(BSP_UART_RC, rx_buf, BSP_UART_ERROR_CB, DR16_ErrorCallback) !=
+          BSP_OK) {
+    (void)BSP_UART_Release(BSP_UART_RC, rx_buf);
+    return DEVICE_ERR;
+  }
 
   inited = true;
   return DEVICE_OK;
@@ -139,8 +145,7 @@ int8_t DR16_Restart(void) {
   if (huart == NULL) return DEVICE_ERR_NULL;
 
   g_dr16_debug.restart_count++;
-  (void)HAL_UART_AbortReceive(huart);
-  (void)HAL_UART_DMAStop(huart);
+  if (HAL_UART_AbortReceive(huart) != HAL_OK) return DEVICE_ERR;
   __HAL_UART_CLEAR_FLAG(huart, UART_CLEAR_PEF | UART_CLEAR_FEF |
                                    UART_CLEAR_NEF | UART_CLEAR_OREF |
                                    UART_CLEAR_IDLEF);
@@ -151,6 +156,8 @@ int8_t DR16_Restart(void) {
 
 int8_t DR16_StartDmaRecv(DR16_t *dr16) {
   if (dr16 == NULL) return DEVICE_ERR_NULL;
+  UART_HandleTypeDef* huart = BSP_UART_GetHandle(BSP_UART_RC);
+  if (!inited || !huart || huart->RxState != HAL_UART_STATE_READY) return DEVICE_ERR;
 
   rx_size = 0;
   rx_error = false;
@@ -167,8 +174,12 @@ int8_t DR16_StartDmaRecv(DR16_t *dr16) {
 }
 
 bool DR16_WaitDmaCplt(uint32_t timeout) {
-  return (osThreadFlagsWait(SIGNAL_DR16_RAW_REDY, osFlagsWaitAll, timeout) ==
-          SIGNAL_DR16_RAW_REDY);
+  if (osThreadFlagsWait(SIGNAL_DR16_RAW_REDY, osFlagsWaitAll, timeout) == SIGNAL_DR16_RAW_REDY)
+    return !rx_error;
+  (void)DR16_Restart();
+  rx_error = true;
+  rx_size = 0;
+  return false;
 }
 
 int8_t DR16_ParseData(DR16_t *dr16){
@@ -280,3 +291,14 @@ void DR16_Service(DR16_t *dr16) {
 /* USER FUNCTION BEGIN */
 
 /* USER FUNCTION END */
+
+int8_t DR16_Deinit(void) {
+  if (!inited) return DEVICE_OK;
+  if (DR16_Restart() != DEVICE_OK) return DEVICE_ERR;
+  if (BSP_UART_Release(BSP_UART_RC, rx_buf) != BSP_OK) return DEVICE_ERR;
+  inited = false;
+  thread_alert = NULL;
+  rx_error = true;
+  rx_size = 0;
+  return DEVICE_OK;
+}

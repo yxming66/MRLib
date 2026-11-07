@@ -6,8 +6,8 @@ extern "C" {
 
 /* Includes ----------------------------------------------------------------- */
 #include <spi.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "bsp/bsp.h"
 
@@ -46,20 +46,21 @@ typedef enum {
 } BSP_SPI_Callback_t;
 
 /* Exported functions prototypes -------------------------------------------- */
-SPI_HandleTypeDef *BSP_SPI_GetHandle(BSP_SPI_t spi);
-int8_t BSP_SPI_RegisterCallback(BSP_SPI_t spi, BSP_SPI_Callback_t type,
-                                void (*callback)(void));
+SPI_HandleTypeDef* BSP_SPI_GetHandle(BSP_SPI_t spi);
+int8_t BSP_SPI_RegisterCallback(BSP_SPI_t spi, BSP_SPI_Callback_t type, void (*callback)(void));
 
+int8_t BSP_SPI_Transmit(BSP_SPI_t spi, uint8_t* data, uint16_t size, bool dma);
+int8_t BSP_SPI_Receive(BSP_SPI_t spi, uint8_t* data, uint16_t size, bool dma);
+int8_t BSP_SPI_TransmitReceive(BSP_SPI_t spi, uint8_t* txData, uint8_t* rxData, uint16_t size,
+                               bool dma);
 
-int8_t BSP_SPI_Transmit(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma);
-int8_t BSP_SPI_Receive(BSP_SPI_t spi, uint8_t *data, uint16_t size, bool dma);
-int8_t BSP_SPI_TransmitReceive(BSP_SPI_t spi, uint8_t *txData, uint8_t *rxData,
-                               uint16_t size, bool dma);
+int8_t BSP_SPI_Abort(BSP_SPI_t spi);
 
+/* Register helpers are blocking; caller owns CS and bus across both phases. */
 uint8_t BSP_SPI_MemReadByte(BSP_SPI_t spi, uint8_t reg);
 int8_t BSP_SPI_MemWriteByte(BSP_SPI_t spi, uint8_t reg, uint8_t data);
-int8_t BSP_SPI_MemRead(BSP_SPI_t spi, uint8_t reg, uint8_t *data, uint16_t size);
-int8_t BSP_SPI_MemWrite(BSP_SPI_t spi, uint8_t reg, uint8_t *data, uint16_t size);
+int8_t BSP_SPI_MemRead(BSP_SPI_t spi, uint8_t reg, uint8_t* data, uint16_t size);
+int8_t BSP_SPI_MemWrite(BSP_SPI_t spi, uint8_t reg, uint8_t* data, uint16_t size);
 
 /* USER FUNCTION BEGIN */
 

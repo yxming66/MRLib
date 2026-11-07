@@ -175,3 +175,16 @@ PoseCoordinatesFromTransform/TransformFromPoseCoordinates 表示平移+旋转向
 旧 Twist 名称保留 deprecated 包装，不是 SE(3) exp/log。
 机械臂的坐标、单位、流式加速度、显式 IK 降级及正常/故障过渡边界见
 [arm 接口说明](../User/robotics/arm/README.md)。
+
+
+## MRLink 与 DMA 平台边界
+
+协议与固定容量 C++ 类型接口统一在 component/communication/mrlink；HAL 平台通道在 bsp/mrlink，
+bsp/adapters/mrlink.hpp 负责显式连接。mr_component_mrlink 不引入 HAL/RTOS；旧 device 头是兼容入口，
+旧实现源已删除。所有 payload 使用显式 MessageCodec，旧 ABI 数据须 opt-in LegacyNativeCodec。
+
+Init 后安装同步 hooks 再启动 ISR 输入；单任务消费，回调中的配置/重置返回 BUSY。
+通道成功发送先复制数据，释放必须显式 Deinit 并检查结果。UART 回调占用失败不覆盖其他设备。
+DMA 必须先配置 BSP_DMA_Configure 的 board hook；没有 hook 会拒绝启动。BMI088 和 DR16
+采用对齐独占缓冲，board 仍须确认实际 RAM 与 Cache/MPU 策略。完整契约、迁移和源码列表见
+[MRLink 接入说明](../User/device/mrlink/docs/README.md)，显式装配见 [例子](../examples/mrlink/README.md)。

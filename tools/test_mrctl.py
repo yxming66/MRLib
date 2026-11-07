@@ -32,6 +32,7 @@ class ProjectCliTests(unittest.TestCase):
             "test_host_project_compiles_only_selected_public_headers": "headers",
             "test_init_never_overwrites_existing_application_files": "init",
             "test_only_selected_target_dependencies_are_built": "deps",
+            "test_c_protocol_target_links_into_cpp_application": "mrlink",
             "test_target_schema_matches_the_cli": "schema",
             "test_unknown_targets_are_rejected": "unknown",
         }[self._testMethodName]
@@ -122,6 +123,24 @@ class ProjectCliTests(unittest.TestCase):
         self.build_project()
         self.assertFalse(list(self.build.rglob("libmr_robotics_core.a")))
         self.assertFalse(list(self.build.rglob("mr_robotics_core.lib")))
+
+    def test_c_protocol_target_links_into_cpp_application(self) -> None:
+        self.invoke(
+            "init", str(self.project), "--name", "robot_mrlink",
+            "--library", self.library, "--targets", "mr_component_mrlink",
+        )
+        # Exercise actual C ABI/linkage through the portable C++ wrapper.
+        (self.project / "src" / "main.cpp").write_text(
+            '#include "component/communication/mrlink/mrlink.hpp"\n'
+            'int main() { mr::link::Bus<> link; return link.Begin() == MRLINK_OK ? 0 : 1; }\n',
+            encoding="utf-8",
+        )
+        self.configure_project()
+        self.build_project()
+        executable = self.build / ("robot_mrlink.exe" if os.name == "nt" else "robot_mrlink")
+        result = subprocess.run([str(executable)], cwd=self.build, check=False)
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(list(self.build.rglob("libmr_robotics_core.a")))
 
     def test_target_schema_matches_the_cli(self) -> None:
         import importlib.util

@@ -75,8 +75,8 @@ typedef struct {
 
   float ch_res; /* 第五通道值 */
 
-   DR16_SwitchPos_t sw_r; /* 右侧拨杆位置 */
-   DR16_SwitchPos_t sw_l; /* 左侧拨杆位置 */
+  DR16_SwitchPos_t sw_r; /* 右侧拨杆位置 */
+  DR16_SwitchPos_t sw_l; /* 左侧拨杆位置 */
 
   struct {
     int16_t x;
@@ -88,7 +88,7 @@ typedef struct {
 
   union {
     bool key[DR16_KEY_NUM]; /* 键盘按键值 */
-    uint16_t value;        /* 键盘按键值的位映射 */
+    uint16_t value;         /* 键盘按键值的位映射 */
   } keyboard;
 
   uint16_t res; /* 保留，未启用 */
@@ -128,14 +128,15 @@ typedef struct {
 extern volatile DR16_Debug_t g_dr16_debug;
 
 /* Exported functions prototypes -------------------------------------------- */
-int8_t DR16_Init(DR16_t *dr16);
+int8_t DR16_Init(DR16_t* dr16);
 int8_t DR16_Restart(void);
-int8_t DR16_StartDmaRecv(DR16_t *dr16);
+int8_t DR16_Deinit(void);
+int8_t DR16_StartDmaRecv(DR16_t* dr16);
 bool DR16_WaitDmaCplt(uint32_t timeout);
-int8_t DR16_ParseData(DR16_t *dr16);
-int8_t DR16_Offline(DR16_t *dr16);
+int8_t DR16_ParseData(DR16_t* dr16);
+int8_t DR16_Offline(DR16_t* dr16);
 void DR16_RecordTimeoutOffline(void);
-void DR16_Service(DR16_t *dr16);
+void DR16_Service(DR16_t* dr16);
 
 /* USER FUNCTION BEGIN */
 

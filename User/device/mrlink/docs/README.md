@@ -41,3 +41,43 @@ Dispatch 默认预算 16 帧/1024 消费字节；剩余数据下次继续处理�
 传输通过 `BindTransport` 或 `SetWriter` 注入。send 返回 true 前必须复制或消费全部字节。
 直接持有 Build 的 TX scratch 给 DMA 不符合接口契约；使用拥有发送缓冲的硬件 channel，
 或在应用自行实现固定发送队列。PollRx 会限制读取量到 RX 空间，并在无新输入时继续 Dispatch。
+
+
+## 平台通道与 DMA 接入
+
+实现移至 `User/bsp/mrlink`，`bsp/adapters/mrlink.hpp` 将它转换为 portable Transport，
+并提供配对的 IRQ save/restore 同步钩子。旧 device 通道头只做转发。
+所有 channel 必须零初始化，使用期间禁止复制/移动；先停用消费任务，再调用 Deinit。
+Deinit 失败必须保留对象/缓冲，重试或处理硬件故障，不能释放后让 DMA/ISR 继续访问。
+
+UART 初始化独占 BSP 回调资源，六个 UART 端点均有 trampoline；和 DR16 等设备冲突时明确失败。
+重复初始化返回 BUSY，不能以初始化覆盖活动 DMA。TX 使用对齐的独立缓冲，完成或确认取消后才可复用；
+RX 从 DMA 槽位分段复制，scratch 小于接收块时不丢尾部。
+UART 错误 ISR 只尝试非阻塞重启；需要 HAL abort 的恢复延迟到任务 Poll/Send。
+TX 通知仅作为短通知信号，可能来自 ISR、错误恢复任务或 FDCAN 提交上下文；不要在通知里重入通道 API。
+
+USB 明确选择 synchronous_send（返回前已消费/复制）或异步提交。异步模式必须提供
+transactional register_tx_callbacks 和同步 stop：失败注册不保留回调，完成/错误通知表示已停止使用
+TX 缓冲，stop 成功保证 DMA 和回调均已解除。库拥有异步 TX 数据直到这些条件之一满足。
+板级 USB 回调负责 USB 控制器自己的 DMA/Cache 策略，send 不得阻塞。
+
+FDCAN 校验 ID/数据帧种类，按 BSP 的实际字节数接收；保留不足 scratch 的剩余数据。
+其 tx_done 仅表示 BSP 已复制/接纳发送，并非总线 ACK。Deinit 释放自己登记的接收 ID；
+必须先停用所有该 ID 的应用读者，不能在另一个任务仍阻塞读队列时删除。
+最大完整协议帧不能超过 channel.max_frame_size（CAN FD 最大 64）。CRC 开启时 payload 最大 58；
+classic CAN 最大完整帧 8，BSP 会拒绝超过该控制器帧格式的长度。
+当前没有 CAN 分片；FDCAN padding 按噪声消费。BSP 的 ID parser 若自定义，必须为此通道保持原始 ID 键。
+
+DMA 统一通过 `bsp/dma.h` 的 BSP_DMA_Configure 安装 board hook。未配置时拒绝 UART/SPI DMA，
+不会假定 H7 的 DTCM/SRAM、Cache 和 MPU 布局。hook 验证 DMA 可达内存，按板级策略处理 prepare TX、
+prepare RX 和 complete RX；失败的 complete 不通知数据就绪。
+只支持 normal DMA；circular DMA 需要另一套写指针/事件协议，当前显式拒绝。
+Cacheable RX 整个缓冲及其行填充在完成/成功取消前归 DMA 独占，half callback 只能读取已完成部分。
+
+BMI088 改为 32 字节对齐的独占 staging，再复制到 CPU 原始数据区；DR16 也使用独占 32 字节缓冲。
+二者传输启动失败不报告成功，超时取消失败保持所有权；DR16_Deinit 显式解除资源登记。
+这些静态 DMA buffer 必须由 board 链接到控制器可达内存，单纯对齐不能让 DTCM 变得可达。
+
+可编译的显式装配例子见 `examples/mrlink`。应用需要加入 UART/SPI 的 `bsp/dma.c`；
+平台通道源为 `bsp/mrlink/channel.c`、`channel_uart.c`、`channel_usb.c`、`channel_fdcan.c`，
+并链接原 BSP FDCAN/RTOS/内存/计时及 HAL 支持。不要再编译已删除的 device/mrlink/src/mrlink.c。

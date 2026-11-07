@@ -512,3 +512,16 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 4. 新增 mr_component_mrlink 导出目标，更新目录与 CLI Schema。核心主机测试不再借助假的 CMSIS；增加拆包全部位置、最大帧、噪声、CRC、预算、回调重入、同步钩子、字节别名、C++ codec、注册回滚和缓存生命周期回归。
 
 本批 MRLink C/C++ 主机测试、CLI/Schema 一致性通过。平台适配的资源释放、异步完成和 DMA 一致性继续在下一批处理；外部工程未修改。
+
+
+## 第三十六批：平台通道释放、DMA 一致性与设备收尾（2026-11-07）
+
+1. UART/FDCAN/USB 实现移入 bsp/mrlink，新增显式 transport 适配和可编译的手动装配例子。旧 opaque byte storage 改为真正的 backend union，C/C++ 实际布局与对齐一致；旧 device 通道头仅转发。删除不能实际通知 ISR 的 FDCAN rx_ready 配置。
+2. UART 六端点统一回调占用，冲突、重复初始化失败不覆盖旧资源；显式 Deinit 在确认停止 DMA 后解绑。RX 分段读取、TX 独占复制、abort-all、DMA 错误和释放失败均有明确状态；需要 blocking HAL abort 的恢复延迟到任务 Poll/Send，不在错误 ISR 中等待。DR16 也使用同一回调占用接口。
+3. USB 显式区分同步复制与异步提交；异步必须提供事务化回调登记及同步取消/解绑，库拥有 TX 缓冲直到完成或成功取消。FDCAN 保留短读取剩余数据、检查 ID/帧类型、失败初始化回滚、释放接收订阅；BSP 拒绝越界 ID 和 classic CAN/remote 大于 8 字节。
+4. 新增 BSP_DMA_Configure：board 显式验证控制器可达内存、整行所有权与 Cache 操作。没有 hook 会拒绝 DMA；RX 完成处理失败不发布数据。UART/SPI 在检查 busy 后才执行 Cache 同步，拒绝 circular DMA。BMI088 和 DR16 采用独占对齐缓冲，修正启动失败、超时及取消失败的生命周期；BMI088 的 DMA 数据先复制到 CPU 解析区。
+5. 补充真实 UART/SPI/BMI088/DR16 源的主机生命周期回归，以及只读外部 H723 HAL/CMSIS 的严格编译脚本。库引入要求父 CMake 启用 C/CXX；修正现有 CLI scaffold 仅启 CXX 导致 C 目标无法被工程引入的问题，新增真实 C 协议库链接进 C++ 应用并运行的回归。
+
+验证：27 项 CTest 通过；6 项 CLI 端到端测试通过（本机 Ninja 检测停滞后，使用 MinGW Makefiles）。13 份实际源和装配检查文件在真实 H723 HAL/CMSIS 头下通过 Cortex-M7、严格 C11/C++17、-Werror、无异常/RTTI 编译。主机测试中的模拟 HAL 验证协议/调用/所有权，不模拟真实 Cache 或中断抢占。
+
+本批完成 MRLink 核心/类型接口合并与通道/BSP 生命周期的代码收敛。仍需由实际 board 工程确认 DMA 缓冲链接地址、Cache/MPU、RTOS 中断优先级，进行完整固件链接与硬件验收；编译检查不能代替这些验收。YAML 新功能仍后置；未修改外部 zzrobot/RC_02。

@@ -281,7 +281,7 @@ def write_new(path: Path, content: str) -> bool:
 def render_cmake(project: dict[str, Any]) -> str:
     name, library = project["name"], project["library"].replace("\\", "/")
     return f'''cmake_minimum_required(VERSION 3.22)
-project({name} LANGUAGES CXX)
+project({name} LANGUAGES C CXX)
 
 # Relative to this project directory. Set --library to your vendored submodule.
 set(MR_TESTLIB_DIR "{library}")

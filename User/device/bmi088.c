@@ -93,6 +93,12 @@ typedef enum {
 /* Private variables -------------------------------------------------------- */
 static uint8_t buffer[2];
 static uint8_t bmi088_rxbuf[BMI088_LEN_RX_BUFF];
+_Alignas(32) static uint8_t bmi088_dma_rx[32];
+static uint8_t* dma_destination;
+static uint8_t dma_length;
+static volatile bool dma_busy;
+static BMI_Device_t dma_device;
+#define BMI088_SIGNAL_IO_ERROR (1u << 30u)
 
 static osThreadId_t thread_alert;
 static bool inited = false;
@@ -158,32 +164,54 @@ static uint8_t BMI_ReadSingle(BMI_Device_t dv, uint8_t reg) {
   return 0xFFu;
 }
 
-static void BMI_Read(BMI_Device_t dv, uint8_t reg, uint8_t *data, uint8_t len) {
-  if (data == NULL) return;
-
-  switch (dv) {
-    case BMI_ACCL:
-      BMI088_ACCL_NSS_RESET();
-      break;
-
-    case BMI_GYRO:
-      BMI088_GYRO_NSS_RESET();
-      break;
-  }
+static bool BMI_Read(BMI_Device_t dv, uint8_t reg, uint8_t* data, uint8_t len) {
+  if (!data || !len || len > sizeof(bmi088_dma_rx) || dma_busy || !inited) return false;
+  osThreadFlagsClear(SIGNAL_BMI088_ACCL_RAW_REDY | SIGNAL_BMI088_GYRO_RAW_REDY |
+                     BMI088_SIGNAL_IO_ERROR);
+  dma_destination = data;
+  dma_length = len;
+  dma_device = dv;
+  dma_busy = true;
+  if (dv == BMI_ACCL)
+    BMI088_ACCL_NSS_RESET();
+  else
+    BMI088_GYRO_NSS_RESET();
   buffer[0] = (uint8_t)(reg | 0x80);
-  BSP_SPI_Transmit(BSP_SPI_BMI088, buffer, 1u, false); 
-  BSP_SPI_Receive(BSP_SPI_BMI088, data, len, true);
+  if (BSP_SPI_Transmit(BSP_SPI_BMI088, buffer, 1u, false) == BSP_OK &&
+      BSP_SPI_Receive(BSP_SPI_BMI088, bmi088_dma_rx, len, true) == BSP_OK)
+    return true;
+  dma_busy = false;
+  dma_destination = NULL;
+  BMI088_ACCL_NSS_SET();
+  BMI088_GYRO_NSS_SET();
+  return false;
 }
-
 static void BMI088_RxCpltCallback(void) {
-  if (BSP_GPIO_ReadPin(BSP_GPIO_ACCL_CS) == GPIO_PIN_RESET) {
+  if (!dma_busy || !dma_destination) return;
+  memcpy(dma_destination, bmi088_dma_rx, dma_length);
+  dma_destination = NULL;
+  dma_busy = false;
+  BMI088_ACCL_NSS_SET();
+  BMI088_GYRO_NSS_SET();
+  osThreadFlagsSet(thread_alert, dma_device == BMI_ACCL ? SIGNAL_BMI088_ACCL_RAW_REDY
+                                                        : SIGNAL_BMI088_GYRO_RAW_REDY);
+}
+static void BMI088_ErrorCallback(void) {
+  if (dma_busy) osThreadFlagsSet(thread_alert, BMI088_SIGNAL_IO_ERROR);
+}
+static uint32_t BMI088_WaitDma(uint32_t ready, uint32_t timeout_ms) {
+  const uint32_t flags =
+      osThreadFlagsWait(ready | BMI088_SIGNAL_IO_ERROR, osFlagsWaitAny, timeout_ms);
+  if ((flags & BMI088_SIGNAL_ERROR_MASK) == 0u && (flags & BMI088_SIGNAL_IO_ERROR) == 0u &&
+      (flags & ready) != 0u)
+    return flags;
+  if (BSP_SPI_Abort(BSP_SPI_BMI088) == BSP_OK) {
+    dma_busy = false;
+    dma_destination = NULL;
     BMI088_ACCL_NSS_SET();
-    osThreadFlagsSet(thread_alert, SIGNAL_BMI088_ACCL_RAW_REDY);
-  }
-  if (BSP_GPIO_ReadPin(BSP_GPIO_GYRO_CS) == GPIO_PIN_RESET) {
     BMI088_GYRO_NSS_SET();
-    osThreadFlagsSet(thread_alert, SIGNAL_BMI088_GYRO_RAW_REDY);
   }
+  return osFlagsErrorResource;
 }
 
 static void BMI088_AcclIntCallback(void) {
@@ -221,6 +249,7 @@ int8_t BMI088_Init(BMI088_t *bmi088, const BMI088_Cali_t *cali) {
 
   BSP_SPI_RegisterCallback(BSP_SPI_BMI088, BSP_SPI_RX_CPLT_CB,
                            BMI088_RxCpltCallback);
+  BSP_SPI_RegisterCallback(BSP_SPI_BMI088, BSP_SPI_ERROR_CB, BMI088_ErrorCallback);
   BSP_GPIO_RegisterCallback(BSP_GPIO_ACCL_INT, BMI088_AcclIntCallback);
   BSP_GPIO_RegisterCallback(BSP_GPIO_GYRO_INT, BMI088_GyroIntCallback);
 
@@ -289,23 +318,20 @@ uint32_t BMI088_WaitNew(uint32_t timeout_ms) {
 }
 
 int8_t BMI088_AcclStartDmaRecv() {
-  BMI_Read(BMI_ACCL, BMI088_REG_ACCL_X_LSB, bmi088_rxbuf, BMI088_LEN_RX_BUFF);
-  return DEVICE_OK;
+  return BMI_Read(BMI_ACCL, BMI088_REG_ACCL_X_LSB, bmi088_rxbuf, BMI088_LEN_RX_BUFF) ? DEVICE_OK
+                                                                                     : DEVICE_ERR;
 }
 
 uint32_t BMI088_AcclWaitDmaCplt(uint32_t timeout_ms) {
-  return osThreadFlagsWait(SIGNAL_BMI088_ACCL_RAW_REDY, osFlagsWaitAll,
-                           timeout_ms);
+  return BMI088_WaitDma(SIGNAL_BMI088_ACCL_RAW_REDY, timeout_ms);
 }
 
 int8_t BMI088_GyroStartDmaRecv() {
-  BMI_Read(BMI_GYRO, BMI088_REG_GYRO_X_LSB, bmi088_rxbuf + 7, 6u);
-  return DEVICE_OK;
+  return BMI_Read(BMI_GYRO, BMI088_REG_GYRO_X_LSB, bmi088_rxbuf + 7, 6u) ? DEVICE_OK : DEVICE_ERR;
 }
 
 uint32_t BMI088_GyroWaitDmaCplt(uint32_t timeout_ms) {
-  return osThreadFlagsWait(SIGNAL_BMI088_GYRO_RAW_REDY, osFlagsWaitAll,
-                           timeout_ms);
+  return BMI088_WaitDma(SIGNAL_BMI088_GYRO_RAW_REDY, timeout_ms);
 }
 
 bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms) {
@@ -320,7 +346,6 @@ bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms) {
   }
   if (!BMI088_FlagsOk(BMI088_AcclWaitDmaCplt(timeout_ms),
                       SIGNAL_BMI088_ACCL_RAW_REDY)) {
-    BMI088_ACCL_NSS_SET();
     return false;
   }
 
@@ -329,7 +354,6 @@ bool BMI088_ReadFrameNonBlocking(uint32_t timeout_ms) {
   }
   if (!BMI088_FlagsOk(BMI088_GyroWaitDmaCplt(timeout_ms),
                       SIGNAL_BMI088_GYRO_RAW_REDY)) {
-    BMI088_GYRO_NSS_SET();
     return false;
   }
 

@@ -4,6 +4,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(MR_TestLib LANGUAGES C CXX)
     set(MR_TESTLIB_HOST_TESTS_DEFAULT ON)
 else()
+    # CMake must enable languages in the common parent of consumers and library.
+    if(NOT CMAKE_C_COMPILER_LOADED OR NOT CMAKE_CXX_COMPILER_LOADED)
+        message(FATAL_ERROR "MR_TestLib requires project(... LANGUAGES C CXX) before add_subdirectory")
+    endif()
     set(MR_TESTLIB_HOST_TESTS_DEFAULT OFF)
 endif()
 
@@ -339,6 +343,23 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     target_compile_options(mr_mrlink_cpp_host_tests PRIVATE
         -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
     add_test(NAME mr_mrlink_cpp_host_tests COMMAND mr_mrlink_cpp_host_tests)
+
+    add_executable(mr_mrlink_channel_host_tests
+        tests/device/mrlink_channel_host_tests.c User/bsp/uart.c User/bsp/spi.c User/bsp/dma.c
+        User/device/bmi088.c User/device/dr16.c
+        User/bsp/mrlink/channel.c
+        User/bsp/mrlink/channel_uart.c
+        User/bsp/mrlink/channel_usb.c
+        User/bsp/mrlink/channel_fdcan.c)
+    target_include_directories(mr_mrlink_channel_host_tests BEFORE PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/tests/stubs/io")
+    target_include_directories(mr_mrlink_channel_host_tests PRIVATE
+        "${CMAKE_CURRENT_LIST_DIR}/User" "${CMAKE_CURRENT_LIST_DIR}/User/device")
+    set_target_properties(mr_mrlink_channel_host_tests PROPERTIES
+        C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
+    target_compile_options(mr_mrlink_channel_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG)
+    add_test(NAME mr_mrlink_channel_host_tests COMMAND mr_mrlink_channel_host_tests)
 
     add_executable(mr_filter_host_tests tests/component/filter_host_tests.cpp
         User/component/filter/filter.c User/component/pid.c)

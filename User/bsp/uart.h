@@ -5,9 +5,9 @@ extern "C" {
 #endif
 
 /* Includes ----------------------------------------------------------------- */
-#include <usart.h>
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <usart.h>
 
 #include "bsp/bsp.h"
 
@@ -56,19 +56,24 @@ typedef void (*BSP_UART_RxEventCallback_t)(uint16_t size);
 
 /* Exported functions prototypes -------------------------------------------- */
 
-UART_HandleTypeDef *BSP_UART_GetHandle(BSP_UART_t uart);
+UART_HandleTypeDef* BSP_UART_GetHandle(BSP_UART_t uart);
 
-void BSP_UART_IRQHandler(UART_HandleTypeDef *huart);
+/* Claim/release and registration are startup/task operations. Claim rejects any
+ * existing callback, preventing silent takeover of another device's UART. */
+int8_t BSP_UART_Claim(BSP_UART_t uart, const void* owner);
+int8_t BSP_UART_Release(BSP_UART_t uart, const void* owner);
+int8_t BSP_UART_RegisterOwnedCallback(BSP_UART_t uart, const void* owner, BSP_UART_Callback_t type,
+                                      void (*fn)(void));
+int8_t BSP_UART_RegisterOwnedRxEvent(BSP_UART_t uart, const void* owner,
+                                     BSP_UART_RxEventCallback_t fn);
+void BSP_UART_IRQHandler(UART_HandleTypeDef* huart);
 
-int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type,
-                                 void (*callback)(void));
-int8_t BSP_UART_RegisterRxEventCallback(BSP_UART_t uart,
-                                        BSP_UART_RxEventCallback_t callback);
+int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type, void (*callback)(void));
+int8_t BSP_UART_RegisterRxEventCallback(BSP_UART_t uart, BSP_UART_RxEventCallback_t callback);
 
-int8_t BSP_UART_Transmit(BSP_UART_t uart, uint8_t *data, uint16_t size, bool dma);
-int8_t BSP_UART_Receive(BSP_UART_t uart, uint8_t *data, uint16_t size, bool dma);
-int8_t BSP_UART_ReceiveToIdle(BSP_UART_t uart, uint8_t *data, uint16_t size,
-                              bool dma);
+int8_t BSP_UART_Transmit(BSP_UART_t uart, uint8_t* data, uint16_t size, bool dma);
+int8_t BSP_UART_Receive(BSP_UART_t uart, uint8_t* data, uint16_t size, bool dma);
+int8_t BSP_UART_ReceiveToIdle(BSP_UART_t uart, uint8_t* data, uint16_t size, bool dma);
 
 /* USER FUNCTION BEGIN */
 

@@ -631,6 +631,7 @@ void HAL_FDCAN_TxFifoEmptyCallback(FDCAN_HandleTypeDef *hfdcan) {
 }
 
 void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t BufferIndex) {
+  (void)BufferIndex;
   BSP_FDCAN_t bsp_fdcan = FDCAN_Get(hfdcan);
   if (bsp_fdcan != BSP_FDCAN_ERR) {
     if (FDCAN_Callback[bsp_fdcan][HAL_FDCAN_TX_BUFFER_COMPLETE_CB])
@@ -639,6 +640,7 @@ void HAL_FDCAN_TxBufferCompleteCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t Bu
 }
 
 void HAL_FDCAN_TxBufferAbortCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t BufferIndex) {
+  (void)BufferIndex;
   BSP_FDCAN_t bsp_fdcan = FDCAN_Get(hfdcan);
   if (bsp_fdcan != BSP_FDCAN_ERR) {
     if (FDCAN_Callback[bsp_fdcan][HAL_FDCAN_TX_BUFFER_ABORT_CB])
@@ -647,6 +649,7 @@ void HAL_FDCAN_TxBufferAbortCallback(FDCAN_HandleTypeDef *hfdcan, uint32_t Buffe
 }
 
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs) {
+  (void)RxFifo0ITs;
   BSP_FDCAN_t bsp_fdcan = FDCAN_Get(hfdcan);
   if (bsp_fdcan != BSP_FDCAN_ERR) {
     if (FDCAN_Callback[bsp_fdcan][HAL_FDCAN_RX_FIFO0_MSG_PENDING_CB])
@@ -655,6 +658,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 }
 
 void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs) {
+  (void)RxFifo1ITs;
   BSP_FDCAN_t bsp_fdcan = FDCAN_Get(hfdcan);
   if (bsp_fdcan != BSP_FDCAN_ERR) {
     if (FDCAN_Callback[bsp_fdcan][HAL_FDCAN_RX_FIFO1_MSG_PENDING_CB])
@@ -816,13 +820,25 @@ int8_t BSP_FDCAN_RegisterCallback(BSP_FDCAN_t fdcan, BSP_FDCAN_Callback_t type, 
     return BSP_OK;
 }
 
-int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t fdcan, BSP_FDCAN_Format_t format, uint32_t id, uint8_t *data, uint8_t dlc) {
-    if (!inited) return BSP_ERR_INITED;
-    if (fdcan >= BSP_FDCAN_NUM) return BSP_ERR;
-    if (data == NULL && format != BSP_FDCAN_FORMAT_STD_REMOTE && format != BSP_FDCAN_FORMAT_EXT_REMOTE) return BSP_ERR_NULL;
-    if (dlc > BSP_FDCAN_MAX_DLC) return BSP_ERR;
-    FDCAN_HandleTypeDef *hfdcan = BSP_FDCAN_GetHandle(fdcan);
-    if (hfdcan == NULL) return BSP_ERR_NULL;
+int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t fdcan, BSP_FDCAN_Format_t format, uint32_t id,
+                          const uint8_t* data, uint8_t dlc) {
+  if (!inited) return BSP_ERR_INITED;
+  if (fdcan >= BSP_FDCAN_NUM) return BSP_ERR;
+  if (data == NULL && format != BSP_FDCAN_FORMAT_STD_REMOTE &&
+      format != BSP_FDCAN_FORMAT_EXT_REMOTE)
+    return BSP_ERR_NULL;
+  if (dlc > BSP_FDCAN_MAX_DLC) return BSP_ERR;
+  FDCAN_HandleTypeDef* hfdcan = BSP_FDCAN_GetHandle(fdcan);
+  if (hfdcan == NULL) return BSP_ERR_NULL;
+  const bool standard =
+      format == BSP_FDCAN_FORMAT_STD_DATA || format == BSP_FDCAN_FORMAT_STD_REMOTE;
+  const bool extended =
+      format == BSP_FDCAN_FORMAT_EXT_DATA || format == BSP_FDCAN_FORMAT_EXT_REMOTE;
+  const bool remote =
+      format == BSP_FDCAN_FORMAT_STD_REMOTE || format == BSP_FDCAN_FORMAT_EXT_REMOTE;
+  if ((!standard && !extended) || id > (standard ? 0x7ffu : 0x1fffffffu) ||
+      ((remote || hfdcan->Init.FrameFormat == FDCAN_FRAME_CLASSIC) && dlc > 8u))
+    return BSP_ERR;
   (void)BSP_FDCAN_RecoverIfNeeded(fdcan, false);
 
   BSP_FDCAN_TxMessage_t tx_msg = {0};
@@ -865,7 +881,11 @@ int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t fdcan, BSP_FDCAN_Format_t format, uint32_t
       tx_msg.header.FDFormat = FDCAN_CLASSIC_CAN;
       break;
   }
-	tx_msg.header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
+  if (remote) {
+    tx_msg.header.BitRateSwitch = FDCAN_BRS_OFF;
+    tx_msg.header.FDFormat = FDCAN_CLASSIC_CAN;
+  }
+        tx_msg.header.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
   tx_msg.header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
 	tx_msg.header.MessageMarker = 0x00;
   tx_msg.header.DataLength = BSP_FDCAN_EncodeDLC(dlc);   
@@ -910,6 +930,35 @@ int8_t BSP_FDCAN_TransmitRemoteFrame(BSP_FDCAN_t fdcan, BSP_FDCAN_RemoteFrame_t 
 int8_t BSP_FDCAN_RegisterId(BSP_FDCAN_t fdcan, uint32_t can_id, uint8_t queue_size) {
     if (!inited) return BSP_ERR_INITED;
     return BSP_FDCAN_CreateIdNode(fdcan, can_id, queue_size, false);
+}
+
+int8_t BSP_FDCAN_UnregisterId(BSP_FDCAN_t fdcan, uint32_t can_id) {
+  if (!inited) return BSP_ERR_INITED;
+  if ((unsigned)fdcan >= BSP_FDCAN_NUM) return BSP_ERR;
+  if (osMutexAcquire(queue_mutex, FDCAN_QUEUE_MUTEX_TIMEOUT) != osOK) return BSP_ERR_TIMEOUT;
+  BSP_FDCAN_QueueNode_t** slot = &queue_list;
+  while (*slot && ((*slot)->fdcan != fdcan || (*slot)->can_id != can_id)) slot = &(*slot)->next;
+  BSP_FDCAN_QueueNode_t* node = *slot;
+  if (!node) {
+    osMutexRelease(queue_mutex);
+    return BSP_ERR_NO_DEV;
+  }
+  const uint32_t token = __get_PRIMASK();
+  __disable_irq();
+  *slot = node->next;
+  if (token == 0u) __enable_irq();
+  if (node->queue && osMessageQueueDelete(node->queue) != osOK) {
+    const uint32_t restore = __get_PRIMASK();
+    __disable_irq();
+    node->next = *slot;
+    *slot = node;
+    if (restore == 0u) __enable_irq();
+    osMutexRelease(queue_mutex);
+    return BSP_ERR;
+  }
+  BSP_Free(node);
+  osMutexRelease(queue_mutex);
+  return BSP_OK;
 }
 
 int8_t BSP_FDCAN_RegisterLatestId(BSP_FDCAN_t fdcan, uint32_t can_id) {
