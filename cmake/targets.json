@@ -2,6 +2,16 @@
   "version": 1,
   "targets": [
     {
+      "name": "mr_component_mrlink",
+      "alias": "mr::component_mrlink",
+      "type": "STATIC",
+      "include_dirs": ["User"],
+      "compile_features": ["c_std_11", "cxx_std_17"],
+      "header": "component/communication/mrlink/mrlink.h",
+      "sources": ["User/component/communication/mrlink/mrlink.c", "User/component/crc16.c"],
+      "dependencies": []
+    },
+    {
       "name": "mr_component_math",
       "alias": "mr::component_math",
       "type": "INTERFACE",

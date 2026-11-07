@@ -502,3 +502,13 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 4. SPI 多字节寄存器访问改为同步完整事务，禁止把栈上寄存器地址交给 DMA 后立即启动下一次传输；补齐 SPI 参数检查和安全回调注销。MRLink backend storage 扩大以覆盖异步 UART 状态。
 
 验证：MinGW Makefiles 重新构建 MRLink 主机测试并通过；完整 25 项 CTest 在本批代码修改前后均通过。尚未进行目标 H7 的完整 HAL 链接、DMA cache 维护和实机 UART/SPI/FDCAN 验收；这些仍需在 board 工程中接入实际缓冲区、Cache 策略和中断优先级后验证。未修改外部 zzrobot/RC_02。
+
+
+## 第三十五批：可移植 MRLink 核心与单一固定容量 C++ 接口（2026-11-07）
+
+1. 将帧核心移到 component/communication/mrlink，删除条件宏控制的两套实例布局，使用 C/C++ 一致的真实结构；去除核心的 CMSIS/SPSC 依赖。同步钩子由应用在接收启动前注入，单上下文默认无需平台代码。
+2. 解析从队首完整候选帧读取，修正噪声跨 peek 窗口时已缓存帧无法继续处理的问题；先消费再回调，重入保护覆盖延迟错误回调。帧数和实际消费字节分别受预算约束，长度订阅错误仍算有效 wire 帧，不会在 Parse 中跳过到下一帧。
+3. 合并 full/lite 为一个固定函数/上下文实现；删除 std::function、未构造对象指针及隐式结构体 wire memcpy。显式 MessageCodec、端序字段工具和 opt-in LegacyNativeCodec；latest 使用带类型标识的复制快照，订阅注册失败保留旧状态。
+4. 新增 mr_component_mrlink 导出目标，更新目录与 CLI Schema。核心主机测试不再借助假的 CMSIS；增加拆包全部位置、最大帧、噪声、CRC、预算、回调重入、同步钩子、字节别名、C++ codec、注册回滚和缓存生命周期回归。
+
+本批 MRLink C/C++ 主机测试、CLI/Schema 一致性通过。平台适配的资源释放、异步完成和 DMA 一致性继续在下一批处理；外部工程未修改。

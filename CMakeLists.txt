@@ -325,21 +325,20 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     target_compile_options(mr_rm_protocol_host_tests PRIVATE -UNDEBUG)
     add_test(NAME mr_motor_feedback_host_tests COMMAND mr_motor_feedback_host_tests)
 
-    add_executable(mr_mrlink_host_tests
-        tests/device/mrlink_host_tests.c
-        User/device/mrlink/src/mrlink.c
-        User/component/container/spsc_ringbuf.c
-        User/component/crc16.c)
-    target_include_directories(mr_mrlink_host_tests BEFORE PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/tests/stubs/mrlink")
-    target_include_directories(mr_mrlink_host_tests PRIVATE
-        "${CMAKE_CURRENT_LIST_DIR}/User"
-        "${CMAKE_CURRENT_LIST_DIR}/User/device")
+    add_executable(mr_mrlink_host_tests tests/device/mrlink_host_tests.c)
+    target_link_libraries(mr_mrlink_host_tests PRIVATE mr_component_mrlink)
+    target_include_directories(mr_mrlink_host_tests PRIVATE "${CMAKE_CURRENT_LIST_DIR}/User/device")
     set_target_properties(mr_mrlink_host_tests PROPERTIES
         C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
     target_compile_options(mr_mrlink_host_tests PRIVATE
         -Wall -Wextra -Wpedantic -pedantic-errors)
     add_test(NAME mr_mrlink_host_tests COMMAND mr_mrlink_host_tests)
+
+    add_executable(mr_mrlink_cpp_host_tests tests/device/mrlink_cpp_host_tests.cpp)
+    target_link_libraries(mr_mrlink_cpp_host_tests PRIVATE mr_component_mrlink)
+    target_compile_options(mr_mrlink_cpp_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_mrlink_cpp_host_tests COMMAND mr_mrlink_cpp_host_tests)
 
     add_executable(mr_filter_host_tests tests/component/filter_host_tests.cpp
         User/component/filter/filter.c User/component/pid.c)

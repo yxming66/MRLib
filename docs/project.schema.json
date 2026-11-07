@@ -40,7 +40,8 @@
           "items": {
             "type": "string",
             "enum": [
-              "mr_component_math",
+              "mr_component_mrlink",
+          "mr_component_math",
               "mr_component_filter",
               "mr_component_controller",
               "mr_component_trajectory",

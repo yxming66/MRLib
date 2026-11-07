@@ -49,7 +49,7 @@ static void TestCapacityAndDeferredOverflow(void) {
          "error callback should register");
   g_error_calls = 0U;
   g_saw_drop = false;
-  Expect(MrLink_PushBytes(&link, input, sizeof(input)) == MRLINK_OK,
+  Expect(MrLink_PushBytes(&link, input, sizeof(input)) == MRLINK_ERR_BUF_FULL,
          "overflow input should be accepted with dropped-byte accounting");
   Expect(g_error_calls == 0U,
          "RX overflow must not invoke a business callback from PushBytes");
@@ -148,7 +148,94 @@ static void TestDispatchStillConsumesAllFrames(void) {
          "Dispatch should report no frame after consuming the stream");
 }
 
+
+static unsigned g_lock_depth, g_lock_calls, g_reentrant_calls;
+static uintptr_t TestEnter(void *ctx) {
+  (void)ctx; ++g_lock_calls; return g_lock_depth++;
+}
+static void TestExit(void *ctx, uintptr_t token) {
+  (void)ctx; Expect(g_lock_depth == token + 1u, "synchronization must be paired");
+  g_lock_depth = (unsigned)token;
+}
+static int8_t ReentrantHandler(uint8_t cmd, const uint8_t *data, uint16_t len, void *ctx) {
+  (void)cmd; (void)data; (void)len;
+  MrLink_t *link = (MrLink_t *)ctx;
+  Expect(g_lock_depth == 0u, "business callback must run outside synchronization");
+  Expect(MrLink_Dispatch(link) == MRLINK_ERR_BUSY, "recursive Dispatch must be rejected");
+  Expect(MrLink_Reset(link) == MRLINK_ERR_BUSY, "callback Reset must not corrupt parser");
+  Expect(MrLink_RegisterHandler(link, 0x41, NULL, NULL) == MRLINK_ERR_BUSY,
+         "callback registration must not mutate active slots");
+  ++g_reentrant_calls;
+  /* Feed forever if dispatch has no work budget. */
+  const uint16_t n = MrLink_Build(link, 0x41, NULL, 0u);
+  Expect(MrLink_PushBytes(link, link->tx_buf, n) == MRLINK_OK, "callback may enqueue more bytes");
+  return MRLINK_OK;
+}
+static void TestBudgetsAndSynchronization(void) {
+  MrLink_t link;
+  uint8_t rx[256], tx[70];
+  Expect(MrLink_Init(&link, NULL, rx, sizeof(rx), tx, sizeof(tx)) == MRLINK_OK, "init budget test");
+  MrLink_Synchronization_t sync = {TestEnter, TestExit, NULL};
+  Expect(MrLink_SetSynchronization(&link, &sync) == MRLINK_OK, "paired hooks accepted");
+  MrLink_Synchronization_t bad = {TestEnter, NULL, NULL};
+  Expect(MrLink_SetSynchronization(&link, &bad) == MRLINK_ERR_ARGS, "unpaired hooks rejected");
+  Expect(MrLink_RegisterHandler(&link, 0x41, ReentrantHandler, &link) == MRLINK_OK, "register reentry test");
+  const uint16_t n = MrLink_Build(&link, 0x41, NULL, 0u);
+  Expect(MrLink_PushBytes(&link, tx, n) == MRLINK_OK, "feed budget seed");
+  g_reentrant_calls = 0;
+  Expect(MrLink_Dispatch(&link) == MRLINK_OK, "bounded dispatch returns");
+  Expect(g_reentrant_calls == MRLINK_DISPATCH_MAX_FRAMES, "exact frame budget despite callback feeding");
+  MrLink_Stats_t stats;
+  Expect(MrLink_GetStatsSnapshot(&link, &stats) == MRLINK_OK &&
+         stats.frame_rx_ok == g_reentrant_calls, "stats snapshot counts wire frames");
+  Expect(g_lock_calls > 0 && g_lock_depth == 0u, "hooks cover ring and stats without leakage");
+}
+static void TestNoiseSplitCrcAndAliasing(void) {
+  MrLink_t link;
+  uint8_t rx[512], tx[70], frame[70], payload[64];
+  for (uint8_t i = 0u; i < sizeof(payload); ++i) payload[i] = i;
+  Expect(MrLink_Init(&link, NULL, rx, 70, tx, sizeof(tx)) == MRLINK_ERR_ARGS,
+         "max-frame-sized RX storage is one byte too small");
+  Expect(MrLink_Init(&link, NULL, rx, sizeof(rx), tx, sizeof(tx)) == MRLINK_OK, "init scan test");
+  Expect(MrLink_RegisterHandler(&link, 0x10, CountHandler, NULL) == MRLINK_OK, "register scan test");
+  const uint16_t n = MrLink_Build(&link, 0x10, payload, sizeof(payload));
+  memcpy(frame, tx, n);
+  uint8_t noise[80] = {0};
+  MrLink_PushBytes(&link, noise, sizeof(noise));
+  MrLink_PushBytes(&link, frame, n);
+  g_handler_calls = 0;
+  Expect(MrLink_Dispatch(&link) == MRLINK_OK && g_handler_calls == 1,
+         "noise beyond old peek boundary must not stall a buffered max frame");
+  for (uint16_t split = 1; split < n; ++split) {
+    MrLink_PushBytes(&link, frame, split);
+    Expect(MrLink_Dispatch(&link) == MRLINK_ERR, "partial input must wait");
+    MrLink_PushBytes(&link, frame+split, (uint16_t)(n-split));
+    Expect(MrLink_Dispatch(&link) == MRLINK_OK, "every split point must recover one frame");
+  }
+  frame[n-1u] ^= 1u;
+  MrLink_PushBytes(&link, frame, n);
+  Expect(MrLink_Dispatch(&link) == MRLINK_ERR, "bad CRC not accepted");
+  frame[n-1u] ^= 1u;
+  MrLink_PushBytes(&link, frame, n);
+  Expect(MrLink_Dispatch(&link) == MRLINK_OK, "valid frame after corrupt one recovers");
+  memcpy(tx, payload, sizeof(payload));
+  Expect(MrLink_Build(&link, 0x10, tx, sizeof(payload)) == n && memcmp(tx, frame, n) == 0,
+         "Build permits payload aliasing TX buffer");
+  /* Independently calculated CRC16/IBM-SDLC-without-xorout golden frame. */
+  const uint8_t golden[] = {0x4d,0x52,0x02,0x10,0x11,0x22,0x2e,0x6e};
+  const uint16_t gn = MrLink_Build(&link, 0x10, golden+4u, 2u);
+  Expect(gn == sizeof(golden) && memcmp(tx, golden, sizeof(golden)) == 0, "wire header and length stable");
+  /* A typed mismatch is still a consumed valid wire frame in pull mode. */
+  MrLink_Reset(&link);
+  MrLink_PushBytes(&link, frame, n);
+  uint8_t cmd; const uint8_t *out; uint16_t len;
+  Expect(MrLink_Parse(&link, &cmd, &out, &len) == MRLINK_OK && len == 64u &&
+         memcmp(out, payload, len) == 0, "maximum payload survives reset and pull");
+}
+
 int main(void) {
+  TestNoiseSplitCrcAndAliasing();
+  TestBudgetsAndSynchronization();
   TestCapacityAndDeferredOverflow();
   TestParseConsumesExactlyOneFrame();
   TestDispatchStillConsumesAllFrames();
