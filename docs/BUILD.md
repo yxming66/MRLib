@@ -11,7 +11,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 25 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 29 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
 
 滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试未验证真实 CAN 外设、STM32 固件链接与板级运行。
 
@@ -87,3 +87,12 @@ py -3 tools/check_user_io_h7.py --board-root D:/STM32Projects_HAL/board-H7/zzrob
 不执行完整固件链接、烧录、Cache 实测或实时性验收。
 
 作为子目录引入库时，父工程应先声明 `project(... LANGUAGES C CXX)`，因为库含有 C 与 C++ 导出目标。
+
+
+## 完整 H723 固件基线
+
+[H7 集成示例](../examples/h7_integration/README.md)现在提供独立 CMake/board/app 工程，使用真实 Cube/HAL/FreeRTOS 和本库的 RM 底盘、DM 关节机械臂及 UART MRLink，生成 ELF/BIN/map。默认禁止电机 TX，外部 zzrobot 工程只读。默认构建额外严格编译全部 35 个 User 生产实现；公共头检查脚本分别检查 C++17 与 C11 的独立 include。
+
+完整链接已经验证；烧录、Cache 开启与真实控制验收尚未完成。这个示例只覆盖选定的实际装配，不表示所有可选功能组合都已链接验证。详细构建步骤、板级前提与待验收项目见示例 README。
+
+旧 GUI 使用的 `User/bsp/bsp_config.yaml`、`User/component/component_config.yaml`、`User/device/device_config.yaml` 已删除；它们与当前 BSP 不匹配且没有仓库内消费者。当前 target 与依赖清单以 `cmake/targets.json` 为准，项目 YAML 以 `docs/project.schema.json` 为准；来源 manifest 仍保留历史文件记录。

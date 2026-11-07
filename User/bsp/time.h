@@ -23,6 +23,9 @@ extern "C" {
 /* Exported functions prototypes -------------------------------------------- */
 uint32_t BSP_TIME_Get_ms(void);
 
+/* TIM2 timebase: 1 MHz, ARR=999, HAL tick incremented once per TIM2 overflow.
+ * IRQ must be serviced at least once per ms. The result wraps with HAL's
+ * uint32 millisecond epoch (~49.7 days); it is not an unbounded uptime clock. */
 uint64_t BSP_TIME_Get_us(void);
 
 uint64_t BSP_TIME_Get(void);

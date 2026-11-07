@@ -13,8 +13,8 @@
  * @param mode 混合器模式
  * @return int8_t 0对应没有错误
  */
-int8_t Mixer_Init(Mixer_t *mixer, Mixer_Mode_t mode) {
-  if (mixer == NULL) return -1;
+int8_t Mixer_Init(Mixer_t* mixer, Mixer_Mode_t mode) {
+  if (mixer == NULL || (unsigned)mode > MIXER_SINGLE) return -1;
 
   mixer->mode = mode;
   return 0;
@@ -30,9 +30,11 @@ int8_t Mixer_Init(Mixer_t *mixer, Mixer_Mode_t mode) {
  * @param scale 输出放大因子
  * @return int8_t 0对应没有错误
  */
-int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
-                   int8_t len, float scale) {
-  if (mixer == NULL) return -1;
+int8_t Mixer_Apply(Mixer_t* mixer, MoveVector_t* move_vec, float* out, int8_t len, float scale) {
+  if (mixer == NULL || move_vec == NULL || out == NULL || len <= 0) return -1;
+  if (!isfinite(move_vec->vx) || !isfinite(move_vec->vy) || !isfinite(move_vec->wz) ||
+      !isfinite(scale))
+    goto error;
 
   switch (mixer->mode) {
     case MIXER_MECANUM:
@@ -55,6 +57,7 @@ int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
       } else {
         goto error;
       }
+      break;
     case MIXER_PARLFIX2:
       if (len == 2) {
         out[0] = -move_vec->vx;
@@ -62,20 +65,24 @@ int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
       } else {
         goto error;
       }
+      break;
     case MIXER_SINGLE:
       if (len == 1) {
         out[0] = move_vec->vx;
       } else {
         goto error;
       }
+      break;
     case MIXER_OMNICROSS:
     case MIXER_OMNIPLUS:
+    default:
       goto error;
   }
 
   float abs_max = 0.f;
   for (int8_t i = 0; i < len; i++) {
     const float abs_val = fabsf(out[i]);
+    if (!isfinite(abs_val)) goto error;
     abs_max = (abs_val > abs_max) ? abs_val : abs_max;
   }
   if (abs_max > 1.f) {
@@ -89,6 +96,6 @@ int8_t Mixer_Apply(Mixer_t *mixer, MoveVector_t *move_vec, float *out,
   return 0;
 
 error:
-  for (uint8_t i = 0; i < len; i++) out[i] = 0;
+  for (int8_t i = 0; i < len; i++) out[i] = 0;
   return -1;
 }

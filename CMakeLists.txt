@@ -374,10 +374,11 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
     add_executable(mr_task_services_host_tests tests/module/task_services_host_tests.cpp
         User/component/ahrs.c)
     add_executable(mr_pid_c_host_tests tests/component/pid_c_host_tests.c)
+    add_executable(mr_mixer_host_tests tests/component/mixer_host_tests.c User/component/mixer.c)
     add_executable(mr_pid_cpp_host_tests tests/component/pid_cpp_host_tests.cpp
         User/component/pid.c)
     foreach(_mr_test IN ITEMS mr_filter_host_tests mr_time_host_tests mr_task_services_host_tests
-            mr_pid_c_host_tests mr_pid_cpp_host_tests)
+            mr_pid_c_host_tests mr_pid_cpp_host_tests mr_mixer_host_tests)
         target_link_libraries(${_mr_test} PRIVATE mr_component_math)
         set_target_properties(${_mr_test} PROPERTIES
             C_STANDARD 11 C_STANDARD_REQUIRED YES C_EXTENSIONS NO

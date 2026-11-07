@@ -1,6 +1,7 @@
 """Check every User header as a standalone C++17 translation unit on H723.
 
 Uses real Cube headers; does not link firmware or instantiate every template.
+C headers are additionally checked as standalone C11 translation units.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -35,6 +36,12 @@ def main():
         name = path.relative_to(ROOT / "User").as_posix()
         result = subprocess.run(flags + ["-"], input=f'#include "{name}"\n',
                                 text=True, capture_output=True, cwd=ROOT)
+        if not result.returncode and path.suffix == ".h":
+            cflags = ["arm-none-eabi-gcc", "-x", "c", "-std=c11"] + [
+                flag for flag in flags[5:] if flag not in ("-fno-exceptions", "-fno-rtti")]
+            result = subprocess.run(cflags + ["-fsyntax-only", "-"],
+                                    input=f'#include "{name}"\ntypedef int mr_header_check_t;\n', text=True,
+                                    capture_output=True, cwd=ROOT)
         return name, result
 
     failures = 0

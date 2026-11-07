@@ -533,3 +533,16 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 - BSP_Malloc/BSP_Free 改为普通外部定义，避免 C11 inline 导致链接缺少定义。
 - BSP 毫秒延时按实际 RTOS 频率向上取整，处理零频率、溢出和 osDelay 失败；启动前不查询内核频率。
 - 验证：133/133 个头文件严格 C++17 H723 独立语法检查通过；28/28 项 CTest 通过（新增 BSP 延时边界测试）。尚不代表固件链接或硬件验证完成。
+
+## 第 38 批：全量实现检查与 H723 完整链接基线（2026-11-07）
+
+- 新增 `examples/h7_integration`，自己的 CMake/toolchain、board 启动入口、链接脚本与 app 装配；只读外部 zzrobot 的 Cube/HAL/FreeRTOS，不使用其旧 main/freertos/User，也未改动外部工程。
+- 真实装配 RM M3508 四轮 + 统一 Chassis、DM J4310 + 执行器适配 + JointT + Arm<3>、UART DMA MRLink、1 ms 控制和 100 ms 遥测。对象静态所有权；故障锁定后需显式新请求恢复；底盘失败立即停止本轮机械臂提交。
+- 板级明确 H723/24 MHz HSE/1000 Hz RTOS/TIM2 时基，数据、DMA 缓冲、RTOS heap/任务栈和 MSP 均在 AXI SRAM，缓存关闭；没有把 DTCM 误作 DMA 可达区。链接脚本保留标准数学/运行库与 C++ 构造函数，明确 heap/stack 容量，并分离 ELF RX/RW 段。
+- 默认禁止电机 TX，另行构建发送开关 ON 版本仅用于验证真实发送路径可链接，两者均未烧录。默认固件 Flash 99,340 B / 1 MiB，RAM 127,040 B / 320 KiB（含 newlib/MSP 预留，线程栈来自已统计 FreeRTOS heap）。
+- 默认构建严格编译全部 35 个生产 C/C++ 实现。检查发现旧 mixer 的平行轮/单轮分支缺 break，修复无故失败，同时检查空指针、长度、非法模式及非有限输入/输出，新增回归。
+- BSP 微秒时间以临界区读取 HAL tick/计数器/溢出标志，补偿 pending 超过半毫秒的情况；毫秒时间直接采用 HAL tick，保持 CAN 时间戳同一时基。文档明确 TIM2 与 49.7 天 epoch 边界。
+- 删除已无仓库内消费者且与 H723 配置不符的三个旧 GUI `*_config.yaml`，保留历史来源 manifest。现有 target/schema 是构建配置入口，不维护第二份勾选依赖表。
+- 公共头检查扩展到 `.h` 的 C11 独立包含：133/133 头检查通过。29/29 主机 CTest、6/6 CLI 回归通过，最后 mixer/time 改动的定向回归通过。两种发送开关的 ELF/BIN/map 均生成，无未定义符号；核对向量表 MSP 与复位入口，map/符号保留真实控制、BSP 分配、HAL/RTOS 与发送路径。
+
+当前 User 达到全量实现可编译、公共头独立可包含、选定 H7 装配可完整链接的基线。其他可选组合只通过编译的部分不宣称已链接/运行覆盖；尚未完成实机时序、DMA/IRQ、故障停机、控制参数与机械标定验收。Cache 开启、任意板级移植、补齐全部可选导出 target、项目 YAML 自动装配仍是后续工作。先以该手写示例稳定接口，再推进生成器。
