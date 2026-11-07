@@ -10,6 +10,7 @@
 #include "module/arm/arm.hpp"
 #include "module/chassis/chassis.hpp"
 #include "robot_config.hpp"
+#include "board_bindings.hpp"
 
 namespace {
 using namespace mr::motor;
@@ -52,7 +53,8 @@ struct Robot {
   bool Init() {
     if (drive.Register() != ChassisStatus::kOk) return false;
     if (manipulator.Init() != DEVICE_OK) return false;
-    return telemetry.Begin(BSP_UART_PC) == MRLINK_OK;
+    return mr::generated::ValidateUartBindings() &&
+           telemetry.Begin(mr::generated::CommunicationUart("telemetry")) == MRLINK_OK;
   }
   void Stop() {
     running = false;

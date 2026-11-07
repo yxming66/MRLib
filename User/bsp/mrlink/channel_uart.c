@@ -100,35 +100,27 @@ static void UartRxEvent(MrLink_UartBackend_t* backend, uint16_t size) {
   }
 }
 
-static void UartRxEventRc(uint16_t size) { UartRxEvent(s_uart_backends[BSP_UART_RC], size); }
-
-static void UartRxEventPc(uint16_t size) { UartRxEvent(s_uart_backends[BSP_UART_PC], size); }
-
-static void UartRxEventIr(uint16_t size) { UartRxEvent(s_uart_backends[BSP_UART_IR], size); }
-
-#define UART_RX_WRAPPER(Name, Id) \
-  static void UartRxEvent##Name(uint16_t n) { UartRxEvent(s_uart_backends[Id], n); }
-UART_RX_WRAPPER(Ore, BSP_UART_ORE)
-UART_RX_WRAPPER(RfRc, BSP_UART_RF_RC)
-UART_RX_WRAPPER(IrAux, BSP_UART_IR_AUX)
+#define UART_RX_WRAPPER(Id) \
+  static void UartRxEvent##Id(uint16_t n) { UartRxEvent(s_uart_backends[Id], n); }
+UART_RX_WRAPPER(BSP_UART_0)
+UART_RX_WRAPPER(BSP_UART_1)
+UART_RX_WRAPPER(BSP_UART_2)
+UART_RX_WRAPPER(BSP_UART_3)
+UART_RX_WRAPPER(BSP_UART_4)
+UART_RX_WRAPPER(BSP_UART_5)
+UART_RX_WRAPPER(BSP_UART_6)
+UART_RX_WRAPPER(BSP_UART_7)
+UART_RX_WRAPPER(BSP_UART_8)
+UART_RX_WRAPPER(BSP_UART_9)
 #undef UART_RX_WRAPPER
 static BSP_UART_RxEventCallback_t UartRxTrampoline(BSP_UART_t uart) {
-  switch (uart) {
-    case BSP_UART_RC:
-      return UartRxEventRc;
-    case BSP_UART_PC:
-      return UartRxEventPc;
-    case BSP_UART_IR:
-      return UartRxEventIr;
-    case BSP_UART_ORE:
-      return UartRxEventOre;
-    case BSP_UART_RF_RC:
-      return UartRxEventRfRc;
-    case BSP_UART_IR_AUX:
-      return UartRxEventIrAux;
-    default:
-      return NULL;
-  }
+  static const BSP_UART_RxEventCallback_t callbacks[BSP_UART_NUM] = {
+      UartRxEventBSP_UART_0, UartRxEventBSP_UART_1, UartRxEventBSP_UART_2,
+      UartRxEventBSP_UART_3, UartRxEventBSP_UART_4, UartRxEventBSP_UART_5,
+      UartRxEventBSP_UART_6, UartRxEventBSP_UART_7, UartRxEventBSP_UART_8,
+      UartRxEventBSP_UART_9,
+  };
+  return (unsigned)uart < BSP_UART_NUM ? callbacks[uart] : NULL;
 }
 
 static void UartTxDone(MrLink_UartBackend_t* backend) {
@@ -181,79 +173,49 @@ static void UartError(MrLink_UartBackend_t* backend) {
   UartRxErrorRecover(backend);
 }
 
-static void UartTxDoneRc(void) { UartTxDone(s_uart_backends[BSP_UART_RC]); }
-static void UartTxDonePc(void) { UartTxDone(s_uart_backends[BSP_UART_PC]); }
-static void UartTxDoneIr(void) { UartTxDone(s_uart_backends[BSP_UART_IR]); }
-static void UartErrorRc(void) { UartError(s_uart_backends[BSP_UART_RC]); }
-static void UartErrorPc(void) { UartError(s_uart_backends[BSP_UART_PC]); }
-static void UartErrorIr(void) { UartError(s_uart_backends[BSP_UART_IR]); }
-static void UartAbortTxRc(void) { UartTxError(s_uart_backends[BSP_UART_RC]); }
-static void UartAbortTxPc(void) { UartTxError(s_uart_backends[BSP_UART_PC]); }
-static void UartAbortTxIr(void) { UartTxError(s_uart_backends[BSP_UART_IR]); }
-
-#define UART_TX_WRAPPERS(Name, Id)                                        \
-  static void UartTxDone##Name(void) { UartTxDone(s_uart_backends[Id]); } \
-  static void UartError##Name(void) { UartError(s_uart_backends[Id]); }   \
-  static void UartAbortTx##Name(void) { UartTxError(s_uart_backends[Id]); }
-UART_TX_WRAPPERS(Ore, BSP_UART_ORE)
-UART_TX_WRAPPERS(RfRc, BSP_UART_RF_RC)
-UART_TX_WRAPPERS(IrAux, BSP_UART_IR_AUX)
+#define UART_TX_WRAPPERS(Id) \
+  static void UartTxDone##Id(void) { UartTxDone(s_uart_backends[Id]); } \
+  static void UartError##Id(void) { UartError(s_uart_backends[Id]); } \
+  static void UartAbortTx##Id(void) { UartTxError(s_uart_backends[Id]); }
+UART_TX_WRAPPERS(BSP_UART_0)
+UART_TX_WRAPPERS(BSP_UART_1)
+UART_TX_WRAPPERS(BSP_UART_2)
+UART_TX_WRAPPERS(BSP_UART_3)
+UART_TX_WRAPPERS(BSP_UART_4)
+UART_TX_WRAPPERS(BSP_UART_5)
+UART_TX_WRAPPERS(BSP_UART_6)
+UART_TX_WRAPPERS(BSP_UART_7)
+UART_TX_WRAPPERS(BSP_UART_8)
+UART_TX_WRAPPERS(BSP_UART_9)
 #undef UART_TX_WRAPPERS
 static void (*UartAbortTxTrampoline(BSP_UART_t uart))(void) {
-  switch (uart) {
-    case BSP_UART_RC:
-      return UartAbortTxRc;
-    case BSP_UART_PC:
-      return UartAbortTxPc;
-    case BSP_UART_IR:
-      return UartAbortTxIr;
-    case BSP_UART_ORE:
-      return UartAbortTxOre;
-    case BSP_UART_RF_RC:
-      return UartAbortTxRfRc;
-    case BSP_UART_IR_AUX:
-      return UartAbortTxIrAux;
-    default:
-      return NULL;
-  }
+  static void (*const callbacks[BSP_UART_NUM])(void) = {
+      UartAbortTxBSP_UART_0, UartAbortTxBSP_UART_1, UartAbortTxBSP_UART_2,
+      UartAbortTxBSP_UART_3, UartAbortTxBSP_UART_4, UartAbortTxBSP_UART_5,
+      UartAbortTxBSP_UART_6, UartAbortTxBSP_UART_7, UartAbortTxBSP_UART_8,
+      UartAbortTxBSP_UART_9,
+  };
+  return (unsigned)uart < BSP_UART_NUM ? callbacks[uart] : NULL;
 }
 
 static void (*UartTxDoneTrampoline(BSP_UART_t uart))(void) {
-  switch (uart) {
-    case BSP_UART_RC:
-      return UartTxDoneRc;
-    case BSP_UART_PC:
-      return UartTxDonePc;
-    case BSP_UART_IR:
-      return UartTxDoneIr;
-    case BSP_UART_ORE:
-      return UartTxDoneOre;
-    case BSP_UART_RF_RC:
-      return UartTxDoneRfRc;
-    case BSP_UART_IR_AUX:
-      return UartTxDoneIrAux;
-    default:
-      return NULL;
-  }
+  static void (*const callbacks[BSP_UART_NUM])(void) = {
+      UartTxDoneBSP_UART_0, UartTxDoneBSP_UART_1, UartTxDoneBSP_UART_2,
+      UartTxDoneBSP_UART_3, UartTxDoneBSP_UART_4, UartTxDoneBSP_UART_5,
+      UartTxDoneBSP_UART_6, UartTxDoneBSP_UART_7, UartTxDoneBSP_UART_8,
+      UartTxDoneBSP_UART_9,
+  };
+  return (unsigned)uart < BSP_UART_NUM ? callbacks[uart] : NULL;
 }
 
 static void (*UartErrorTrampoline(BSP_UART_t uart))(void) {
-  switch (uart) {
-    case BSP_UART_RC:
-      return UartErrorRc;
-    case BSP_UART_PC:
-      return UartErrorPc;
-    case BSP_UART_IR:
-      return UartErrorIr;
-    case BSP_UART_ORE:
-      return UartErrorOre;
-    case BSP_UART_RF_RC:
-      return UartErrorRfRc;
-    case BSP_UART_IR_AUX:
-      return UartErrorIrAux;
-    default:
-      return NULL;
-  }
+  static void (*const callbacks[BSP_UART_NUM])(void) = {
+      UartErrorBSP_UART_0, UartErrorBSP_UART_1, UartErrorBSP_UART_2,
+      UartErrorBSP_UART_3, UartErrorBSP_UART_4, UartErrorBSP_UART_5,
+      UartErrorBSP_UART_6, UartErrorBSP_UART_7, UartErrorBSP_UART_8,
+      UartErrorBSP_UART_9,
+  };
+  return (unsigned)uart < BSP_UART_NUM ? callbacks[uart] : NULL;
 }
 
 int8_t MrLink_ChannelBackend_InitUart(MrLink_Channel_t* channel,

@@ -1,7 +1,7 @@
 /* Includes ----------------------------------------------------------------- */
 #include "bsp/uart.h"
 
-#include <usart.h>
+#include <string.h>
 
 #include "bsp/dma.h"
 
@@ -26,6 +26,33 @@ static BSP_UART_RxEventCallback_t UART_RxEventCallback[BSP_UART_NUM];
 static const void* UART_Owner[BSP_UART_NUM];
 static uint8_t* UART_DmaRx[BSP_UART_NUM];
 static uint16_t UART_DmaRxSize[BSP_UART_NUM];
+static BSP_UART_Endpoint_t UART_Endpoints[BSP_UART_NUM];
+static uint8_t UART_EndpointCount;
+static bool UART_Configured;
+
+int8_t BSP_UART_Configure(const BSP_UART_Endpoint_t* endpoints, uint8_t count) {
+  if (UART_Configured || !endpoints || !count || count > BSP_UART_NUM) return BSP_ERR;
+  for (uint8_t i = 0; i < count; ++i) {
+    const BSP_UART_Endpoint_t* endpoint = &endpoints[i];
+    if (!endpoint->name || !endpoint->name[0] || !endpoint->handle ||
+        !endpoint->handle->Instance || endpoint->handle->RxState != HAL_UART_STATE_READY ||
+        endpoint->handle->gState != HAL_UART_STATE_READY) return BSP_ERR;
+    for (uint8_t j = 0; j < i; ++j)
+      if (strcmp(endpoint->name, endpoints[j].name) == 0 ||
+          endpoint->handle->Instance == endpoints[j].handle->Instance) return BSP_ERR;
+  }
+  memcpy(UART_Endpoints, endpoints, count * sizeof(*endpoints));
+  UART_EndpointCount = count;
+  UART_Configured = true;
+  return BSP_OK;
+}
+
+BSP_UART_t BSP_UART_FindEndpoint(const char* name) {
+  if (name)
+    for (uint8_t i = 0; i < UART_EndpointCount; ++i)
+      if (strcmp(name, UART_Endpoints[i].name) == 0) return (BSP_UART_t)i;
+  return BSP_UART_ERR;
+}
 static bool UART_CompleteDma(BSP_UART_t uart, uint16_t size, bool final) {
   uint8_t* data = UART_DmaRx[uart];
   if (!data) return true;
@@ -45,21 +72,10 @@ static bool UART_CompleteDma(BSP_UART_t uart, uint16_t size, bool final) {
 
 /* Private function  -------------------------------------------------------- */
 static BSP_UART_t UART_Get(UART_HandleTypeDef* huart) {
-  if (huart == NULL) return BSP_UART_ERR;
-  if (huart->Instance == UART5)
-    return BSP_UART_RC;
-  else if (huart->Instance == UART9)
-    return BSP_UART_RF_RC;
-  else if (huart->Instance == USART1)
-    return BSP_UART_PC;
-  else if (huart->Instance == UART8)
-    return BSP_UART_IR;
-  else if (huart->Instance == UART7)
-    return BSP_UART_IR_AUX;
-  else if (huart->Instance == USART10)
-    return BSP_UART_ORE;
-  else
-    return BSP_UART_ERR;
+  if (huart)
+    for (uint8_t i = 0; i < UART_EndpointCount; ++i)
+      if (huart == UART_Endpoints[i].handle) return (BSP_UART_t)i;
+  return BSP_UART_ERR;
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* huart) {
@@ -173,27 +189,13 @@ void BSP_UART_IRQHandler(UART_HandleTypeDef* huart) {
 }
 
 UART_HandleTypeDef* BSP_UART_GetHandle(BSP_UART_t uart) {
-  switch (uart) {
-    case BSP_UART_RC:
-      return &huart5;
-    case BSP_UART_RF_RC:
-      return &huart9;
-    case BSP_UART_PC:
-      return &huart1;
-    case BSP_UART_IR:
-      return &huart8;
-    case BSP_UART_IR_AUX:
-      return &huart7;
-    case BSP_UART_ORE:
-      return &huart10;
-    default:
-      return NULL;
-  }
+  return (unsigned)uart < UART_EndpointCount ? UART_Endpoints[uart].handle : NULL;
 }
 
 int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type,
                                  void (*callback)(void)) {
   if ((unsigned)uart >= BSP_UART_NUM || (unsigned)type >= BSP_UART_CB_NUM) return BSP_ERR;
+  if (!BSP_UART_GetHandle(uart)) return BSP_ERR;
   if (UART_Owner[uart]) return BSP_ERR;
   if (callback == NULL) {
     UART_Callback[uart][type] = NULL;
@@ -205,6 +207,7 @@ int8_t BSP_UART_RegisterCallback(BSP_UART_t uart, BSP_UART_Callback_t type,
 
 int8_t BSP_UART_RegisterRxEventCallback(BSP_UART_t uart, BSP_UART_RxEventCallback_t callback) {
   if ((unsigned)uart >= BSP_UART_NUM) return BSP_ERR;
+  if (!BSP_UART_GetHandle(uart)) return BSP_ERR;
   if (UART_Owner[uart]) return BSP_ERR;
   UART_RxEventCallback[uart] = callback;
   return BSP_OK;

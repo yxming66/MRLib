@@ -94,6 +94,46 @@ class RobotGenerationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "refusing to overwrite"):
             generate(self.path, self.output, "all")
 
+    def test_uart_yaml_routes_real_driver_and_rebuilds(self):
+        self.config["board"]["bindings"]["uart"]["remote"] = "uart5"
+        self.write_config()
+        cmake = f'''cmake_minimum_required(VERSION 3.22)
+project(uart_generated_probe LANGUAGES C CXX)
+set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory("{ROOT.as_posix()}" mr_library)
+include("{ROOT.as_posix()}/cmake/MrRobot.cmake")
+add_library(board_probe INTERFACE)
+mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot
+    CAN_ENDPOINTS BSP_CAN_1 UART_ENDPOINTS usart1 uart9 uart5)
+add_executable(probe "{ROOT.as_posix()}/tests/generation/uart_bindings_probe.cpp"
+    "{ROOT.as_posix()}/User/bsp/uart.c" "{ROOT.as_posix()}/User/bsp/dma.c")
+target_include_directories(probe PRIVATE "{ROOT.as_posix()}/tests/stubs/io")
+target_compile_options(probe PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)
+mr_target_robot_config(TARGET probe CONFIG "${{CMAKE_CURRENT_SOURCE_DIR}}/config.yaml"
+    MODULE chassis BOARD_TARGET board_probe PYTHON "{Path(sys.executable).as_posix()}")
+'''
+        self.project.joinpath("CMakeLists.txt").write_text(cmake, encoding="utf-8")
+        build = self.project / "build"
+        command = ["cmake", "-S", str(self.project), "-B", str(build)]
+        if os.name == "nt":
+            command += ["-G", "MinGW Makefiles",
+                        "-DCMAKE_MAKE_PROGRAM=D:/Drivers/MSYS2/ucrt64/bin/mingw32-make.exe",
+                        "-DCMAKE_C_COMPILER=D:/Drivers/MSYS2/ucrt64/bin/gcc.exe",
+                        "-DCMAKE_CXX_COMPILER=D:/Drivers/MSYS2/ucrt64/bin/g++.exe"]
+        self.run_command(command)
+        executable = build / ("probe.exe" if os.name == "nt" else "probe")
+        for endpoint in ("usart1", "uart9"):
+            # Change only YAML: emitted mapping, real TX handle and ISR routing
+            # must follow it after a normal build without any driver/app edits.
+            self.config["board"]["bindings"]["uart"]["telemetry_uart"] = endpoint
+            self.write_config()
+            self.run_command(["cmake", "--build", str(build), "--parallel", "4"])
+            self.run_command([str(executable), endpoint])
+        self.config["board"]["bindings"]["uart"]["telemetry_uart"] = "BSP_UART_PC"
+        self.write_config()
+        log = self.run_command(["cmake", "--build", str(build)], success=False)
+        self.assertIn("does not provide UART endpoint", log)
+
     def test_arm_bus_and_numeric_boundaries(self):
         self.config["board"]["bindings"]["can"]["second_bus"] = "BSP_CAN_2"
         self.config["devices"]["motors"]["arm_0"]["bus"] = "second_bus"
@@ -226,7 +266,7 @@ set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("{ROOT.as_posix()}" mr_library)
 add_library(board_probe INTERFACE)
 include("{ROOT.as_posix()}/cmake/MrRobot.cmake")
-mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot CAN_ENDPOINTS BSP_CAN_1)
+mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot CAN_ENDPOINTS BSP_CAN_1 UART_ENDPOINTS usart1)
 add_executable(probe main.cpp)
 target_include_directories(probe PRIVATE "{ROOT.as_posix()}/tests")
 target_compile_options(probe PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG)
@@ -292,7 +332,7 @@ set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("{ROOT.as_posix()}" mr_library)
 include("{ROOT.as_posix()}/cmake/MrRobot.cmake")
 add_library(board_probe INTERFACE)
-mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot CAN_ENDPOINTS BSP_CAN_1)
+mr_register_board_adapter(TARGET board_probe PROFILE h723_zzrobot CAN_ENDPOINTS BSP_CAN_1 UART_ENDPOINTS usart1)
 add_executable(probe "{ROOT.as_posix()}/tests/generation/arm_probe.cpp")
 target_include_directories(probe PRIVATE "{ROOT.as_posix()}/tests")
 target_compile_options(probe PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)

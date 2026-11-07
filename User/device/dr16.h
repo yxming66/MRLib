@@ -9,6 +9,7 @@ extern "C" {
 
 #include "cmsis_compiler.h"
 #include "device.h"
+#include "bsp/uart.h"
 
 /* USER INCLUDE BEGIN */
 
@@ -128,7 +129,8 @@ typedef struct {
 extern volatile DR16_Debug_t g_dr16_debug;
 
 /* Exported functions prototypes -------------------------------------------- */
-int8_t DR16_Init(DR16_t* dr16);
+/* One receiver instance; caller selects a registered endpoint explicitly. */
+int8_t DR16_Init(DR16_t* dr16, BSP_UART_t uart);
 int8_t DR16_Restart(void);
 int8_t DR16_Deinit(void);
 int8_t DR16_StartDmaRecv(DR16_t* dr16);

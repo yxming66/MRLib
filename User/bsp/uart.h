@@ -7,7 +7,7 @@ extern "C" {
 /* Includes ----------------------------------------------------------------- */
 #include <stdbool.h>
 #include <stdint.h>
-#include <usart.h>
+#include "stm32h7xx_hal.h"
 
 #include "bsp/bsp.h"
 
@@ -23,19 +23,25 @@ extern "C" {
 
 /* Exported types ----------------------------------------------------------- */
 
-/* 要添加使用UART的新设备，需要先在此添加对应的枚举值 */
-
-/* UART实体枚举，与设备对应 */
+/* Neutral slots. Board registers hardware; devices never encode RC/PC roles. */
 typedef enum {
-  BSP_UART_RC,
-  BSP_UART_PC,
-  BSP_UART_IR,
-  BSP_UART_ORE,
-  BSP_UART_RF_RC,
-  BSP_UART_IR_AUX,
+  BSP_UART_0, BSP_UART_1, BSP_UART_2, BSP_UART_3, BSP_UART_4,
+  BSP_UART_5, BSP_UART_6, BSP_UART_7, BSP_UART_8, BSP_UART_9,
   BSP_UART_NUM,
   BSP_UART_ERR,
 } BSP_UART_t;
+
+typedef struct {
+  const char* name;
+  UART_HandleTypeDef* handle;
+} BSP_UART_Endpoint_t;
+
+/* Call once at startup, after HAL initialization and before devices/interrupt
+ * traffic. Copies the table; names and HAL handles must have static lifetime.
+ * Entire table is validated before publication. No runtime rebinding/reset.
+ * Array order defines opaque slot IDs; use FindEndpoint instead of assuming IDs. */
+int8_t BSP_UART_Configure(const BSP_UART_Endpoint_t* endpoints, uint8_t count);
+BSP_UART_t BSP_UART_FindEndpoint(const char* name);
 
 /* UART支持的中断回调函数类型，具体参考HAL中定义 */
 typedef enum {

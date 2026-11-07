@@ -15,7 +15,7 @@ board:
     can:
       motor_can: BSP_CAN_1
     uart:
-      telemetry_uart: BSP_UART_PC
+      telemetry_uart: usart1
 
 runtime:
   allow_motor_tx: false

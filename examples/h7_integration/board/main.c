@@ -7,6 +7,8 @@
 #include "tim.h"
 #include "usart.h"
 
+extern int Board_RegisterUartEndpoints(void);
+
 #ifdef MR_CHASSIS_TASK_EXAMPLE
 #include "robot_tasks.h"
 #else
@@ -70,6 +72,7 @@ int main(void) {
   MX_TIM3_Init();
   MX_TIM4_Init();
   MX_TIM1_Init();
+  if (!Board_RegisterUartEndpoints()) Error_Handler();
   if (osKernelInitialize() != osOK) Error_Handler();
 #ifdef MR_CHASSIS_TASK_EXAMPLE
   if (!MR_CreateConfiguredTask()) Error_Handler();

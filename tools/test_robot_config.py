@@ -73,6 +73,11 @@ class RobotConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             validate(self.config)
 
+    def test_uart_endpoints_reject_duplicate_aliases(self):
+        self.config["board"]["bindings"]["uart"] = {"remote": "uart9", "telemetry_uart": "uart9"}
+        with self.assertRaisesRegex(ValueError, "physical endpoint"):
+            validate(self.config)
+
     def test_named_custom_business_parameters(self):
         self.config["extensions"]["team_name"] = {"mode": "hold", "threshold": 0.2}
         validate(self.config)

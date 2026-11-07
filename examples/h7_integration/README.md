@@ -63,7 +63,7 @@ py -3 tools/check_user_headers_h7.py --board-root D:/STM32Projects_HAL/board-H7/
 - Flash 为 `0x08000000` 起 1 MiB；数据、BSS、FreeRTOS heap、线程栈、MSP 都在 `0x24000000` 起 320 KiB 的 AXI SRAM，DMA1/2 缓冲不放 DTCM。启动代码复制 data、清零 BSS 并运行 C++ 构造函数。
 - D-cache/I-cache 显式关闭；DMA hook 只接受上述 AXI SRAM。当前不是 Cache 开启后的性能模板。开启 Cache 时需独占缓存行、MPU/Cache 策略及实机一致性验证。
 - FreeRTOS heap 72 KiB，robot 线程栈 32 KiB；链接额外预留 newlib heap 8 KiB、MSP 16 KiB。后续应实测任务栈高水位和最坏周期耗时。
-- BSP 启动、设备注册与控制全部在同一 robot 任务中完成；CanPort、RM 分组总线、执行器、关节、模块和 MRLink 对象均为静态生命周期。UART/FD CAN IRQ 由 Cube 文件提供，HAL 完成回调由本库接管。
+- UART 硬件端点在 main 中完成 Cube 初始化后、内核启动前登记；其余 BSP 启动、设备注册与控制在 robot 任务中完成。CanPort、RM 分组总线、执行器、关节、模块和 MRLink 对象均为静态生命周期。UART/FD CAN IRQ 由 Cube 文件提供，HAL 完成回调由本库接管。
 - 默认 YAML `runtime.allow_motor_tx: false`，MotorPort 拒绝所有电机 TX；`request_run=false`，不会自动 Enable。FDCAN 接收和串口遥测仍会启动。
 - 允许电机发送的独立构建使用另一份 config.yaml，将 `runtime.allow_motor_tx` 改为 true，用 `-DMR_ROBOT_CONFIG=配置绝对路径` 指定，并使用另一个 build 目录。复制 YAML 后须调整 project.library 指向本库。旧 `MR_H7_ALLOW_MOTOR_TX` CMake 开关已移除。仍须人工请求 `request_run` 的上升沿才能尝试启动；串口没有使能命令。启动前要求真实轮/关节反馈，运行中故障停止并锁住，需撤销请求后重新请求。例子只发零底盘速度和机械臂保持命令，停止路径只重试零/禁用命令。
 
@@ -73,10 +73,12 @@ py -3 tools/check_user_headers_h7.py --board-root D:/STM32Projects_HAL/board-H7/
 
 2026-11-07：GNU Arm 15.2.1 完成两种发送开关的编译和链接；默认构建检查 35 个实际实现，133 个公共头可独立编译；29 项主机 CTest 和 6 项 CLI 回归通过。ELF 保留 RobotTask、底盘控制、ArmController、逆运动学、真实 HAL/RTOS 和 BSP 分配符号，未发现未定义符号。
 
-尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。通信/任务生成、任意硬件资源绑定仍待实现。
+尚未烧录或上电验证。需在板上确认时钟/中断优先级、FDCAN 波特率和消息 RAM、UART DMA 接收恢复、传感器数据、单位/方向/限位、失联停机、任务周期/栈及物理急停，再作为整机迁移基础。完整通信服务、多任务拓扑和其他外设绑定仍待实现。
 
 
 ## 统一参数格式
+
+UART 的硬件清单在 board/uart_endpoints.c，Cube 初始化后由 main 登记；用途由 YAML 的 board.bindings.uart 分配。telemetry_uart 默认 usart1，改为 uart9/uart7 等已登记端点后重新构建，MRLink 实际句柄及回调随之变化，无需改库或 app。新增硬件时同步更新 board 表及 CMake UART_ENDPOINTS，波特率/引脚/DMA 仍由 Cube 配置。见 [UART 绑定及迁移](../../docs/UART_BINDINGS.md)。其他外设仍有板型限制，见 [核查表](../../docs/BSP_PORTABILITY_AUDIT.md)。
 
 新增 [config.yaml](config.yaml) 作为其他机器人项目的 v2 配置范本，包含 board 绑定、电机/轮子/关节、统一模块、MRLink 和任务参数。详细单位、引用关系、校验及扩展规则见 [配置规范](../../docs/ROBOT_CONFIG.md)。它已驱动底盘和机械臂静态装配与参数，修改后运行 `cmake --build build/h7-integration` 会自动重新配置并编译。示例 CMake 使用 `MODULE all`，最多一个底盘和一个机械臂共享 CAN 端点；两个模块在同一个任务中运行，周期必须相同。通信周期、任务栈/优先级、消息 codec 和任务入口仍手写。板级边界与依赖选择见 [板级接入](../../docs/BOARD_INTEGRATION.md)。
 

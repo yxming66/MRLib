@@ -1,4 +1,4 @@
-# 板级接入与生成底盘
+# 板级接入与装配生成
 
 库接入已有 Cube/CMake 工程。项目保留芯片启动汇编、链接脚本、HAL/RTOS、引脚时钟、DMA/Cache 策略、中断以及 main。生成器只提供设备/模块静态装配和库依赖，不生成第二套硬件初始化。
 
@@ -14,7 +14,7 @@ include(external/MR_TestLib/cmake/MrRobot.cmake)
 # board_adapter 必须已实现实际使用的 BSP/CanPort，并传递 HAL 头文件和宏。
 # profile 与 config.yaml 的 board.profile 相同，端点列表只声明已实现的能力。
 mr_register_board_adapter(TARGET board_adapter PROFILE my_board
-    CAN_ENDPOINTS BSP_CAN_1)
+    CAN_ENDPOINTS BSP_CAN_1 UART_ENDPOINTS usart1 uart9)
 mr_target_robot_config(TARGET robot_firmware
     CONFIG "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
     MODULE chassis BOARD_TARGET board_adapter
@@ -27,6 +27,10 @@ mr_target_robot_config(TARGET robot_firmware
 
 当前支持选定的单总线 RM 四轮底盘和 DM/LZ 串联机械臂。将生成的 `mr::generated::ChassisAssembly` 作为静态对象，注入该总线的 CanPort，调用 Register；app 继续负责反馈、命令、Step、CommitOutput 与 RM 分组 Flush。它不创建任务或自动使能；周期常量供 app 调度使用。生成的 `ArmAssembly` 持有电机 → MotorActuatorAdapter → JointT → Arm<N>，注入同一 CanPort 后调用 Init，再由 app 继续 UpdateFeedback、显式 Enable、Step 和 CommitOutput。N 按关节列表长度推导，零点仅在 JointT 处理，模型 position_offset 保持零。完整调用顺序参考 H7 app 和 `examples/device_execution`。
 
+## UART 绑定
+
+YAML 的 board.bindings.uart 现在填写 board 登记的硬件名称，例如 telemetry_uart: usart1。CMake 检查 UART_ENDPOINTS 能力；board 在 Cube 初始化后调用一次 BSP_UART_Configure，app 通过生成的 board_bindings.hpp 查找逻辑端口。H7 MRLink 已使用 CommunicationUart("telemetry")，改 YAML 后实际切换句柄。完整 API、启动顺序和 DR16 迁移见 [UART 绑定](UART_BINDINGS.md)。
+
 ## 可选的单周期任务
 
 在 `mr_target_robot_config()` 中额外传入 `TASK chassis`，等价于 CLI 的 `--task chassis`。生成器输出任务配置与创建连接并自动将 `robot_tasks.cpp` 加入固件编译；board 提供 CMSIS-RTOS2/FreeRTOS 头文件和实现。app 必须实现入口绑定及 Init/Step/Fault，board 在内核初始化后、启动前调用生成的 `MR_CreateConfiguredTask()` 并检查结果。此时不要重复创建同一个手写任务。
@@ -35,12 +39,13 @@ mr_target_robot_config(TARGET robot_firmware
 
 ## 当前 H723 BSP 的可选帮助函数
 
-当前 User/bsp 的 HAL 句柄与端点映射属于既有 H723/zzrobot 板型，可用：
+当前帮助函数支持既有 H723 板型。UART 已通过 board 登记端点；CAN、SPI、GPIO、PWM 和时基仍有板型映射，见 [核查表](BSP_PORTABILITY_AUDIT.md)。可用：
 
 ```cmake
 include(external/MR_TestLib/cmake/MrStm32H7.cmake)
 mr_add_stm32h7_bsp(TARGET board_adapter PLATFORM cube_platform
-    PROFILE h723_zzrobot COMPONENTS can mrlink)
+    PROFILE h723_zzrobot COMPONENTS can mrlink
+    UART_ENDPOINTS usart1 uart9)
 ```
 
 `cube_platform` 提供 Cube 的 include、编译定义和所需平台使用条件，不应包含另一个 main。帮助函数创建 OBJECT target 并选择以下 MR 源依赖：

@@ -6,6 +6,8 @@
 
 ## 配置分层
 
+UART 绑定已接入生成和 H7 实际收发：`board.bindings.uart` 的值使用 board 登记的硬件名（例如 `telemetry_uart: usart1`），不再使用旧项目的 BSP_UART_PC 等用途枚举。生成的 `board_bindings.hpp` 提供逻辑端口及通信到端点的查找；board 初始化、通信缓冲/codec 和调度仍由项目实现。API 迁移见 [UART 绑定](UART_BINDINGS.md)，其他外设尚存的板型限制见 [BSP 核查](BSP_PORTABILITY_AUDIT.md)。
+
 | 区域 | 填写内容 | 最终用途 |
 | --- | --- | --- |
 | `project` | 项目名、库相对路径 | 构建入口与库引用 |
@@ -71,7 +73,7 @@ robot_project/
 
 配置校验 → 类型/依赖与板级能力检查 → 生成静态 C++ 装配和构建清单 → 编译。YAML 只作为电脑上的构建输入，不在 MCU 上解析。不要求勾选每个底层源文件，不从配置猜测任意 `.h/.c`，也不在 YAML 中放入 shell 命令或 C++ 片段。
 
-输出为 `robot_config.hpp`、`robot.cmake` 和 `.mrctl-manifest.json`。`ChassisAssembly` 拥有一组 RM 命令总线、四电机、四轮与统一 Chassis；构造时注入项目的 CanPort，显式调用 `Register()`，再由 app 调度反馈、控制与输出。注册不自动 Enable，发送许可常量需要 app 的端口适配执行（H7 已执行），不能把它当作通用 CanPort 的隐式限制。
+输出为 `robot_config.hpp`、`board_bindings.hpp`、`robot.cmake` 和 `.mrctl-manifest.json`。UART 绑定单独放在 board_bindings.hpp，可移植模块头不必包含 HAL。`ChassisAssembly` 拥有一组 RM 命令总线、四电机、四轮与统一 Chassis；构造时注入项目的 CanPort，显式调用 `Register()`，再由 app 调度反馈、控制与输出。注册不自动 Enable，发送许可常量需要 app 的端口适配执行（H7 已执行），不能把它当作通用 CanPort 的隐式限制。
 
 `ArmAssembly` 根据关节列表推导 `Arm<N>`，拥有 DM/LZ 电机、`MotorActuatorAdapter`、`JointT` 和 `Arm<N>`，按此顺序构造并反序销毁。电机总线、地址、方向、额外传动比、反馈超时及 DM MIT 量程来自 motors；JointT 读取零点、位置限位，保持默认单位传动，避免重复换算；模型读取关节轴、父子变换、基座/工具变换、关节速度/加速度限位，模型 position_offset 保持零。
 

@@ -206,6 +206,53 @@ static void SpiDone(void) {
   ++done_calls;
 }
 static void SpiError(void) { ++error_calls; }
+static void TestUartRegistration(void) {
+  uint8_t data = 0;
+  assert(BSP_UART_FindEndpoint("usart1") == BSP_UART_ERR);
+  assert(BSP_UART_GetHandle(BSP_UART_0) == NULL);
+  assert(BSP_UART_Claim(BSP_UART_0, &data) != BSP_OK);
+  assert(BSP_UART_RegisterCallback(BSP_UART_0, BSP_UART_TX_CPLT_CB, Legacy) != BSP_OK);
+  assert(BSP_UART_Transmit(BSP_UART_0, &data, 1, false) != BSP_OK);
+  BSP_UART_Endpoint_t invalid[] = {{"a", &huart1}, {"a", &huart5}};
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  assert(BSP_UART_FindEndpoint("a") == BSP_UART_ERR);  // No partial publication.
+  invalid[1].name = "b";
+  invalid[1].handle = &huart1;
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  UART_HandleTypeDef alias = huart1;
+  invalid[1].handle = &alias;  // Different handle pointing to the same peripheral.
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  invalid[1].handle = NULL;
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  invalid[1].handle = &huart5;
+  huart5.RxState = 1;
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  huart5.RxState = HAL_UART_STATE_READY;
+  invalid[1].name = "";
+  assert(BSP_UART_Configure(invalid, 2) != BSP_OK);
+  assert(BSP_UART_Configure(NULL, 0) != BSP_OK);
+  assert(BSP_UART_Configure(invalid, BSP_UART_NUM + 1) != BSP_OK);
+  static USART_TypeDef extra_instances[4];
+  static UART_HandleTypeDef extra_handles[4];
+  for (unsigned i = 0; i < 4; ++i) {
+    extra_handles[i].Instance = &extra_instances[i];
+    extra_handles[i].hdmarx = &dma;
+  }
+  // Deliberately different from the old RC/PC index mapping.
+  const BSP_UART_Endpoint_t endpoints[] = {
+      {"usart1", &huart1}, {"uart5", &huart5}, {"uart8", &huart8},
+      {"usart10", &huart10}, {"uart9", &huart9}, {"uart7", &huart7},
+      {"extra0", &extra_handles[0]}, {"extra1", &extra_handles[1]},
+      {"extra2", &extra_handles[2]}, {"extra3", &extra_handles[3]},
+  };
+  assert(BSP_UART_Configure(endpoints, BSP_UART_NUM) == BSP_OK);
+  assert(BSP_UART_Configure(endpoints, BSP_UART_NUM) != BSP_OK);
+  assert(BSP_UART_FindEndpoint("usart1") == BSP_UART_0);
+  assert(BSP_UART_GetHandle(BSP_UART_FindEndpoint("uart9")) == &huart9);
+  assert(BSP_UART_FindEndpoint("missing") == BSP_UART_ERR);
+  assert(BSP_UART_FindEndpoint(NULL) == BSP_UART_ERR);
+  assert(BSP_UART_GetHandle(BSP_UART_ERR) == NULL);
+}
 static void TestUart(void) {
   for (unsigned id = 0; id < BSP_UART_NUM; ++id) {
     MrLink_Channel_t channel = {0}, other = {0};
@@ -243,6 +290,8 @@ static void TestUart(void) {
     assert(MrLink_Channel_Send(&channel, source, 3) == MRLINK_CHANNEL_OK);
     source[0] = 9;
     assert(hal_tx[0] == 1);
+    UART_HandleTypeDef impostor = *h;
+    HAL_UART_TxCpltCallback(&impostor);  // Same peripheral, unregistered handle.
     assert(MrLink_Channel_Send(&channel, source, 3) == MRLINK_CHANNEL_ERR_BUSY && hal_tx[0] == 1);
     h->ErrorCode = 0;
     h->RxState = 0;
@@ -268,6 +317,10 @@ static void TestUart(void) {
   UART_HandleTypeDef unknown = {(void*)99, &dma, 0, 0, 0, 0};
   BSP_UART_IRQHandler(&unknown);
   BSP_UART_IRQHandler(NULL);
+  UART_HandleTypeDef copied_handle = huart1;
+  const unsigned previous_done = done_calls;
+  HAL_UART_TxCpltCallback(&copied_handle);  // Only the registered handle is routed.
+  assert(done_calls == previous_done);
   assert(BSP_UART_RegisterCallback((BSP_UART_t)-1, BSP_UART_TX_CPLT_CB, Legacy) != BSP_OK);
 }
 static MrLink_ChannelNotify_t usb_done, usb_error;
@@ -426,29 +479,32 @@ static void TestBmiDma(void) {
 }
 static void TestDr16(void) {
   DR16_t dr16;
-  assert(DR16_Init(&dr16) == DEVICE_OK);
+  const BSP_UART_t receiver = BSP_UART_FindEndpoint("uart9");
+  assert(DR16_Init(&dr16, BSP_UART_ERR) != DEVICE_OK);
+  assert(DR16_Init(&dr16, receiver) == DEVICE_OK);
   assert(DR16_StartDmaRecv(&dr16) == DEVICE_OK && (uintptr_t)hal_rx % 32u == 0u);
   assert(DR16_StartDmaRecv(&dr16) != DEVICE_OK);
   DR16_RawData_t raw = {0};
   raw.ch_r_x = raw.ch_r_y = raw.ch_l_x = raw.ch_l_y = 1024;
   raw.sw_l = raw.sw_r = 1;
   memcpy(hal_rx, &raw, sizeof(raw));
-  huart5.RxState = 0;
-  HAL_UARTEx_RxEventCallback(&huart5, sizeof(raw));
+  huart9.RxState = 0;
+  HAL_UARTEx_RxEventCallback(&huart9, sizeof(raw));
   assert(DR16_WaitDmaCplt(0) && DR16_ParseData(&dr16) == DEVICE_OK);
   assert(DR16_StartDmaRecv(&dr16) == DEVICE_OK);
-  assert(!DR16_WaitDmaCplt(0) && huart5.RxState == HAL_UART_STATE_READY);
+  assert(!DR16_WaitDmaCplt(0) && huart9.RxState == HAL_UART_STATE_READY);
   assert(DR16_StartDmaRecv(&dr16) == DEVICE_OK);
   abort_fail = true;
   assert(DR16_Deinit() != DEVICE_OK);
   abort_fail = false;
   assert(DR16_Deinit() == DEVICE_OK);
-  assert(BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_TX_CPLT_CB, Legacy) == BSP_OK);
-  assert(BSP_UART_RegisterCallback(BSP_UART_RC, BSP_UART_TX_CPLT_CB, NULL) == BSP_OK);
+  assert(BSP_UART_RegisterCallback(receiver, BSP_UART_TX_CPLT_CB, Legacy) == BSP_OK);
+  assert(BSP_UART_RegisterCallback(receiver, BSP_UART_TX_CPLT_CB, NULL) == BSP_OK);
 }
 int main(void) {
   uint8_t data[8];
-  assert(BSP_UART_Transmit(BSP_UART_PC, data, 8, true) != BSP_OK && tx_starts == 0);
+  assert(BSP_UART_Transmit(BSP_UART_0, data, 8, true) != BSP_OK && tx_starts == 0);
+  TestUartRegistration();
   assert(BSP_DMA_Configure(Cache, NULL));
   TestUart();
   TestUsb();

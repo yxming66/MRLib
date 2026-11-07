@@ -587,3 +587,12 @@ v2 当前仅提供格式与校验，不生成 C++/CMake，也不驱动现有 H7 
 - 验证：23 项原配置/生成测试及 2 项新增任务测试通过。主机测试编译真实执行器和生成连接，覆盖 tick 回绕、精确周期、创建/入口绑定/初始化/控制/超时/等待失败；通过 CMake 普通 build 验证仅改 YAML 周期和栈就更新。独立底盘 H723 固件真实编译/链接成功且无未定义符号，Flash 58832 B、RAM 120256 B（含预留），原整机 H7 也重新链接成功。
 
 本批提供一个可对照阅读的底盘任务闭环，仍未完成通用多任务生成。动态任务栈来自 FreeRTOS heap，4 KiB 栈与真实运行时序未在板上测量；主机 stub 仅验证 CMSIS 调用契约。按用户要求未烧录，外部 rm_balance/zzrobot/RC_02 均未修改。
+
+## 第 43 批：UART 板级登记与 YAML 实际绑定（2026-11-07）
+
+- 删除 UART 中 RC/PC/IR 等用途枚举和固定 huart/Instance 映射，改为 board 单次登记命名硬件端点。十个中性槽位支持 MRLink 回调，设备通过名称查找，不依赖登记顺序。整表校验后发布，拒绝重复物理实例、未就绪句柄及运行期重配；未知句柄不接收已登记端点的回调。
+- 生成独立 board_bindings.hpp，将 YAML 逻辑名称和 communication.port 连接到真实 BSP 端点。CMake 检查 board 声明的 UART 能力，启动时检查实际登记；只改 YAML 并重新构建即可改变 H7 MRLink 的 HAL 句柄和回调分发。生成头与可移植模块参数头分离，不向模块引入 HAL。
+- H7 board 显式登记六个硬件端点，不分 RC/PC 用途；DR16_Init 增加端点参数，删除默认 UART5。补充旧 C API 迁移说明；通信缓冲、codec、轮询和完整服务仍由 app 提供。引脚、波特率、DMA 和 IRQ 仍由 Cube/board 配置。
+- 验证：29 项主机 CTest 通过，新增断言后的 UART/MRLink/DR16 定向复验通过；配置、生成与任务测试覆盖 27 项，Windows 临时 manifest 替换失败的任务用例复跑通过。真实驱动回归仅改 YAML 从 USART1 切到 UART9 后正常重建、发送和分发回调，board 未声明端点构建失败。134/134 公共头独立编译通过；默认、TX 开启和独立底盘任务三份 H723 固件均链接成功且无未定义符号，Flash/RAM 分别为 100820/127360 B、100820/127360 B、59084/120512 B（RAM 含预留）。
+
+本批完成 UART 配置链路，未进行板上验证。FDCAN 句柄/资源布局、SPI、GPIO、PWM 与 TIM2 时基仍有旧板型或业务映射，详见 BSP_PORTABILITY_AUDIT.md，不能据此认为所有 BSP 已完成移植拆分。外部 rm_balance/zzrobot/RC_02 均未修改。

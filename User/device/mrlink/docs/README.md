@@ -50,7 +50,7 @@ Dispatch 默认预算 16 帧/1024 消费字节；剩余数据下次继续处理�
 所有 channel 必须零初始化，使用期间禁止复制/移动；先停用消费任务，再调用 Deinit。
 Deinit 失败必须保留对象/缓冲，重试或处理硬件故障，不能释放后让 DMA/ISR 继续访问。
 
-UART 初始化独占 BSP 回调资源，六个 UART 端点均有 trampoline；和 DR16 等设备冲突时明确失败。
+UART 由 board 在启动时登记硬件，十个中性槽位均有 trampoline；初始化独占 BSP 回调资源，和 DR16 等设备冲突时明确失败。
 重复初始化返回 BUSY，不能以初始化覆盖活动 DMA。TX 使用对齐的独立缓冲，完成或确认取消后才可复用；
 RX 从 DMA 槽位分段复制，scratch 小于接收块时不丢尾部。
 UART 错误 ISR 只尝试非阻塞重启；需要 HAL abort 的恢复延迟到任务 Poll/Send。

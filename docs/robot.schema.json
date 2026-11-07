@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/yxming66/MR_TestLib/blob/main/docs/robot.schema.json",
-  "title": "MR_TestLib robot configuration v2 (validation contract, generation pending)",
+  "title": "MR_TestLib robot configuration v2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -72,6 +72,7 @@
               "minProperties": 0
             },
             "uart": {
+              "description": "Logical UART name to board-registered hardware endpoint name; e.g. telemetry_uart: usart1. CMake checks board capability; runtime resolves the registered HAL handle.",
               "type": "object",
               "propertyNames": {
                 "$ref": "#/$defs/identifier"

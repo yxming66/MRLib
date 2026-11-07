@@ -30,6 +30,8 @@
 
 ## 开始使用
 
+UART 已支持 board 硬件登记与 YAML 用途绑定，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。SPI/GPIO/PWM 等仍有旧板型映射，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
+
 ```sh
 git clone https://github.com/yxming66/MR_TestLib.git
 cd MR_TestLib

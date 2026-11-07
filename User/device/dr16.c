@@ -2,7 +2,7 @@
     DR16接收机
     Example：
 
-  DR16_Init(&dr16);
+  DR16_Init(&dr16, BSP_UART_FindEndpoint("uart5"));
   
   while (1) {
     DR16_StartDmaRecv(&dr16);
@@ -42,6 +42,7 @@
 
 static osThreadId_t thread_alert;
 static bool inited = false;
+static BSP_UART_t s_uart = BSP_UART_ERR;
 _Static_assert(sizeof(DR16_RawData_t) <= 32u, "DR16 frame exceeds DMA staging buffer");
 _Alignas(32) static uint8_t rx_buf[32];
 static volatile uint16_t rx_size = 0;
@@ -51,7 +52,7 @@ volatile DR16_Debug_t g_dr16_debug = {0};
 
 /* Private function  -------------------------------------------------------- */
 static void DR16_UpdateDebugUartState(void) {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_RC);
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(s_uart);
   if (huart == NULL) {
     return;
   }
@@ -121,18 +122,20 @@ static bool DR16_DataCorrupted(const DR16_t *dr16) {
 }
 
 /* Exported functions ------------------------------------------------------- */
-int8_t DR16_Init(DR16_t *dr16) {
+int8_t DR16_Init(DR16_t *dr16, BSP_UART_t uart) {
   if (dr16 == NULL) return DEVICE_ERR_NULL;
   if (inited) return DEVICE_ERR_INITED;
   if ((thread_alert = osThreadGetId()) == NULL) return DEVICE_ERR_NULL;
 
-  if (BSP_UART_Claim(BSP_UART_RC, rx_buf) != BSP_OK) return DEVICE_ERR;
-  if (BSP_UART_RegisterOwnedCallback(BSP_UART_RC, rx_buf, BSP_UART_RX_CPLT_CB,
+  if (BSP_UART_Claim(uart, rx_buf) != BSP_OK) return DEVICE_ERR;
+  s_uart = uart;
+  if (BSP_UART_RegisterOwnedCallback(s_uart, rx_buf, BSP_UART_RX_CPLT_CB,
                                      DR16_RxCpltCallback) != BSP_OK ||
-      BSP_UART_RegisterOwnedRxEvent(BSP_UART_RC, rx_buf, DR16_RxEventCallback) != BSP_OK ||
-      BSP_UART_RegisterOwnedCallback(BSP_UART_RC, rx_buf, BSP_UART_ERROR_CB, DR16_ErrorCallback) !=
+      BSP_UART_RegisterOwnedRxEvent(s_uart, rx_buf, DR16_RxEventCallback) != BSP_OK ||
+      BSP_UART_RegisterOwnedCallback(s_uart, rx_buf, BSP_UART_ERROR_CB, DR16_ErrorCallback) !=
           BSP_OK) {
-    (void)BSP_UART_Release(BSP_UART_RC, rx_buf);
+    (void)BSP_UART_Release(s_uart, rx_buf);
+    s_uart = BSP_UART_ERR;
     return DEVICE_ERR;
   }
 
@@ -141,7 +144,7 @@ int8_t DR16_Init(DR16_t *dr16) {
 }
 
 int8_t DR16_Restart(void) {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_RC);
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(s_uart);
   if (huart == NULL) return DEVICE_ERR_NULL;
 
   g_dr16_debug.restart_count++;
@@ -156,14 +159,14 @@ int8_t DR16_Restart(void) {
 
 int8_t DR16_StartDmaRecv(DR16_t *dr16) {
   if (dr16 == NULL) return DEVICE_ERR_NULL;
-  UART_HandleTypeDef* huart = BSP_UART_GetHandle(BSP_UART_RC);
+  UART_HandleTypeDef* huart = BSP_UART_GetHandle(s_uart);
   if (!inited || !huart || huart->RxState != HAL_UART_STATE_READY) return DEVICE_ERR;
 
   rx_size = 0;
   rx_error = false;
   osThreadFlagsClear(SIGNAL_DR16_RAW_REDY);
 
-  const int8_t result = BSP_UART_ReceiveToIdle(BSP_UART_RC, rx_buf,
+  const int8_t result = BSP_UART_ReceiveToIdle(s_uart, rx_buf,
                                                DR16_FRAME_SIZE, true);
   g_dr16_debug.last_start_result = result;
   DR16_UpdateDebugUartState();
@@ -269,7 +272,7 @@ void DR16_RecordTimeoutOffline(void) {
 }
 
 void DR16_Service(DR16_t *dr16) {
-  UART_HandleTypeDef *huart = BSP_UART_GetHandle(BSP_UART_RC);
+  UART_HandleTypeDef *huart = BSP_UART_GetHandle(s_uart);
   if (huart == NULL || dr16 == NULL) {
     return;
   }
@@ -295,8 +298,9 @@ void DR16_Service(DR16_t *dr16) {
 int8_t DR16_Deinit(void) {
   if (!inited) return DEVICE_OK;
   if (DR16_Restart() != DEVICE_OK) return DEVICE_ERR;
-  if (BSP_UART_Release(BSP_UART_RC, rx_buf) != BSP_OK) return DEVICE_ERR;
+  if (BSP_UART_Release(s_uart, rx_buf) != BSP_OK) return DEVICE_ERR;
   inited = false;
+  s_uart = BSP_UART_ERR;
   thread_alert = NULL;
   rx_error = true;
   rx_size = 0;
