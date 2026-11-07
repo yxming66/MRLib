@@ -49,6 +49,8 @@ typedef BSP_FDCAN_IdParser_t BSP_CAN_IdParser_t;
 #define BSP_CAN_FRAME_EXT_REMOTE        BSP_FDCAN_FRAME_EXT_REMOTE
 
 /* 函数映射 */
+#define BSP_CAN_Configure(table, count) BSP_FDCAN_Configure(table, count)
+#define BSP_CAN_FindEndpoint(name)      BSP_FDCAN_FindEndpoint(name)
 #define BSP_CAN_Init()                  BSP_FDCAN_Init()
 #define BSP_CAN_GetHandle(can)          BSP_FDCAN_GetHandle(can)
 #define BSP_CAN_RegisterCallback(can, type, callback) \

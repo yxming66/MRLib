@@ -71,7 +71,7 @@ else()
     add_executable(mr_h7_integration board/main.c app/robot.cpp)
 endif()
 set_target_properties(mr_h7_integration PROPERTIES SUFFIX ".elf")
-target_sources(mr_h7_integration PRIVATE board/uart_endpoints.c board/pwm_endpoints.c board/io_endpoints.c)
+target_sources(mr_h7_integration PRIVATE board/uart_endpoints.c board/pwm_endpoints.c board/io_endpoints.c board/fdcan_endpoints.c board/time_source.c)
 target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)

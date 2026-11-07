@@ -28,7 +28,7 @@ module 保留统一接口：底盘注册时选择 robotics 模型、绑定 Wheel
 
 ## 开始使用
 
-UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。PWM、GPIO/SPI 也已改为 board 登记，BMI088 显式接收总线与引脚，详见 [PWM 接入](docs/PWM_BINDINGS.md)、[GPIO/SPI 接入](docs/GPIO_SPI_BINDINGS.md)。FDCAN 和时基仍有旧板型依赖，当前边界见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
+UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。PWM、GPIO/SPI 也已改为 board 登记，BMI088 显式接收总线与引脚，详见 [PWM 接入](docs/PWM_BINDINGS.md)、[GPIO/SPI 接入](docs/GPIO_SPI_BINDINGS.md)。FDCAN 也已改为命名端点登记，过滤器和消息 RAM 规划归 board；时基由项目直接实现 Board_Time*，见 [FDCAN 接入](docs/FDCAN_BINDINGS.md)、[时间源](docs/TIME_SOURCE.md)。当前芯片与运行限制见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
 
 ```sh
 git clone https://github.com/yxming66/MR_TestLib.git
@@ -76,7 +76,7 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前已有 32 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约）。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
+当前已有 37 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约），以及真实 BSP 的 FDCAN 登记/失败回滚/FD 帧和 H7 时间源溢出边界。BSP 回归使用 HAL/RTOS 测试替身。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 

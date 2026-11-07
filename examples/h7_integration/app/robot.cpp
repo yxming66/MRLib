@@ -26,7 +26,7 @@ volatile uint32_t cycles = 0, faults = 0, tx_rejected = 0, link_tx_failed = 0;
 volatile int8_t last_error = 0;
 class MotorPort final : public CanPort {
  public:
-  mr::board::BspCanPort actual{board::bindings::kMotorCan, BSP_TIME_Get_ms};
+  mr::board::BspCanPort actual{BSP_CAN_FindEndpoint(board::bindings::kMotorCan), BSP_TIME_Get_ms};
   uint32_t NowMs() const override { return actual.NowMs(); }
   int8_t RegisterLatest(uint32_t id) override { return actual.RegisterLatest(id); }
   int8_t RegisterQueue(uint32_t id, uint8_t n) override { return actual.RegisterQueue(id, n); }
@@ -111,12 +111,12 @@ struct Robot {
 };
 
 // Static lifetime and AXI SRAM placement (including UART RX/TX owned buffers).
-Robot robot;
 const board::DmaRegion regions[] = {{0x24000000, 0x24050000, false}};
 board::DmaPolicy dma_policy{regions, 1};
 }  // namespace
 
 extern "C" void RobotTask(void*) {
+  static Robot robot; // Construct after board endpoint registration, fixed storage.
   static_assert(app::params::kControlPeriodUs % 1000u == 0u,
                 "Example scheduler requires whole milliseconds at 1000 Hz");
   constexpr uint32_t kPeriodTicks = app::params::kControlPeriodUs / 1000u;

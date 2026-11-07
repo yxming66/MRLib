@@ -11,9 +11,9 @@ cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```
 
-当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 32 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
+当前包括 C11 基础组件、C++17 基础组件、滤波、计时、姿态/校准/告警服务、RM/DM/LZ 电机协议 fake-CAN 路径、C PID 核心、C++ PID/旧参数适配、机械臂、底盘运动学和统一底盘模块以及矩阵/轨迹、固定存储和几何有效性共 37 项主机回归测试。测试直接编译实际 C AHRS、滤波、PID 适配、CRC16、C++ timer 和 RM/DM/LZ protocol；电机总线使用注入的 CanPort 测试替身，不需要 STM32 HAL/RTOS。
 
-滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。测试未验证真实 CAN 外设、STM32 固件链接与板级运行。
+滤波测试检查截止频率处的 -3 dB 响应、陷波中心衰减、C/C++ 一致性与变周期切换；服务测试检查重复/过期反馈、实际采样间隔、重新校准和告警保持。上述主机测试不验证真实 CAN 外设或板级运行；H723 固件链接由独立示例验证。
 
 PID 测试使用独立 PI 预期值验证积分输出限幅、饱和恢复和斜率限制；验证微分首帧、显式 dt、算术/滤波错误时保持控制历史，以及三种微分模式下旧 C 入口与 C++ 接口的一致性。底盘模块测试确认非法 PID/反馈超时配置在设备注册前被拒绝，反馈超时触发安全放松，uint32 毫秒时钟回绕可正确处理。
 
@@ -74,6 +74,8 @@ timer 已登记为 mr::component_timer；姿态估计与告警服务尚未登记
 
 新增机械臂模块和音乐主机回归；三轴装配示例也参与测试编译。曲谱无需加入公共依赖，应用显式添加 `resources/music` 中的单曲源文件，见 `examples/music/README.md`。
 
+
+FDCAN 回归编译真实 BSP 和 H7 board 过滤函数，覆盖端点校验、失败回滚/锁定、FIFO 隔离、恢复失败和 CAN FD 帧；H7 时间源回归编译真实 board 实现，覆盖 pending/读取期间溢出和 HAL tick 回绕。两者使用 HAL/CMSIS 测试替身，不能代替实机时序验证。接入见 [FDCAN](FDCAN_BINDINGS.md)、[时间源](TIME_SOURCE.md)。
 
 MRLink 可移植协议使用导出目标 `mr_component_mrlink`，主机测试不使用 HAL/CMSIS stub。
 通道生命周期回归额外编译实际 UART/SPI/GPIO/BMI088/DR16 源，用模拟 HAL 检查调用次序和所有权；包含 GPIO 单线屏蔽、SPI 端点注入以及 BMI088 初始化冲突/回滚。

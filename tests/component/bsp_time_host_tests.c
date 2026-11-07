@@ -3,13 +3,14 @@
 
 #include "bsp/time.h"
 #include "cmsis_os2.h"
-#include "stm32h7xx_hal_tim.h"
+#include "bsp/time_source.h"
 
-TIM_HandleTypeDef htim2;
-uint32_t time_primask;
+static bool ready;
+static uint64_t now_us;
+static uint32_t increment;
 static osKernelState_t state;
 static osStatus_t delay_result;
-static uint32_t hz, delayed_ticks, delayed_ms, freq_calls, tick;
+static uint32_t hz, delayed_ticks, delayed_ms, freq_calls;
 osKernelState_t osKernelGetState(void) { return state; }
 uint32_t osKernelGetTickFreq(void) {
   ++freq_calls;
@@ -19,10 +20,14 @@ osStatus_t osDelay(uint32_t ticks) {
   delayed_ticks = ticks;
   return delay_result;
 }
-uint32_t HAL_GetTick(void) { return tick; }
-void HAL_Delay(uint32_t ms) { delayed_ms = ms; }
+bool Board_TimeIsReady(void) { return ready; }
+uint64_t Board_TimeNowUs(void) { const uint64_t value = now_us; now_us += increment; return value; }
+int8_t Board_TimeDelayMs(uint32_t ms) { delayed_ms = ms; return BSP_OK; }
 
 int main(void) {
+  assert(BSP_TIME_Get_us() == 0 && BSP_TIME_Get_ms() == 0);
+  assert(BSP_TIME_Delay_us(1) == BSP_ERR && BSP_TIME_Delay_ms(1) == BSP_ERR);
+  ready = true;
   state = osKernelInactive;
   assert(BSP_TIME_Delay_ms(7) == BSP_OK && delayed_ms == 7 && freq_calls == 0);
   state = osKernelRunning;
@@ -40,14 +45,11 @@ int main(void) {
   assert(BSP_TIME_Delay_ms(1) == BSP_ERR);
   state = osKernelLocked;
   assert(BSP_TIME_Delay_ms(1) == BSP_ERR);
-  tick = 10;
-  htim2.counter = 25;
-  assert(BSP_TIME_Get_us() == 10025 && BSP_TIME_Get_ms() == 10);
-  htim2.pending = 1;
-  assert(BSP_TIME_Get() == 11025);
-  htim2.counter = 900;
-  assert(BSP_TIME_Get_us() == 11900 && time_primask == 0);
-  time_primask = 1;
-  assert(BSP_TIME_Get_us() == 11900 && time_primask == 1);
+  now_us = ((uint64_t)UINT32_MAX + 2u) * 1000u + 25u;
+  assert(BSP_TIME_Get_us() == now_us && BSP_TIME_Get_ms() == 1u);
+  assert(BSP_TIME_Get() == now_us);
+  increment = 3;
+  assert(BSP_TIME_Delay_us(10) == BSP_OK);
+  assert(now_us >= ((uint64_t)UINT32_MAX + 2u) * 1000u + 35u);
   return 0;
 }

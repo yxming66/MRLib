@@ -21,7 +21,7 @@ volatile bool stop_failed = false;
 
 class MotorPort final : public mr::motor::CanPort {
  public:
-  mr::board::BspCanPort actual{board::bindings::kMotorCan, BSP_TIME_Get_ms};
+  mr::board::BspCanPort actual{BSP_CAN_FindEndpoint(board::bindings::kMotorCan), BSP_TIME_Get_ms};
   uint32_t NowMs() const override { return actual.NowMs(); }
   int8_t RegisterLatest(uint32_t id) override { return actual.RegisterLatest(id); }
   int8_t RegisterQueue(uint32_t id, uint8_t n) override { return actual.RegisterQueue(id, n); }
@@ -95,11 +95,11 @@ class ChassisApplication {
   bool running_ = false;
 };
 
-ChassisApplication chassis;
 }  // namespace
 
 // Direct typed wiring: no entry-name registry or generated binding function.
 extern "C" int App_CreateChassisTask(void) {
+  static ChassisApplication chassis; // Fixed storage, constructed after board registration.
   static mr::task::PeriodicTask task;
   static StaticTask_t control_block;
   alignas(8) static StackType_t stack[chassis_example::kTaskConfig.stack_bytes / sizeof(StackType_t)];

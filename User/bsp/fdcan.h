@@ -5,7 +5,7 @@ extern "C" {
 #endif
 
 /* Includes ----------------------------------------------------------------- */
-#include <cmsis_os.h>
+#include <cmsis_os2.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -13,7 +13,7 @@ extern "C" {
 #include "bsp/mm.h"
 
 /* USER INCLUDE BEGIN */
-#include <fdcan.h>
+#include "stm32h7xx_hal.h"
 /* USER INCLUDE END */
 
 /* Exported constants ------------------------------------------------------- */
@@ -23,35 +23,22 @@ extern "C" {
 #define BSP_FDCAN_TIMEOUT_FOREVER osWaitForever
 #define BSP_FDCAN_TX_QUEUE_SIZE 32
 /* Exported macro ----------------------------------------------------------- */
-// FDCANX实例使能
-/* AUTO GENERATED FDCAN_EN BEGIN */
-#define FDCAN1_EN
-#define FDCAN2_EN
-#define FDCAN3_EN
-/* AUTO GENERATED FDCAN_EN END */
+// Neutral slots in board registration order, NOT physical controller numbers.
+typedef enum { BSP_FDCAN_1 = 0, BSP_FDCAN_2, BSP_FDCAN_3,
+               BSP_FDCAN_NUM, BSP_FDCAN_ERR } BSP_FDCAN_t;
+enum { BSP_FDCAN_RX_FIFO0 = 1u, BSP_FDCAN_RX_FIFO1 = 2u };
+typedef struct {
+  const char* name;
+  FDCAN_HandleTypeDef* handle;
+  uint8_t rx_fifos; // Bitmask of BSP_FDCAN_RX_FIFO0/1, matching board filters.
+} BSP_FDCAN_Endpoint_t;
 
-// FDCANX接收FIFO选择（0=FIFO0, 1=FIFO1）
-/* AUTO GENERATED FDCAN_RX_FIFO BEGIN */
-#ifdef FDCAN1_EN
-#define FDCAN1_RX_FIFO 0
-#endif
-#ifdef FDCAN2_EN
-#define FDCAN2_RX_FIFO 1
-#endif
-#ifdef FDCAN3_EN
-#define FDCAN3_RX_FIFO 1
-#endif
-/* AUTO GENERATED FDCAN_RX_FIFO END */
-/* Exported types ----------------------------------------------------------- */
-typedef enum {
-  /* AUTO GENERATED BSP_FDCAN_NAME BEGIN */
-  BSP_FDCAN_1 = 0,
-  BSP_FDCAN_2,
-  BSP_FDCAN_3,
-  /* AUTO GENERATED BSP_FDCAN_NAME END */
-  BSP_FDCAN_NUM,
-  BSP_FDCAN_ERR,
-} BSP_FDCAN_t;
+// Startup-only, after Cube HAL init, before controller Start. Board must finish
+// filters before BSP_FDCAN_Init; Configure may precede filter RAM writes.
+// Copies the table; names/handles persist. No runtime rebinding or hardware init.
+// Board owns clocks, timing, RAM capacity/layout, filters and NVIC configuration.
+int8_t BSP_FDCAN_Configure(const BSP_FDCAN_Endpoint_t* endpoints, uint8_t count);
+BSP_FDCAN_t BSP_FDCAN_FindEndpoint(const char* name);
 
 typedef enum {
   HAL_FDCAN_TX_EVENT_FIFO_CB,
@@ -162,10 +149,16 @@ typedef struct {
 extern volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug;
 
 /* Exported functions prototypes -------------------------------------------- */
+// Task-only, once RTOS is running. Prepares software state, then starts only the
+// registered controllers. Failure stops this attempt's controllers; failed HAL
+// rollback locks initialization until reset. Never reinitializes shared RAM.
 int8_t BSP_FDCAN_Init(void);
 FDCAN_HandleTypeDef* BSP_FDCAN_GetHandle(BSP_FDCAN_t can);
 int8_t BSP_FDCAN_RegisterCallback(BSP_FDCAN_t can, BSP_FDCAN_Callback_t type,
                                   void (*callback)(void));
+// Observer callbacks never replace BSP reception or another callback.
+int8_t BSP_FDCAN_UnregisterCallback(BSP_FDCAN_t can, BSP_FDCAN_Callback_t type,
+                                    void (*callback)(void));
 int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t can, BSP_FDCAN_Format_t format, uint32_t id,
                           const uint8_t* data, uint8_t dlc);
 int8_t BSP_FDCAN_TransmitStdDataFrame(BSP_FDCAN_t can, BSP_FDCAN_StdDataFrame_t* frame);

@@ -1,56 +1,13 @@
-/* Includes ----------------------------------------------------------------- */
 #include "bsp/time.h"
-
+#include "bsp/time_source.h"
 #include <cmsis_os2.h>
 
-#include "bsp.h"
-#include "main.h"
-#include "stm32h7xx_hal_tim.h"
-
-/* USER INCLUDE BEGIN */
-
-/* USER INCLUDE END */
-/* Private define ----------------------------------------------------------- */
-/* USER DEFINE BEGIN */
-
-/* USER DEFINE END */
-
-/* Private macro ------------------------------------------------------------ */
-/* Private typedef ---------------------------------------------------------- */
-/* USER STRUCT BEGIN */
-
-/* USER STRUCT END */
-
-/* Private variables -------------------------------------------------------- */
-extern TIM_HandleTypeDef htim2;
-
-/* Private function  -------------------------------------------------------- */
-/* Exported functions ------------------------------------------------------- */
-
-uint32_t BSP_TIME_Get_ms(void) { return HAL_GetTick(); }
-
-uint64_t BSP_TIME_Get_us(void) {
-  // Read the HAL tick, timer counter and pending overflow as one snapshot.
-  // TIM2 must be 1 MHz / ARR=999; its IRQ must not remain masked for >=1 ms.
-  const uint32_t token = __get_PRIMASK();
-  __disable_irq();
-  uint32_t ms = HAL_GetTick();
-  const uint32_t pending = __HAL_TIM_GET_FLAG(&htim2, TIM_FLAG_UPDATE);
-  uint32_t us_in_ms = __HAL_TIM_GET_COUNTER(&htim2);
-  if (pending != RESET) {
-    ms++;
-  } else if (__HAL_TIM_GET_FLAG(&htim2, TIM_FLAG_UPDATE) != RESET) {
-    // The timer wrapped between the first flag read and counter read.
-    us_in_ms = __HAL_TIM_GET_COUNTER(&htim2);
-    ms++;
-  }
-  if (token == 0u) __enable_irq();
-  return (uint64_t)ms * 1000ULL + (uint64_t)us_in_ms;
-}
-
-uint64_t BSP_TIME_Get(void) __attribute__((alias("BSP_TIME_Get_us")));
+uint64_t BSP_TIME_Get_us(void) { return Board_TimeIsReady() ? Board_TimeNowUs() : 0; }
+uint32_t BSP_TIME_Get_ms(void) { return (uint32_t)(BSP_TIME_Get_us() / 1000u); }
+uint64_t BSP_TIME_Get(void) { return BSP_TIME_Get_us(); }
 
 int8_t BSP_TIME_Delay_ms(uint32_t ms) {
+  if (!Board_TimeIsReady()) return BSP_ERR;
   switch (osKernelGetState()) {
     case osKernelRunning: {
       const uint32_t hz = osKernelGetTickFreq();
@@ -62,8 +19,7 @@ int8_t BSP_TIME_Delay_ms(uint32_t ms) {
     }
     case osKernelInactive:
     case osKernelReady:
-      HAL_Delay(ms);
-      return BSP_OK;
+      return Board_TimeDelayMs(ms);
     default:
       return BSP_ERR;
   }
@@ -71,6 +27,7 @@ int8_t BSP_TIME_Delay_ms(uint32_t ms) {
 
 /* 微秒忙等延时：只允许极短硬件初始化/临界时序使用，禁止任务流程等待。 */
 int8_t BSP_TIME_Delay_us(uint32_t us) {
+  if (!Board_TimeIsReady()) return BSP_ERR;
   uint64_t start = BSP_TIME_Get_us();
   while (BSP_TIME_Get_us() - start < us) {
     // 等待us时间
@@ -78,8 +35,4 @@ int8_t BSP_TIME_Delay_us(uint32_t us) {
   return BSP_OK;
 }
 
-int8_t BSP_TIME_Delay(uint32_t ms) __attribute__((alias("BSP_TIME_Delay_ms")));
-
-/* USER FUNCTION BEGIN */
-
-/* USER FUNCTION END */
+int8_t BSP_TIME_Delay(uint32_t ms) { return BSP_TIME_Delay_ms(ms); }

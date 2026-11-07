@@ -21,6 +21,23 @@ include("${CMAKE_CURRENT_LIST_DIR}/cmake/MrTargets.cmake")
 if(MR_TESTLIB_BUILD_HOST_TESTS)
     enable_testing()
 
+    add_executable(mr_fdcan_host_tests tests/bsp/fdcan_host_tests.c User/bsp/fdcan.c
+        examples/h7_integration/board/fdcan_endpoints.c)
+    target_include_directories(mr_fdcan_host_tests BEFORE PRIVATE tests/stubs/fdcan User)
+    target_compile_features(mr_fdcan_host_tests PRIVATE c_std_11)
+    target_compile_options(mr_fdcan_host_tests PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)
+    add_test(NAME mr_fdcan_host_tests COMMAND mr_fdcan_host_tests)
+    add_test(NAME mr_fdcan_rollback_host_tests COMMAND mr_fdcan_host_tests locked)
+    add_test(NAME mr_fdcan_board_host_tests COMMAND mr_fdcan_host_tests board)
+    add_test(NAME mr_fdcan_fd_host_tests COMMAND mr_fdcan_host_tests fd)
+
+    add_executable(mr_h7_time_source_host_tests tests/bsp/h7_time_source_host_tests.c
+        examples/h7_integration/board/time_source.c)
+    target_include_directories(mr_h7_time_source_host_tests BEFORE PRIVATE tests/stubs/time User)
+    target_compile_features(mr_h7_time_source_host_tests PRIVATE c_std_11)
+    target_compile_options(mr_h7_time_source_host_tests PRIVATE -Wall -Wextra -Wpedantic -pedantic-errors -Werror -UNDEBUG)
+    add_test(NAME mr_h7_time_source_host_tests COMMAND mr_h7_time_source_host_tests)
+
     add_executable(mr_pwm_host_tests tests/bsp/pwm_host_tests.c User/bsp/pwm.c User/device/buzzer.c)
     target_include_directories(mr_pwm_host_tests BEFORE PRIVATE tests/stubs/pwm User)
     target_compile_features(mr_pwm_host_tests PRIVATE c_std_11)

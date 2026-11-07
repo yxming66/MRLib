@@ -8,10 +8,12 @@
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
+#include "time_source.h"
 
 extern int Board_RegisterUartEndpoints(void);
 extern int Board_RegisterPwmEndpoints(void);
 extern int Board_RegisterIoEndpoints(void);
+extern int Board_RegisterFdcanEndpoints(void);
 
 #ifdef MR_CHASSIS_TASK_EXAMPLE
 extern int App_CreateChassisTask(void);
@@ -60,6 +62,7 @@ int main(void) {
   SCB_DisableICache();
   if (HAL_Init() != HAL_OK) Error_Handler();
   ConfigureClock();
+  if (!Board_TimeInit()) Error_Handler();
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_FDCAN1_Init();
@@ -79,6 +82,7 @@ int main(void) {
   if (!Board_RegisterUartEndpoints()) Error_Handler();
   if (!Board_RegisterPwmEndpoints()) Error_Handler();
   if (!Board_RegisterIoEndpoints()) Error_Handler();
+  if (!Board_RegisterFdcanEndpoints()) Error_Handler();
   if (osKernelInitialize() != osOK) Error_Handler();
 #ifdef MR_CHASSIS_TASK_EXAMPLE
   if (!App_CreateChassisTask()) Error_Handler();
@@ -96,7 +100,7 @@ int main(void) {
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* timer) {
-  if (timer->Instance == TIM2) HAL_IncTick();
+  Board_TimeOnUpdate(timer);
 }
 void Error_Handler(void) {
   __disable_irq();

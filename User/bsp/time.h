@@ -1,46 +1,20 @@
 #pragma once
-
+#include <stdint.h>
+#include "bsp/bsp.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Includes ----------------------------------------------------------------- */
-#include <stdint.h>
-
-#include "bsp/bsp.h"
-
-/* USER INCLUDE BEGIN */
-
-/* USER INCLUDE END */
-
-/* Exported constants ------------------------------------------------------- */
-/* Exported macro ----------------------------------------------------------- */
-/* USER DEFINE BEGIN */
-
-/* USER DEFINE END */
-
-/* Exported types ----------------------------------------------------------- */
-/* Exported functions prototypes -------------------------------------------- */
+// Board must initialize its time source before use; unavailable reads return 0.
+// Both units use the SAME epoch. Milliseconds wrap modulo 2^32 (~49.7 days);
+// use unsigned subtraction for bounded elapsed times. Microseconds retain 64 bits.
 uint32_t BSP_TIME_Get_ms(void);
-
-/* TIM2 timebase: 1 MHz, ARR=999, HAL tick incremented once per TIM2 overflow.
- * IRQ must be serviced at least once per ms. The result wraps with HAL's
- * uint32 millisecond epoch (~49.7 days); it is not an unbounded uptime clock. */
 uint64_t BSP_TIME_Get_us(void);
-
 uint64_t BSP_TIME_Get(void);
-
 int8_t BSP_TIME_Delay_ms(uint32_t ms);
-
-/* 微秒忙等延时：只允许极短硬件初始化/临界时序使用，禁止任务流程等待。 */
+// Short hardware timing only, outside ISR/IRQ-masked sections. No task waiting.
 int8_t BSP_TIME_Delay_us(uint32_t us);
-
 int8_t BSP_TIME_Delay(uint32_t ms);
-
-/* USER FUNCTION BEGIN */
-
-/* USER FUNCTION END */
-
 #ifdef __cplusplus
 }
 #endif
