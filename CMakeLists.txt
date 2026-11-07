@@ -365,6 +365,12 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         User/component/filter/filter.c User/component/pid.c)
     add_executable(mr_time_host_tests tests/component/time_host_tests.cpp
         User/component/timer.cpp)
+    add_executable(mr_bsp_time_host_tests tests/component/bsp_time_host_tests.c User/bsp/time.c)
+    target_include_directories(mr_bsp_time_host_tests BEFORE PRIVATE tests/stubs/time User)
+    target_compile_features(mr_bsp_time_host_tests PRIVATE c_std_11)
+    target_compile_options(mr_bsp_time_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG)
+    add_test(NAME mr_bsp_time_host_tests COMMAND mr_bsp_time_host_tests)
     add_executable(mr_task_services_host_tests tests/module/task_services_host_tests.cpp
         User/component/ahrs.c)
     add_executable(mr_pid_c_host_tests tests/component/pid_c_host_tests.c)

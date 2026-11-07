@@ -1,8 +1,8 @@
 #pragma once
 
-// MotorControllerT per-model default parameters.
-// Include this through motor_controller.hpp so MotorControllerConfig and the
-// primary MotorControllerDefaults template are already declared.
+// Per-model defaults can also be included independently.
+#include "device/motor/packages/controller/motor_controller_config.hpp"
+#include "device/motor/core/motor_aliases.hpp"
 
 namespace mr::motor {
 

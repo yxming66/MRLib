@@ -3,9 +3,7 @@
 #include "bsp.h"
 
 #include <cmsis_os2.h>
-#include "FreeRTOS.h"
 #include "main.h"
-#include "task.h"
 #include "stm32h7xx_hal_tim.h"
 
 /* USER INCLUDE BEGIN */
@@ -28,11 +26,11 @@ extern TIM_HandleTypeDef htim2;
 /* Private function  -------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
 
-uint32_t BSP_TIME_Get_ms() {
+uint32_t BSP_TIME_Get_ms(void) {
   return (uint32_t)(BSP_TIME_Get_us() / 1000ULL);
 }
 
-uint64_t BSP_TIME_Get_us() {
+uint64_t BSP_TIME_Get_us(void) {
   uint32_t ms = HAL_GetTick();
   uint32_t us_in_ms = __HAL_TIM_GET_COUNTER(&htim2);
 
@@ -44,29 +42,25 @@ uint64_t BSP_TIME_Get_us() {
   return (uint64_t)ms * 1000ULL + (uint64_t)us_in_ms;
 }
 
-uint64_t BSP_TIME_Get() __attribute__((alias("BSP_TIME_Get_us")));
+uint64_t BSP_TIME_Get(void) __attribute__((alias("BSP_TIME_Get_us")));
 
 int8_t BSP_TIME_Delay_ms(uint32_t ms) {
-  uint32_t tick_period = 1000u / osKernelGetTickFreq();
-  uint32_t ticks = ms / tick_period;
-
   switch (osKernelGetState()) {
-    case osKernelError:
-    case osKernelReserved:
-    case osKernelLocked:
-    case osKernelSuspended:
-      return BSP_ERR;
-
-    case osKernelRunning:
-      osDelay(ticks ? ticks : 1);
-      break;
-
+    case osKernelRunning: {
+      const uint32_t hz = osKernelGetTickFreq();
+      if (hz == 0) return BSP_ERR;
+      // Round up without overflow; CMSIS reserves osWaitForever (UINT32_MAX).
+      const uint64_t ticks = ((uint64_t)ms * hz + 999u) / 1000u;
+      if (ticks >= UINT32_MAX) return BSP_ERR;
+      return osDelay(ticks ? (uint32_t)ticks : 1u) == osOK ? BSP_OK : BSP_ERR;
+    }
     case osKernelInactive:
     case osKernelReady:
       HAL_Delay(ms);
-      break;
+      return BSP_OK;
+    default:
+      return BSP_ERR;
   }
-  return BSP_OK;
 }
 
 /* 微秒忙等延时：只允许极短硬件初始化/临界时序使用，禁止任务流程等待。 */

@@ -525,3 +525,11 @@ Ninja 在本机编译器 ABI 检测阶段停滞，改用现有 mingw32-make 完�
 验证：27 项 CTest 通过；6 项 CLI 端到端测试通过（本机 Ninja 检测停滞后，使用 MinGW Makefiles）。13 份实际源和装配检查文件在真实 H723 HAL/CMSIS 头下通过 Cortex-M7、严格 C11/C++17、-Werror、无异常/RTTI 编译。主机测试中的模拟 HAL 验证协议/调用/所有权，不模拟真实 Cache 或中断抢占。
 
 本批完成 MRLink 核心/类型接口合并与通道/BSP 生命周期的代码收敛。仍需由实际 board 工程确认 DMA 缓冲链接地址、Cache/MPU、RTOS 中断优先级，进行完整固件链接与硬件验收；编译检查不能代替这些验收。YAML 新功能仍后置；未修改外部 zzrobot/RC_02。
+
+## 第 37 批：公共头文件与 BSP 基础接口复核（2026-11-07）
+
+- 新增 `tools/check_user_headers_h7.py`，使用真实 H723 HAL/CMSIS/RTOS 头文件逐个独立检查 User 头文件，不依赖先包含其他库头。
+- 修复 limiter 的 C++ linkage 闭合；拆分电机控制器配置声明，使默认参数头可独立包含。
+- BSP_Malloc/BSP_Free 改为普通外部定义，避免 C11 inline 导致链接缺少定义。
+- BSP 毫秒延时按实际 RTOS 频率向上取整，处理零频率、溢出和 osDelay 失败；启动前不查询内核频率。
+- 验证：133/133 个头文件严格 C++17 H723 独立语法检查通过；28/28 项 CTest 通过（新增 BSP 延时边界测试）。尚不代表固件链接或硬件验证完成。

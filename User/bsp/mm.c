@@ -21,9 +21,9 @@
 
 /* Private function  -------------------------------------------------------- */
 /* Exported functions ------------------------------------------------------- */
-inline void *BSP_Malloc(size_t size) { return pvPortMalloc(size); }
+void *BSP_Malloc(size_t size) { return pvPortMalloc(size); }
 
-inline void BSP_Free(void *pv) { vPortFree(pv); }
+void BSP_Free(void *pv) { vPortFree(pv); }
 
 /* USER FUNCTION BEGIN */
 
