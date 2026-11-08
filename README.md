@@ -60,7 +60,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
 
 1. 在独立板级工程中准备对应的 HAL、RTOS 和外设初始化。
 2. 按实际依赖添加所需 `.c/.cpp` 与头文件路径，C++ 组件使用 C++17。
-3. 显式列出源文件，排除测试和尚未迁移的旧专用控制器，不要递归编译整个仓库。
+3. 优先链接所需 CMake target；手工管理源文件时显式列出实现，排除测试和示例，不要递归编译整个仓库。
 4. 核对任务入口、引脚、总线、设备 ID、单位、方向、零点、限位及线程/中断使用约束。
 5. 完成编译和对应实机验证后，记录板型、工具链、提交号及结果。
 
@@ -91,6 +91,8 @@ ctest --test-dir build/cmake-host --output-on-failure
 - [底盘周期任务](examples/chassis_task/README.md)：直接修改周期、栈和业务的小型 FreeRTOS 示例。
 
 示例复制后归项目维护，不存在再次生成覆盖。板级前提和接入步骤见 [板级集成](docs/BOARD_INTEGRATION.md)。
+
+从空目录复制示例、指定独立库路径和完成构建验收的步骤见 [新项目接入](docs/NEW_PROJECT.md)。
 
 ## 多人开发
 

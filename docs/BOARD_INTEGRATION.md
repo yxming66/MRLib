@@ -23,6 +23,8 @@ cube_platform/board_adapter 由项目提供实际源文件、HAL include、芯�
 
 完整例子见 [H7 工程](../examples/h7_integration/README.md)，较小的任务例子见 [底盘任务](../examples/chassis_task/README.md)。复制示例后修改的文件完全归项目所有，没有重新生成或覆盖流程。
 
+首次接入可按 [新项目接入](NEW_PROJECT.md) 从独立目录完成主机和 H7 构建。示例 CMake 接受 MR_LIBRARY_ROOT 指向库，不要求保留原仓库中的目录位置。
+
 ## 当前 H723 BSP 帮助函数
 
 ```cmake

@@ -2,13 +2,13 @@
 #include <array>
 #include "bsp/adapters/can_port.hpp"
 #include "bsp/time.h"
-#include "../../h7_integration/app/chassis_assembly.hpp"
-#include "../../h7_integration/board/bindings.hpp"
+#include "app/chassis_assembly.hpp"
+#include "board/bindings.hpp"
 #include "task/periodic_task.hpp"
 #include "task_params.hpp"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "../../device_execution/app/rm_chassis_cycle.hpp"
+#include "rm_chassis_cycle.hpp"
 
 namespace {
 using mr::module::chassis::ChassisStatus;

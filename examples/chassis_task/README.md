@@ -20,4 +20,6 @@ cmake --build build/h7-manual-chassis
 
 先阅读 H7 README 的板级前提和工具链要求。应用发送许可在 H7 app/robot_params.hpp，默认 false；运行请求初始 false。ReadCommand 仅演示零速度和调试器请求，实际项目自行接入带超时的命令快照。volatile 不是跨任务同步。
 
+复制到独立目录时，H7 CMake 配置加 `"-DMR_LIBRARY_ROOT=D:/path/to/MR_TestLib"`，并将本目录放在 H7 项目旁命名为 chassis_task。任务使用 H7 项目的 app/board include 路径，控制循环辅助头由 CMake 显式从库内 examples/device_execution 引入；完整复制与构建步骤见 [新项目接入](../../docs/NEW_PROJECT.md)。
+
 修改周期后直接重新编译，PID 频率由同一 period_us 派生。增加队列、通知或多任务，直接改本项目代码；也可以不用执行器，手写完整任务循环。共享总线、启动顺序与故障恢复由项目明确设计。静态任务栈不代表底层 BSP 队列完全无堆。未测量板上栈高水位或时序，未烧录。

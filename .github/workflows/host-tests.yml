@@ -27,3 +27,11 @@ jobs:
         run: cmake --build build/manual-consumer --parallel
       - name: Run ordinary consumer project
         run: ctest --test-dir build/manual-consumer --output-on-failure
+      - name: Copy consumer to an independent directory
+        run: cmake -E copy_directory examples/host_project "${{ runner.temp }}/mr-consumer"
+      - name: Configure independent consumer project
+        run: cmake -S "${{ runner.temp }}/mr-consumer" -B "${{ runner.temp }}/mr-consumer-build" -G Ninja -DMR_LIBRARY_ROOT="${{ github.workspace }}"
+      - name: Build independent consumer project
+        run: cmake --build "${{ runner.temp }}/mr-consumer-build" --parallel
+      - name: Run independent consumer project
+        run: ctest --test-dir "${{ runner.temp }}/mr-consumer-build" --output-on-failure

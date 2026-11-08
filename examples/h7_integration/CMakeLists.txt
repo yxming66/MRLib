@@ -11,7 +11,10 @@ set(MR_CUBE_ROOT "" CACHE PATH "Read-only STM32H723 Cube project (Core, Drivers,
 if(NOT EXISTS "${MR_CUBE_ROOT}/startup_stm32h723xx.s")
     message(FATAL_ERROR "Set MR_CUBE_ROOT to a complete STM32H723 Cube project; see README.md")
 endif()
-get_filename_component(MR_LIBRARY_ROOT "../.." ABSOLUTE)
+set(MR_LIBRARY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." CACHE PATH "MR_TestLib checkout")
+if(NOT EXISTS "${MR_LIBRARY_ROOT}/cmake/MrTargets.cmake")
+    message(FATAL_ERROR "Set MR_LIBRARY_ROOT to the MR_TestLib checkout; see README.md")
+endif()
 set(_hal "${MR_CUBE_ROOT}/Drivers/STM32H7xx_HAL_Driver")
 set(_rtos "${MR_CUBE_ROOT}/Middlewares/Third_Party/FreeRTOS/Source")
 
@@ -73,6 +76,11 @@ endif()
 set_target_properties(mr_h7_integration PROPERTIES SUFFIX ".elf")
 target_sources(mr_h7_integration PRIVATE board/uart_endpoints.c board/pwm_endpoints.c board/io_endpoints.c board/fdcan_endpoints.c board/time_source.c)
 target_include_directories(mr_h7_integration PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+# Shared example helpers are explicit dependencies, even after copying this
+# project. Application headers always come from this project's own directory.
+target_include_directories(mr_h7_integration PRIVATE
+    "${MR_LIBRARY_ROOT}/examples/device_execution/app"
+    "${MR_LIBRARY_ROOT}/examples/mrlink/board")
 target_compile_options(mr_h7_integration PRIVATE
     -Wall -Wextra -Wpedantic -pedantic-errors -Werror)
 target_link_libraries(mr_h7_integration PRIVATE cube_platform cube_sources

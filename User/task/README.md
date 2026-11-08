@@ -9,7 +9,7 @@
 - `module/attitude/attitude.hpp`：接收 IMU 快照的姿态估计；`component/attitude/gyro_bias.hpp`：连续静止样本的零偏校准。
 - `module/audio/alarm.hpp`：独立于 OS tick 的告警超时、最短保持和交替音调输出。
 - `component/time/periodic.hpp`：显式时间驱动的周期到期判断；`component/timer.hpp`：注入单调时钟的计时器。
-- 已有的 `device/buzzer`、`module/cloudmusic` 仍保存播放器/曲库；它们尚未完成板级与遥控菜单解耦。
+- `device/buzzer` 只输出 PWM/音符；`module/audio` 与 `module/cloudmusic` 使用外部曲谱和同步输出回调，已与 HAL、RTOS、遥控菜单解耦。可选曲谱在 `resources/music`，项目接法见 [音乐示例](../../examples/music/README.md)。
 
 项目在自己的 `app/` 中创建实例和周期任务，在 `board/` 中读取设备并下发输出。姿态估计前先统一传感器坐标轴，每个序列号只发布一次完整快照；校准输入应是未经旧零偏扣除的原始角速度。校准完成会将姿态重置为单位四元数。
 

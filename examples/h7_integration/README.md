@@ -52,6 +52,10 @@ arm-none-eabi-nm -u build/h7-manual/mr_h7_integration.elf
 
 Windows 使用 MinGW Makefiles 时，将 -G Ninja 换为 -G "MinGW Makefiles"，并按实际位置提供 CMAKE_MAKE_PROGRAM。arm-none-eabi-gcc/g++/objcopy/size 应在 PATH。输出 ELF/BIN/map；nm -u 应无输出。命令不烧录。
 
+复制到独立项目后，配置时额外传入 `"-DMR_LIBRARY_ROOT=D:/path/to/MR_TestLib"`，不再依赖示例在仓库内的目录位置。MR_CUBE_ROOT 仍指向匹配的 Cube 工程。默认整机只需复制本目录；若使用 MR_CHASSIS_TASK_EXAMPLE，还须把 examples/chassis_task 复制为本目录的相邻 chassis_task，或直接在自己的 CMake 中指定任务源。完整步骤见 [新项目接入](../../docs/NEW_PROJECT.md)。
+
+控制循环、DMA 策略和 UART 通信辅助头仍由库内 examples/device_execution 与 examples/mrlink 提供，CMake 显式声明 include 路径；无需复制全部 examples 或保留相邻目录。它们是共享示例代码，若需改业务，可复制相关头及其依赖到项目并调整 include，不作为 User 公共接口使用。
+
 默认还严格编译全部 35 个 User 生产实现，检查未链接可选驱动的语法/include；不表示所有组合均已链接或运行验证。公共头检查仍可用可选验证脚本：
 
 ```powershell

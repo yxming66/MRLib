@@ -31,6 +31,8 @@ ctest --test-dir build/manual-consumer --output-on-failure
 
 不需要 Python、YAML、生成头或 CLI。所有 target 的源、include 与依赖直接定义在 cmake/MrTargets.cmake；新增功能只更新对应 CMake 声明。
 
+示例复制到独立目录后，配置时加 `"-DMR_LIBRARY_ROOT=D:/path/to/MR_TestLib"`。H7 示例使用相同参数选择库，另用 MR_CUBE_ROOT 选择匹配的 Cube 工程；不要把两者混为一个路径。完整过程见 [新项目接入](NEW_PROJECT.md)。
+
 ## 作为子目录使用
 
 STM32 应用的既有 CMake 工程可把本库作为 Git submodule 引入，再链接所需功能：
