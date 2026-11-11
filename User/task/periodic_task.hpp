@@ -27,13 +27,14 @@ class PeriodicTask final {
   PeriodicTask(const PeriodicTask&) = delete;
   PeriodicTask& operator=(const PeriodicTask&) = delete;
 
-  // Call once between osKernelInitialize and osKernelStart. No worker can run
-  // before all project startup calls have completed. The project supplies the
-  // static thread control block and stack through CMSIS attributes. No heap
-  // fallback. Buffer alignment/control-block size follow the selected RTOS port.
+  // 在内核 Ready 或 Running 状态，由单一创建者在任务上下文调用一次。
+  // Running 时新线程可能在 Create 返回前运行，所有依赖必须先准备好；
+  // 不依赖调度器启动前的隐式屏障。对象、回调上下文和静态存储须持续有效。
+  // 项目提供静态控制块与栈，不回退到堆分配，不支持并发 Create。
   bool Create(const PeriodicTaskConfig& config, TaskHooks hooks,
               const osThreadAttr_t& storage) {
-    if (created_ || osKernelGetState() != osKernelReady || !config.name ||
+    const auto state = osKernelGetState();
+    if (created_ || (state != osKernelReady && state != osKernelRunning) || !config.name ||
         !config.name[0] || !config.period_us || config.stack_bytes < 512u ||
         config.stack_bytes % 8u || !hooks.init || !hooks.step || !hooks.fault ||
         !storage.cb_mem || !storage.cb_size || !storage.stack_mem ||
@@ -53,6 +54,8 @@ class PeriodicTask final {
     attr.cb_mem = storage.cb_mem;
     attr.cb_size = storage.cb_size;
     attr.stack_mem = storage.stack_mem;
+    // 在发布线程入口前完成配置；新线程可立即抢占创建者。
+    created_ = true;
     handle_ = osThreadNew(Entry, this, &attr);
     created_ = handle_ != nullptr;
     return created_;

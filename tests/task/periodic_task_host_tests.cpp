@@ -10,6 +10,7 @@ osKernelState_t kernel = osKernelReady;
 uint32_t tick = 0, hz = 1000, period = 0, stack_bytes = 0;
 osThreadFunc_t entry = nullptr;
 void* argument = nullptr;
+bool run_immediately = false;
 bool fail_create = false, fail_init = false, overrun = false, fail_delay = false;
 alignas(8) unsigned char task_stack[4096];
 alignas(8) unsigned char task_control[128];
@@ -43,6 +44,9 @@ osThreadId_t osThreadNew(osThreadFunc_t fn, void* context, const osThreadAttr_t*
   assert(attr->cb_size == sizeof(task_control));
   if (fail_create) return nullptr;
   entry = fn; argument = context;
+  if (run_immediately) {
+    try { fn(context); assert(false); } catch (const Exit&) {}
+  }
   return reinterpret_cast<osThreadId_t>(1);
 }
 osStatus_t osDelay(uint32_t) { assert(false); return osError; }
@@ -66,7 +70,7 @@ int main() {
   storage.stack_mem = task_stack;
   storage.stack_size = sizeof(task_stack);
   mr::task::PeriodicTask task;
-  kernel = osKernelRunning;
+  kernel = osKernelInactive;
   assert(!task.Create(config, hooks, storage) && creates == 0);
   kernel = osKernelReady;
   assert(!task.Create(config, {}, storage) && creates == 0);
@@ -87,6 +91,18 @@ int main() {
   assert(!task.Create(config, hooks, storage) && creates == 2);
   assert(inits == 0 && steps == 0);  // Creation never runs application hooks.
 
+  // Running 状态同样允许创建：模拟从 Task_Init 创建业务任务。
+  mr::task::PeriodicTask running_task;
+  kernel = osKernelRunning;
+  assert(running_task.Create(config, hooks, storage));
+  assert(!running_task.Create(config, hooks, storage));
+  kernel = osKernelLocked;
+  mr::task::PeriodicTask locked_task;
+  assert(!locked_task.Create(config, hooks, storage));
+  kernel = osKernelSuspended;
+  assert(!locked_task.Create(config, hooks, storage));
+  kernel = osKernelRunning;
+
   Run(mr::task::TaskFault::kStepFailed, 3);
   assert(waits == 2);
   fail_init = true;
@@ -99,4 +115,14 @@ int main() {
   overrun = false;
   fail_delay = true;
   Run(mr::task::TaskFault::kDelayFailed, 1);
+  fail_delay = false;
+  // The worker may preempt osThreadNew before it returns to the creator.
+  run_immediately = true;
+  fail_init = true;
+  inits = faults = steps = 0;
+  mr::task::PeriodicTask immediate_task;
+  assert(immediate_task.Create(config, hooks, storage));
+  assert(inits == 1 && faults == 1 && steps == 0);
+  assert(last_fault == mr::task::TaskFault::kInitFailed);
+  assert(!immediate_task.Create(config, hooks, storage));
 }

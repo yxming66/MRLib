@@ -3,7 +3,7 @@
 typedef void* osThreadId_t;
 typedef void (*osThreadFunc_t)(void*);
 typedef enum { osOK = 0, osError = -1 } osStatus_t;
-typedef enum { osKernelInactive, osKernelReady, osKernelRunning } osKernelState_t;
+typedef enum { osKernelInactive, osKernelReady, osKernelRunning, osKernelLocked, osKernelSuspended } osKernelState_t;
 typedef enum { osPriorityLow = 8, osPriorityNormal = 24, osPriorityHigh = 40 } osPriority_t;
 typedef struct {
   const char* name;

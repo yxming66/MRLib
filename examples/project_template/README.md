@@ -15,7 +15,7 @@
 | board/bindings.hpp | 项目功能使用哪个物理端点 | 名称必须匹配对应登记表 |
 | app/robot_config.hpp | 几何、ID、周期、超时、方向等参数 | 按实际机器人填写；示例值不是通用默认值 |
 | app/chassis_assembly.hpp | 静态创建电机、轮组和底盘对象 | 电机型号、轮数、控制配置 |
-| app/chassis_task.cpp/.hpp | 创建静态 FreeRTOS 任务并循环运行 | 任务周期、优先级和业务 |
+| app/chassis_task.cpp/.hpp | 通过 PeriodicTask 创建静态线程，提供 Init/Step/Fault | 任务周期、优先级和业务 |
 | app/app_messages.hpp | 本板任务通信数据结构 | 命令和反馈内容 |
 | app/app_channels.cpp/.hpp | 静态单槽队列 | 增加消息通道，命令单消费者，状态可多读者 |
 | app/app_init.cpp/.h | 初始化线程入口与创建业务任务 | 本板要启动的任务 |
@@ -124,3 +124,7 @@ PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使
 ## 本次验证
 
 使用 engineering_hero 的 H723 HAL/FreeRTOS 头文件和 ARM GCC，对本例全部 9 个 C/C++ 实现及 UART/GPIO/SPI/PWM/DMA 共 5 个 BSP 实现进行了严格编译（-Wall -Wextra -Wpedantic -Werror），全部通过。现有底盘固件 Debug 编译与链接通过。未执行烧录或板上验证；可选外设的运行行为仍需在实际板上验收。
+
+## PeriodicTask 底盘任务
+
+chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个命名适配函数交给 PeriodicTask。Task_Init 仍先建立通道并启动 CAN，再创建周期线程。PeriodicTask 执行一次 Init，然后每周期 Step，使用 osDelayUntil 等待。周期超时、初始化/业务失败或等待失败时执行 Fault 后退出线程，不再采用旧示例的超时后继续运行策略。当前仍只读反馈，无电机发送；接入闭环前须在 Fault 实现明确的停止输出策略。

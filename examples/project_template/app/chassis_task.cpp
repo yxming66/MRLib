@@ -6,38 +6,28 @@
 #include "board/bindings.hpp"
 #include "bsp/adapters/can_port.hpp"
 #include "bsp/time.h"
+#include "task/periodic_task.hpp"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "cmsis_os2.h"
 
 namespace {
-// 任务自己持有设备，不把电机/控制器引用暴露给其他任务。
-void Task_Chassis(void* argument) {
-  (void)argument;
-  // 此时板级端点已登记，Task_Init 已完成 CAN 初始化。
-  static mr::board::BspCanPort port{
-      BSP_CAN_FindEndpoint(board::bindings::kChassisCan), BSP_TIME_Get_ms};
-  static app::ChassisAssembly drive{port};
-  static app::ChassisStatus status;
-
-  // 初始化只执行一次，成功后才进入 while 循环。
-  g_app.chassis_registration_result = drive.RegisterFeedback();
-  if (g_app.chassis_registration_result != DEVICE_OK) {
-    g_app.state = APP_CHASSIS_FEEDBACK_REGISTER_FAILED;
-    osThreadExit();
-    return;
+// 业务只负责初始化、单周期处理和故障处理；PeriodicTask 负责循环与等待。
+class ChassisApplication final {
+ public:
+  bool Init() {
+    g_app.chassis_registration_result = drive.RegisterFeedback();
+    if (g_app.chassis_registration_result != DEVICE_OK) {
+      g_app.state = APP_CHASSIS_FEEDBACK_REGISTER_FAILED;
+      return false;
+    }
+    status.feedback_registered = true;
+    previous_us = BSP_TIME_Get_us();
+    return true;
   }
-  status.feedback_registered = true;
-  app::ChassisCommand latest_command{};
-  bool have_command = false;
-  uint64_t previous_us = BSP_TIME_Get_us();
-  TickType_t wake_tick = xTaskGetTickCount();
-  constexpr TickType_t period_ticks = pdMS_TO_TICKS(app::params::kChassisPeriodMs);
-  static_assert(period_ticks > 0, "Chassis period must be at least one RTOS tick");
-  static_assert(app::params::kChassisPeriodMs * configTICK_RATE_HZ % 1000 == 0,
-                "Chassis period must be an exact number of RTOS ticks");
 
-  while (1) {
+  bool Step(float dt_s) {
+    // 当前仅采集反馈；接入控制器后使用此固定配置周期（秒）。
+    (void)dt_s;
     // 1. 收本板其他任务发布的最新指令，不阻塞。
     app::ChassisCommand incoming;
     if (app::TryReceiveChassisCommand(incoming)) {
@@ -83,35 +73,69 @@ void Task_Chassis(void* argument) {
     ++status.heartbeat;
     if (!app::PublishChassisStatus(status)) {
       g_app.state = APP_CHASSIS_STATUS_PUBLISH_FAILED;
-      osThreadExit();
-      return;
+      return false;
     }
 
-    // 5. 等下一个周期。超时记录并重新同步，不连续补跑旧周期。
-    const TickType_t elapsed = xTaskGetTickCount() - wake_tick;
-    if (elapsed >= period_ticks) {
-      ++status.deadline_misses;
-      wake_tick = xTaskGetTickCount();
-    }
-    vTaskDelayUntil(&wake_tick, period_ticks);
+    return true;
   }
+
+  void Fault(mr::task::TaskFault why) {
+    // PeriodicTask 在 Fault 返回后退出线程，不自动重启或补跑周期。
+    // 当前没有电机输出；将来启用控制时，这里必须补充停机输出策略。
+    status.control_enabled = false;
+    if (why == mr::task::TaskFault::kDeadlineMissed) {
+      ++status.deadline_misses;
+      g_app.state = APP_CHASSIS_DEADLINE_MISSED;
+    } else if (why == mr::task::TaskFault::kDelayFailed) {
+      g_app.state = APP_CHASSIS_DELAY_FAILED;
+    }
+    // Init/Step 的具体错误状态已由业务填写。
+    status.updated_ms = BSP_TIME_Get_ms();
+    if (!app::PublishChassisStatus(status))
+      g_app.state = APP_CHASSIS_STATUS_PUBLISH_FAILED;
+  }
+
+ private:
+  mr::board::BspCanPort port{
+      BSP_CAN_FindEndpoint(board::bindings::kChassisCan), BSP_TIME_Get_ms};
+  app::ChassisAssembly drive{port};
+  app::ChassisStatus status{};
+  app::ChassisCommand latest_command{};
+  bool have_command = false;
+  uint64_t previous_us = 0;
+};
+
+// 命名适配函数：把 PeriodicTask 的通用上下文转回底盘业务对象。
+bool InitChassis(void* context) {
+  return static_cast<ChassisApplication*>(context)->Init();
+}
+bool StepChassis(void* context, float dt_s) {
+  return static_cast<ChassisApplication*>(context)->Step(dt_s);
+}
+void FaultChassis(void* context, mr::task::TaskFault why) {
+  static_cast<ChassisApplication*>(context)->Fault(why);
 }
 }  // namespace
 
 namespace app {
 bool CreateChassisTask() {
+  // 仍由运行中的 Task_Init 调用，通道及 CAN 已准备好。
+  if (osKernelGetState() != osKernelRunning) return false;
+  static ChassisApplication application;
+  static mr::task::PeriodicTask task;
   static StaticTask_t control;
   alignas(8) static StackType_t stack[params::kChassisStackBytes / sizeof(StackType_t)];
-  static osThreadId_t thread = nullptr;
-  if (thread || osKernelGetState() != osKernelRunning) return false;
-  osThreadAttr_t attributes{};
-  attributes.name = "Task_Chassis";
-  attributes.priority = osPriorityAboveNormal;
-  attributes.cb_mem = &control;
-  attributes.cb_size = sizeof(control);
-  attributes.stack_mem = stack;
-  attributes.stack_size = sizeof(stack);
-  thread = osThreadNew(Task_Chassis, nullptr, &attributes);
-  return thread != nullptr;
+  static_assert(params::kChassisPeriodMs > 0 && params::kChassisPeriodMs <= UINT32_MAX / 1000u);
+  static_assert(params::kChassisStackBytes % sizeof(StackType_t) == 0);
+  const mr::task::PeriodicTaskConfig config{
+      "Task_Chassis", params::kChassisPeriodMs * 1000u,
+      params::kChassisStackBytes, osPriorityAboveNormal};
+  const mr::task::TaskHooks hooks{&application, InitChassis, StepChassis, FaultChassis};
+  osThreadAttr_t storage{};
+  storage.cb_mem = &control;
+  storage.cb_size = sizeof(control);
+  storage.stack_mem = stack;
+  storage.stack_size = sizeof(stack);
+  return task.Create(config, hooks, storage);
 }
 }  // namespace app
