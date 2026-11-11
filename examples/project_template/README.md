@@ -127,4 +127,4 @@ PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使
 
 ## PeriodicTask 底盘任务
 
-chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个命名适配函数交给 PeriodicTask。Task_Init 仍先建立通道并启动 CAN，再创建周期线程。PeriodicTask 执行一次 Init，然后每周期 Step，使用 osDelayUntil 等待。周期超时、初始化/业务失败或等待失败时执行 Fault 后退出线程，不再采用旧示例的超时后继续运行策略。当前仍只读反馈，无电机发送；接入闭环前须在 Fault 实现明确的停止输出策略。
+chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个无捕获 lambda 回调交给 PeriodicTask。Task_Init 仍先建立通道并启动 CAN，再创建周期线程。PeriodicTask 执行一次 Init，然后每周期 Step，使用 osDelayUntil 等待。周期超时、初始化/业务失败或等待失败时执行 Fault 后退出线程，不再采用旧示例的超时后继续运行策略。当前仍只读反馈，无电机发送；接入闭环前须在 Fault 实现明确的停止输出策略。

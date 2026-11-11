@@ -105,16 +105,6 @@ class ChassisApplication final {
   uint64_t previous_us = 0;
 };
 
-// 命名适配函数：把 PeriodicTask 的通用上下文转回底盘业务对象。
-bool InitChassis(void* context) {
-  return static_cast<ChassisApplication*>(context)->Init();
-}
-bool StepChassis(void* context, float dt_s) {
-  return static_cast<ChassisApplication*>(context)->Step(dt_s);
-}
-void FaultChassis(void* context, mr::task::TaskFault why) {
-  static_cast<ChassisApplication*>(context)->Fault(why);
-}
 }  // namespace
 
 namespace app {
@@ -130,7 +120,15 @@ bool CreateChassisTask() {
   const mr::task::PeriodicTaskConfig config{
       "Task_Chassis", params::kChassisPeriodMs * 1000u,
       params::kChassisStackBytes, osPriorityAboveNormal};
-  const mr::task::TaskHooks hooks{&application, InitChassis, StepChassis, FaultChassis};
+  const mr::task::TaskHooks hooks{
+      &application,
+      [](void* context) { return static_cast<ChassisApplication*>(context)->Init(); },
+      [](void* context, float dt_s) {
+        return static_cast<ChassisApplication*>(context)->Step(dt_s);
+      },
+      [](void* context, mr::task::TaskFault why) {
+        static_cast<ChassisApplication*>(context)->Fault(why);
+      }};
   osThreadAttr_t storage{};
   storage.cb_mem = &control;
   storage.cb_size = sizeof(control);
