@@ -37,7 +37,9 @@ typedef struct {
 // filters before BSP_FDCAN_Init; Configure may precede filter RAM writes.
 // Copies the table; names/handles persist. No runtime rebinding or hardware init.
 // Board owns clocks, timing, RAM capacity/layout, filters and NVIC configuration.
+// 启动时登记板级控制器映射；复制表项，不初始化硬件，不支持运行中重绑定。
 int8_t BSP_FDCAN_Configure(const BSP_FDCAN_Endpoint_t* endpoints, uint8_t count);
+// 按登记名称查找控制器端点，找不到时返回 BSP_FDCAN_ERR。
 BSP_FDCAN_t BSP_FDCAN_FindEndpoint(const char* name);
 
 typedef enum {
@@ -152,30 +154,48 @@ extern volatile BSP_FDCAN_RxDebug_t g_bsp_fdcan_rx_debug;
 // Task-only, once RTOS is running. Prepares software state, then starts only the
 // registered controllers. Failure stops this attempt's controllers; failed HAL
 // rollback locks initialization until reset. Never reinitializes shared RAM.
+// 在 RTOS 任务中初始化软件状态并启动已登记控制器；不重新初始化共享消息 RAM。
 int8_t BSP_FDCAN_Init(void);
+// 取得端点对应的 HAL 句柄，无效端点返回 NULL。
 FDCAN_HandleTypeDef* BSP_FDCAN_GetHandle(BSP_FDCAN_t can);
+// 追加指定事件的观察回调，不替换 BSP 接收处理或已有回调。
 int8_t BSP_FDCAN_RegisterCallback(BSP_FDCAN_t can, BSP_FDCAN_Callback_t type,
                                   void (*callback)(void));
 // Observer callbacks never replace BSP reception or another callback.
+// 移除指定事件中匹配的观察回调，不影响其他回调。
 int8_t BSP_FDCAN_UnregisterCallback(BSP_FDCAN_t can, BSP_FDCAN_Callback_t type,
                                     void (*callback)(void));
+// 按帧格式发送或排队一帧；dlc 为字节数，成功不代表已获总线应答。
 int8_t BSP_FDCAN_Transmit(BSP_FDCAN_t can, BSP_FDCAN_Format_t format, uint32_t id,
                           const uint8_t* data, uint8_t dlc);
+// 发送标准 ID 数据帧，忙时使用软件发送队列。
 int8_t BSP_FDCAN_TransmitStdDataFrame(BSP_FDCAN_t can, BSP_FDCAN_StdDataFrame_t* frame);
+// 发送扩展 ID 数据帧，忙时使用软件发送队列。
 int8_t BSP_FDCAN_TransmitExtDataFrame(BSP_FDCAN_t can, BSP_FDCAN_ExtDataFrame_t* frame);
+// 发送标准或扩展 ID 的远程请求帧。
 int8_t BSP_FDCAN_TransmitRemoteFrame(BSP_FDCAN_t can, BSP_FDCAN_RemoteFrame_t* frame);
+// 为接收 ID 登记 FIFO 队列订阅；queue_size 为 0 时使用默认深度。
 int8_t BSP_FDCAN_RegisterId(BSP_FDCAN_t can, uint32_t can_id, uint8_t queue_size);
 /* Task-only, with all application readers of this ID stopped. ISR delivery is
  * unlinked under IRQ protection before deleting its queue. */
+// 在任务中撤销 ID 订阅并释放队列；调用前须停止该 ID 的所有应用读取者。
 int8_t BSP_FDCAN_UnregisterId(BSP_FDCAN_t can, uint32_t can_id);
+// 为接收 ID 登记最新值订阅；新帧覆盖旧帧，不创建逐帧队列。
 int8_t BSP_FDCAN_RegisterLatestId(BSP_FDCAN_t can, uint32_t can_id);
+// 从普通订阅队列取走最早一帧，等待时间单位为 RTOS tick。
 int8_t BSP_FDCAN_GetMessage(BSP_FDCAN_t can, uint32_t can_id, BSP_FDCAN_Message_t* msg,
                             uint32_t timeout);
+// 最新值订阅读取快照；普通队列订阅则排空队列并取最后一帧。
 int8_t BSP_FDCAN_GetLatestMessage(BSP_FDCAN_t can, uint32_t can_id, BSP_FDCAN_Message_t* msg);
+// 尝试恢复指定控制器通信，不执行整套 HAL 或共享 RAM 重新初始化。
 int8_t BSP_FDCAN_Recover(BSP_FDCAN_t can);
+// 查询普通订阅队列的待取帧数；无效或最新值订阅返回 -1。
 int32_t BSP_FDCAN_GetQueueCount(BSP_FDCAN_t can, uint32_t can_id);
+// 清空普通订阅队列，或使最新值订阅的已有快照失效。
 int8_t BSP_FDCAN_FlushQueue(BSP_FDCAN_t can, uint32_t can_id);
+// 初始化后设置全局 ID 解析器；再次设置会替换原解析器。
 int8_t BSP_FDCAN_RegisterIdParser(BSP_FDCAN_IdParser_t parser);
+// 用已设置解析器或默认规则，将原始 ID 与帧类型转换为订阅键。
 uint32_t BSP_FDCAN_ParseId(uint32_t original_id, BSP_FDCAN_FrameType_t frame_type);
 #ifdef __cplusplus
 }

@@ -2,7 +2,7 @@
 
 面向 STM32 机器人项目的 C/C++ 用户代码测试库，包含底层接口、设备驱动、控制组件、机械臂与底盘算法，以及应用集成示例。
 
-当前阶段为**测试与协作开发版本**。本仓库提供 `User` 代码集合；接入具体硬件时，需要配套 HAL、RTOS、芯片启动文件、链接脚本及板级构建配置。[H723 集成示例](examples/h7_integration/README.md)已提供可完整链接的板级基线，默认禁止电机发送，尚未完成实机验收。
+当前阶段为**测试与协作开发版本**。本仓库提供 `User` 代码集合；接入具体硬件时，需要配套 HAL、RTOS、芯片启动文件、链接脚本及板级构建配置。[项目接入示例](examples/project_template/README.md)提供可复制的 app 与板级适配文件，基于 H723/FreeRTOS，默认禁止电机发送，尚未完成实机验收。
 
 ## 代码结构
 
@@ -64,7 +64,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
 4. 核对任务入口、引脚、总线、设备 ID、单位、方向、零点、限位及线程/中断使用约束。
 5. 完成编译和对应实机验证后，记录板型、工具链、提交号及结果。
 
-旧整机任务已移除；当前 H723 集成示例提供独立构建入口，已完成选定装配的完整固件链接及全部 User 生产实现严格编译。其他功能组合和板上运行仍需分别验证。审查方案与已完成批次见 [User 重构方案](docs/USER_REFACTOR_PLAN.md) 和 [重构进度](docs/USER_REFACTOR_PROGRESS.md)。
+旧整机任务已移除；当前项目接入示例需配合 Cube 生成的工程使用。其他功能组合和板上运行仍需分别验证。审查方案与已完成批次见 [User 重构方案](docs/USER_REFACTOR_PLAN.md) 和 [重构进度](docs/USER_REFACTOR_PROGRESS.md)。
 
 ### 主机构建与 CMake target
 
@@ -84,11 +84,7 @@ ctest --test-dir build/cmake-host --output-on-failure
 
 先准备可构建的 Cube 工程，引入完整库，在 CMake 链接所用 target；board 连接硬件，app 参数文件填写标定值，普通 C++ 创建并连接对象，任务显式调度。新增功能可以立即由 app 调用，不受自动配置工具支持范围限制。
 
-可阅读或复制以下示例：
-
-- [普通 CMake 消费项目](examples/host_project/README.md)：最小 target 引入与链接，无 Python。
-- [H723 完整工程](examples/h7_integration/README.md)：手写底盘/Arm<3>/遥测装配、参数和板级启动。
-- [底盘周期任务](examples/chassis_task/README.md)：直接修改周期、栈和业务的小型 FreeRTOS 示例。
+可阅读或复制[项目接入文件](examples/project_template/README.md)：底盘任务、静态通信、参数、板级时基以及 FDCAN/UART/GPIO/SPI/PWM 登记。
 
 示例复制后归项目维护，不存在再次生成覆盖。板级前提和接入步骤见 [板级集成](docs/BOARD_INTEGRATION.md)。
 
