@@ -29,7 +29,7 @@
 
 ```text
 robot_project/
-  libraries/MR_TestLib/
+  libraries/MRLib/
   firmware/chassis_board/
     Core/ Drivers/ Middlewares/     # Cube 生成
     app/                           # 复制本例 app

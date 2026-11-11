@@ -4,7 +4,7 @@
 
 ```cmake
 project(my_robot LANGUAGES C CXX ASM)
-add_subdirectory(external/MR_TestLib)
+add_subdirectory(external/MRLib)
 add_executable(robot_firmware board/main.c app/robot.cpp)
 target_link_libraries(robot_firmware PRIVATE
     cube_platform board_adapter
@@ -28,7 +28,7 @@ cube_platform/board_adapter 由项目提供实际源文件、HAL include、芯�
 ## 当前 H723 BSP 帮助函数
 
 ```cmake
-include(external/MR_TestLib/cmake/MrStm32H7.cmake)
+include(external/MRLib/cmake/MrStm32H7.cmake)
 mr_add_stm32h7_bsp(TARGET board_adapter PLATFORM cube_platform
     PROFILE h723_zzrobot COMPONENTS can mrlink pwm gpio spi)
 target_link_libraries(robot_firmware PRIVATE board_adapter)

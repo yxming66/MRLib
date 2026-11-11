@@ -1,24 +1,24 @@
 cmake_minimum_required(VERSION 3.22)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
-    project(MR_TestLib LANGUAGES C CXX)
-    set(MR_TESTLIB_HOST_TESTS_DEFAULT ON)
+    project(MRLib LANGUAGES C CXX)
+    set(MRLIB_HOST_TESTS_DEFAULT ON)
 else()
     # CMake must enable languages in the common parent of consumers and library.
     if(NOT CMAKE_C_COMPILER_LOADED OR NOT CMAKE_CXX_COMPILER_LOADED)
-        message(FATAL_ERROR "MR_TestLib requires project(... LANGUAGES C CXX) before add_subdirectory")
+        message(FATAL_ERROR "MRLib requires project(... LANGUAGES C CXX) before add_subdirectory")
     endif()
-    set(MR_TESTLIB_HOST_TESTS_DEFAULT OFF)
+    set(MRLIB_HOST_TESTS_DEFAULT OFF)
 endif()
 
-option(MR_TESTLIB_BUILD_HOST_TESTS "Build host-side regression tests"
-       ${MR_TESTLIB_HOST_TESTS_DEFAULT})
-option(MR_TESTLIB_BUILD_ARM_HOST_TESTS "Build arm host tests" ON)
-option(MR_TESTLIB_BUILD_CHASSIS_HOST_TESTS "Build chassis host tests" ON)
+option(MRLIB_BUILD_HOST_TESTS "Build host-side regression tests"
+       ${MRLIB_HOST_TESTS_DEFAULT})
+option(MRLIB_BUILD_ARM_HOST_TESTS "Build arm host tests" ON)
+option(MRLIB_BUILD_CHASSIS_HOST_TESTS "Build chassis host tests" ON)
 
 include("${CMAKE_CURRENT_LIST_DIR}/cmake/MrTargets.cmake")
 
-if(MR_TESTLIB_BUILD_HOST_TESTS)
+if(MRLIB_BUILD_HOST_TESTS)
     enable_testing()
 
     add_executable(mr_fdcan_host_tests tests/bsp/fdcan_host_tests.c User/bsp/fdcan.c
@@ -334,7 +334,7 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         add_test(NAME ${_mr_test} COMMAND ${_mr_test})
     endforeach()
 
-    if(MR_TESTLIB_BUILD_ARM_HOST_TESTS)
+    if(MRLIB_BUILD_ARM_HOST_TESTS)
         add_executable(mr_arm_host_tests
             User/robotics/arm/tests/arm_host_tests.cpp
         )
@@ -345,7 +345,7 @@ if(MR_TESTLIB_BUILD_HOST_TESTS)
         add_test(NAME mr_arm_host_tests COMMAND mr_arm_host_tests)
     endif()
 
-    if(MR_TESTLIB_BUILD_CHASSIS_HOST_TESTS)
+    if(MRLIB_BUILD_CHASSIS_HOST_TESTS)
         add_executable(mr_chassis_host_tests
             User/robotics/chassis/tests/chassis_host_tests.cpp
         )

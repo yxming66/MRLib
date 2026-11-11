@@ -1,8 +1,8 @@
-# MR_TestLib
+# MRLib
 
-面向 STM32 机器人项目的 C/C++ 用户代码测试库，包含底层接口、设备驱动、控制组件、机械臂与底盘算法，以及应用集成示例。
+面向 STM32 机器人项目的 C/C++ 机器人开发库，包含底层接口、设备驱动、控制组件、机械臂与底盘算法，以及应用集成示例。
 
-当前阶段为**测试与协作开发版本**。本仓库提供 `User` 代码集合；接入具体硬件时，需要配套 HAL、RTOS、芯片启动文件、链接脚本及板级构建配置。[项目接入示例](examples/project_template/README.md)提供可复制的 app 与板级适配文件，基于 H723/FreeRTOS，默认禁止电机发送，尚未完成实机验收。
+本仓库作为 **MRLib 正式开发库**维护。本仓库提供 `User` 代码集合；接入具体硬件时，需要配套 HAL、RTOS、芯片启动文件、链接脚本及板级构建配置。[项目接入示例](examples/project_template/README.md)提供可复制的 app 与板级适配文件，基于 H723/FreeRTOS，默认禁止电机发送，尚未完成实机验收。
 
 ## 代码结构
 
@@ -31,8 +31,8 @@ module 保留统一接口：底盘注册时选择 robotics 模型、绑定 Wheel
 UART 已支持 board 硬件登记与项目代码用途分配，H7 MRLink 和 DR16 不再固定 RC/PC 串口。已有项目升级需要迁移 C API，见 [UART 接入](docs/UART_BINDINGS.md)。PWM、GPIO/SPI 也已改为 board 登记，BMI088 显式接收总线与引脚，详见 [PWM 接入](docs/PWM_BINDINGS.md)、[GPIO/SPI 接入](docs/GPIO_SPI_BINDINGS.md)。FDCAN 也已改为命名端点登记，过滤器和消息 RAM 规划归 board；时基由项目直接实现 Board_Time*，见 [FDCAN 接入](docs/FDCAN_BINDINGS.md)、[时间源](docs/TIME_SOURCE.md)。当前芯片与运行限制见 [BSP 核查](docs/BSP_PORTABILITY_AUDIT.md)。
 
 ```sh
-git clone https://github.com/yxming66/MR_TestLib.git
-cd MR_TestLib
+git clone https://github.com/yxming66/MRLib.git
+cd MRLib
 ```
 
 阅读 [协作规范](CONTRIBUTING.md)，按需使用对应组件。机械臂算法说明见 [robotics/arm](User/robotics/arm/README.md)。
@@ -71,7 +71,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -fno-exceptions -fno-rtti -IUser \
 仓库提供一个不依赖 STM32 HAL 的主机构建入口，用于验证纯算法和后续可复用组件：
 
 ```powershell
-cmake -S . -B build/cmake-host -G Ninja -DMR_TESTLIB_BUILD_HOST_TESTS=ON
+cmake -S . -B build/cmake-host -G Ninja -DMRLIB_BUILD_HOST_TESTS=ON
 cmake --build build/cmake-host
 ctest --test-dir build/cmake-host --output-on-failure
 ```

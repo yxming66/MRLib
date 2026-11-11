@@ -7,7 +7,7 @@
 以下路径仅作示例，my_robot_host 应为新的目录。在任意工作目录执行：
 
 ```powershell
-$libraryRoot = 'D:/STM32Projects_HAL/Mrobot_Test_Version/MR_TestLib'
+$libraryRoot = 'D:/STM32Projects_HAL/Mrobot_Test_Version/MRLib'
 $projectRoot = 'D:/STM32Projects_HAL/my_robot_host'
 if (Test-Path -LiteralPath $projectRoot) { throw '请选择新的项目目录' }
 New-Item -ItemType Directory -Path $projectRoot | Out-Null
@@ -20,14 +20,14 @@ ctest --test-dir "$projectRoot/build" --output-on-failure
 
 成功后 robot_app 应返回 0。该示例实际调用底盘运动学、robotics_core 的旋转实现及 C MRLink 初始化，检查 C/C++ 链接与传递依赖；不连接硬件，也不初始化机械臂设备。CMake 只需链接 module_arm、module_chassis、component_mrlink，无需手补其核心算法源和 include。
 
-MR_LIBRARY_ROOT 指向库仓库，既可用现有 checkout，也可用项目 external/MR_TestLib 子模块。以后改变库位置，只修改 CMake 配置参数；也可直接修改项目 CMake 中的默认路径。示例复制后属于项目，参数不会被库的生成工具覆盖。
+MR_LIBRARY_ROOT 指向库仓库，既可用现有 checkout，也可用项目 external/MRLib 子模块。以后改变库位置，只修改 CMake 配置参数；也可直接修改项目 CMake 中的默认路径。示例复制后属于项目，参数不会被库的生成工具覆盖。
 
 ## 2. 构建独立 H723 固件
 
 这一步要求匹配 [H7 示例板级前提](../examples/h7_integration/README.md) 的 Cube 工程：H723XG、24 MHz HSE、对应的外设句柄与引脚、TIM2 HAL 时基以及 CMSIS-RTOS2/FreeRTOS。当前验收读取 zzrobot 的 Core、Drivers、Middlewares 和启动汇编，不修改或编译其旧 User/main/freertos 业务。
 
 ```powershell
-$libraryRoot = 'D:/STM32Projects_HAL/Mrobot_Test_Version/MR_TestLib'
+$libraryRoot = 'D:/STM32Projects_HAL/Mrobot_Test_Version/MRLib'
 $cubeRoot = 'D:/STM32Projects_HAL/board-H7/zzrobot'
 $projectRoot = 'D:/STM32Projects_HAL/my_robot_h7'
 if (Test-Path -LiteralPath $projectRoot) { throw '请选择新的项目目录' }
@@ -96,7 +96,7 @@ H7 示例参数是演示值，默认 kAllowMotorTx=false、运行请求关闭；
 
 ## 5. 验收记录与边界
 
-2026-11-08 已将示例复制到 MR_TestLib checkout 之外的新工作目录，以显式 MR_LIBRARY_ROOT 接入：
+2026-11-08 已将示例复制到 MRLib checkout 之外的新工作目录，以显式 MR_LIBRARY_ROOT 接入：
 
 - 主机消费项目配置、编译、运行通过；仓库内默认路径也通过。
 - H723 整机与独立底盘任务均从新的构建目录编译、链接，输出 ELF/BIN/map，nm -u 无未定义符号。

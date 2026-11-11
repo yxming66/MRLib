@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Configure host tests
-        run: cmake -S . -B build/cmake-host -G Ninja -DMR_TESTLIB_BUILD_HOST_TESTS=ON
+        run: cmake -S . -B build/cmake-host -G Ninja -DMRLIB_BUILD_HOST_TESTS=ON
       - name: Build host tests
         run: cmake --build build/cmake-host --parallel
       - name: Run library regression tests

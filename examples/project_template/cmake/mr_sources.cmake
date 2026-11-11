@@ -1,7 +1,7 @@
 # 在本板 CMakeLists.txt 中创建 Cube 目标后 include 本文件。
-# 路径以本板目录为基准：firmware/<board>/，库位于 libraries/MR_TestLib/。
-set(MR_LIBRARY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../libraries/MR_TestLib")
-set(MR_TESTLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
+# 路径以本板目录为基准：firmware/<board>/，库位于 libraries/MRLib/。
+set(MR_LIBRARY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../libraries/MRLib")
+set(MRLIB_BUILD_HOST_TESTS OFF CACHE BOOL "" FORCE)
 add_subdirectory("${MR_LIBRARY_ROOT}" mr_library)
 
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

@@ -24,10 +24,10 @@ CloudMusic_Update(&music, now_ms);
 ```cmake
 target_link_libraries(robot_firmware PRIVATE mr::module_cloudmusic)
 target_sources(robot_firmware PRIVATE
-    external/MR_TestLib/resources/music/nokia.c
-    external/MR_TestLib/resources/music/rm.c)
+    external/MRLib/resources/music/nokia.c
+    external/MRLib/resources/music/rm.c)
 target_include_directories(robot_firmware PRIVATE
-    external/MR_TestLib/resources/music)
+    external/MRLib/resources/music)
 ```
 
 遥控侧先将通道值归一化到 [-1,1]，由 app 判断拨杆是否进入音乐菜单，再使用 `app/remote_menu.h` 产生一次性 `CloudMusic_Control_t`。DR16 的头文件和拨杆枚举无需进入播放器。
