@@ -22,7 +22,7 @@
 
 优先保证库易读、易组合、易维护。User 提供完整的普通 C/C++ 接口，项目通过 board、app、参数文件和任务代码完成装配；CMake 自动传递所选能力的编译依赖。不需要勾选复制源文件，也不要求 Python、YAML 或生成器。
 
-module 保留统一接口：底盘注册时选择 robotics 模型、绑定 WheelDevice；机械臂使用编译期固定的 Arm<N>，项目静态持有电机/关节，模型与控制存储不使用堆分配。任务、遥控和整机业务归项目所有。
+module 保留统一接口：底盘注册时选择 robotics 模型、绑定 WheelDevice；机械臂使用编译期固定的 Arm<N>；云台使用固定 yaw/pitch 双轴接口并选择 robotics 几何模型。项目静态持有电机/关节，模型与控制存储不使用堆分配。任务、遥控和整机业务归项目所有。
 
 新增模块只维护功能、配置类型、CMake 直接依赖、最小手写示例与适用验证，不需要同步维护生成模板或 Schema。旧 YAML 配置/装配/任务生成与 CLI 已删除。未来自动配置可以在稳定接口上单独实现，不作为库使用前提。详见 [架构与维护工作](docs/ARCHITECTURE.md)。
 
@@ -79,6 +79,8 @@ ctest --test-dir build/cmake-host --output-on-failure
 当前已有 37 项主机回归，覆盖 C11/C++17 基础组件、共享 PID 控制律、滤波频率响应、计时、姿态/校准/告警服务、RM/DM/LZ 协议 fake-CAN 路径、机械臂、统一底盘运动学和统一底盘模块（含反馈超时及计时回绕契约），以及真实 BSP 的 FDCAN 登记/失败回滚/FD 帧和 H7 时间源溢出边界。BSP 回归使用 HAL/RTOS 测试替身。STM32 工程可以用 `add_subdirectory()` 引入本库，再通过 `target_link_libraries()` 选择 `mr_robotics_arm`、`mr_robotics_chassis`、`mr_module_chassis` 等 target；应用工程仍保留自己的 HAL、RTOS、启动文件、链接脚本和板级适配。详细说明见 [构建入口](docs/BUILD.md)，新增服务的接入契约见 [基础服务接口](docs/USER_SERVICES.md)。
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
+
+双轴云台接口和 yaw/pitch 几何约定见 [云台模块](User/module/gimbal/README.md) 与 [云台运动学](User/robotics/gimbal/README.md)；目前没有云台板级 preset 或实机验收。
 
 ### 新建项目
 

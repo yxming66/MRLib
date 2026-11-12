@@ -64,6 +64,19 @@ if(MRLIB_BUILD_HOST_TESTS)
         -Wall -Wextra -Wpedantic -pedantic-errors -UNDEBUG)
     add_test(NAME mr_periodic_task_host_tests COMMAND mr_periodic_task_host_tests)
 
+    add_executable(mr_gimbal_kinematics_host_tests
+        User/robotics/gimbal/tests/gimbal_host_tests.cpp)
+    target_link_libraries(mr_gimbal_kinematics_host_tests PRIVATE mr_robotics_gimbal)
+    target_compile_options(mr_gimbal_kinematics_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_gimbal_kinematics_host_tests COMMAND mr_gimbal_kinematics_host_tests)
+
+    add_executable(mr_gimbal_module_host_tests tests/module/gimbal_module_host_tests.cpp)
+    target_link_libraries(mr_gimbal_module_host_tests PRIVATE mr_module_gimbal)
+    target_compile_options(mr_gimbal_module_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_gimbal_module_host_tests COMMAND mr_gimbal_module_host_tests)
+
     add_executable(mr_execution_host_tests tests/device/execution_host_tests.cpp)
     target_link_libraries(mr_execution_host_tests PRIVATE mr_device_joint mr_device_wheel)
     add_executable(mr_controller_learning_host_tests tests/device/controller_learning_host_tests.cpp)

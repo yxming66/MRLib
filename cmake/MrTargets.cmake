@@ -42,6 +42,11 @@ add_library(mr::robotics_chassis ALIAS mr_robotics_chassis)
 target_include_directories(mr_robotics_chassis INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
 target_compile_features(mr_robotics_chassis INTERFACE cxx_std_17)
 
+add_library(mr_robotics_gimbal INTERFACE)
+add_library(mr::robotics_gimbal ALIAS mr_robotics_gimbal)
+target_include_directories(mr_robotics_gimbal INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
+target_compile_features(mr_robotics_gimbal INTERFACE cxx_std_17)
+
 add_library(mr_device_wheel_interface INTERFACE)
 add_library(mr::device_wheel_interface ALIAS mr_device_wheel_interface)
 target_include_directories(mr_device_wheel_interface INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
@@ -51,6 +56,11 @@ add_library(mr_module_chassis INTERFACE)
 add_library(mr::module_chassis ALIAS mr_module_chassis)
 target_include_directories(mr_module_chassis INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
 target_compile_features(mr_module_chassis INTERFACE cxx_std_17)
+
+add_library(mr_module_gimbal INTERFACE)
+add_library(mr::module_gimbal ALIAS mr_module_gimbal)
+target_include_directories(mr_module_gimbal INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
+target_compile_features(mr_module_gimbal INTERFACE cxx_std_17)
 
 add_library(mr_device_joint_interface INTERFACE)
 add_library(mr::device_joint_interface ALIAS mr_device_joint_interface)
@@ -148,6 +158,11 @@ target_link_libraries(mr_module_chassis INTERFACE
     mr_robotics_chassis
     mr_component_controller
     mr_device_wheel_interface
+)
+
+target_link_libraries(mr_module_gimbal INTERFACE
+    mr_robotics_gimbal
+    mr_device_joint_interface
 )
 
 target_link_libraries(mr_module_arm INTERFACE
