@@ -13,7 +13,7 @@ enum class ChassisModel : uint8_t {
   kMecanum = 0,
   kFrontOmniRearMecanum = 1,
 };
-
+ 
 struct ChassisGeometry {
   float wheelbase_m = 0.0f;
   float trackwidth_m = 0.0f;
