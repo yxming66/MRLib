@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <array>
 #include <cstdint>
 
 namespace mr::robotics::gimbal {
@@ -18,6 +19,14 @@ struct Angles {
   float pitch_rad = 0.0f;
 };
 
+struct YawPitchPitchAngles {
+  float yaw_rad = 0.0f;
+  float pitch1_rad = 0.0f;
+  float pitch2_rad = 0.0f;
+};
+
+using JointAngles = std::array<float, 3>;  // [yaw, pitch1, pitch2]
+
 struct Direction {
   float x = 1.0f;
   float y = 0.0f;
@@ -26,6 +35,11 @@ struct Direction {
 
 inline bool IsFinite(const Angles& angles) {
   return std::isfinite(angles.yaw_rad) && std::isfinite(angles.pitch_rad);
+}
+
+inline bool IsFinite(const YawPitchPitchAngles& angles) {
+  return std::isfinite(angles.yaw_rad) && std::isfinite(angles.pitch1_rad) &&
+         std::isfinite(angles.pitch2_rad);
 }
 
 inline bool IsFinite(const Direction& direction) {

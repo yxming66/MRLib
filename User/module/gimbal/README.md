@@ -1,28 +1,27 @@
-# Gimbal module
+# Unified gimbal module
 
-`mr::module::gimbal::Gimbal` has exactly two compile-time axes in `[yaw, pitch]` order. The project owns and constructs both `IActuator` objects; the module does not choose motor models, initialize a bus, allocate memory, or create tasks.
+`mr::module::gimbal::Gimbal` is one board-neutral module for the supported gimbal models. It has fixed storage for at most three axes; registering `kYawPitch` activates two and `kYawPitchPitch` activates three. The project owns the `IActuator` objects and the module does not allocate memory, create a task, choose motor models, or initialize a bus.
 
 ```cpp
 using Gimbal = mr::module::gimbal::Gimbal;
 Gimbal gimbal;
 Gimbal::Config config;
-config.kinematics.model = mr::robotics::gimbal::Model::kYawPitch;
-config.axes = {&yaw_actuator, &pitch_actuator};
-config.gains = {{{20.0f, 1.0f}, {16.0f, 0.8f}}}; // kp, kd
-config.kinematics.yaw_pitch.min_yaw_rad = -3.0f;
-config.kinematics.yaw_pitch.max_yaw_rad =  3.0f;
-config.kinematics.yaw_pitch.min_pitch_rad = -0.4f;
-config.kinematics.yaw_pitch.max_pitch_rad =  0.8f;
+config.kinematics.model = mr::robotics::gimbal::Model::kYawPitchPitch;
+config.axes = {&yaw_actuator, &pit1_actuator, &pit2_actuator};
+config.gains = {{{20.0f, 1.0f}, {16.0f, 0.8f}, {12.0f, 0.6f}}};
+config.kinematics.yaw_pitch_pitch.min_pitch1_rad = 0.0f;
+config.kinematics.yaw_pitch_pitch.max_pitch1_rad = 1.5707963f;
+config.kinematics.yaw_pitch_pitch.min_pitch2_rad = 0.0f;
+config.kinematics.yaw_pitch_pitch.max_pitch2_rad = 1.5707963f;
 
-gimbal.Register(config);       // validates and registers; outputs remain relaxed
-gimbal.UpdateFeedback();       // required before enabling
-gimbal.Enable();               // explicitly enables both axes and holds feedback
-gimbal.SetTargetDirection({1.0f, 0.2f, 0.3f});
-gimbal.UpdateFeedback();       // each control cycle consumes a fresh sample
+gimbal.Register(config);     // validates, registers, and leaves outputs relaxed
+gimbal.UpdateFeedback();     // encoder/device feedback
+gimbal.Enable();
+gimbal.SetTargetAngles({yaw_rad, pit1_rad, pit2_rad});
 gimbal.Step(0.002f);
-gimbal.CommitOutput();         // commits both staged actuator commands
+gimbal.CommitOutput();
 ```
 
-The application must check every result. `UpdateFeedback -> SetTarget... -> Step -> CommitOutput` is one cycle. After commit, another feedback update is required. Device code remains responsible for actual frame freshness and bus delivery. Input limits, actuator-side position limits and mechanical hard stops must agree; the module does not calibrate zero or infer motor direction. Any device failure clears pending commands and attempts to relax registered axes. Partial bus transmission cannot be rolled back. A fault latches the module; call `Disable()`, then sample valid feedback and explicitly `Enable()` to recover. If the control task faults, the application should explicitly call `Disable()` or provide its own shutdown policy.
+The axis arrays always use `[yaw, pitch1, pitch2]` order. For ordinary yaw-pitch, set axis 2 to `nullptr`. `SetTargetDirection(direction, pitch1)` resolves the redundant pitch angle using the supplied pitch1 target. Check every return value. A successful output commit consumes that feedback sample; update again before the next step.
 
-`Step` sends position-mode MIT commands with configured gains and zero feedforward torque; it is not a PID controller and does not perform visual tracking. The caller supplies already filtered targets and the fixed sample interval.
+The module reads actuator feedback for safe enable/hold and sends position-mode MIT targets. It does not decide whether an application should use an IMU for world heading or encoders for fold state. Keep IMU selection, frame conversion, command freshness, and fold state transitions in the project app; the actuator device still needs its encoder for its inner control and diagnostics. Device failures clear staged commands and attempt to relax registered axes. Bus transmission is not atomic.

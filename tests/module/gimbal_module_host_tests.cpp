@@ -33,7 +33,7 @@ struct FakeActuator final : mr::IActuator {
 
 mr::module::gimbal::GimbalConfig MakeConfig(FakeActuator& yaw, FakeActuator& pitch) {
   mr::module::gimbal::GimbalConfig config;
-  config.axes = {&yaw, &pitch};
+  config.axes = {&yaw, &pitch, nullptr};
   config.gains = {{{20.0f, 1.0f}, {16.0f, 0.8f}}};
   config.kinematics.yaw_pitch.min_yaw_rad = -3.14159265f;
   config.kinematics.yaw_pitch.max_yaw_rad = 3.14159265f;
@@ -57,18 +57,19 @@ int main() {
   assert(gimbal.Enable() == Status::kInvalidFeedback);
   assert(gimbal.UpdateFeedback() == Status::kOk);
   assert(gimbal.Enable() == Status::kOk && gimbal.lifecycle() == Lifecycle::kEnabled);
-  assert(Near(gimbal.command().yaw_rad, 0) && Near(gimbal.command().pitch_rad, 0));
+  assert(gimbal.axis_count() == 2);
+  assert(Near(gimbal.command()[0], 0) && Near(gimbal.command()[1], 0));
   assert(gimbal.SetTargetDirection({0, 1, 0.5f}) == Status::kOk);
-  assert(Near(gimbal.command().yaw_rad, 1.5707963f));
-  assert(Near(gimbal.command().pitch_rad, 0.4636476f));
+  assert(Near(gimbal.command()[0], 1.5707963f));
+  assert(Near(gimbal.command()[1], 0.4636476f));
   assert(gimbal.Step(0.002f) == Status::kOk);
   assert(yaw.writes == 1 && pitch.writes == 1 && yaw.pending && pitch.pending);
-  assert(Near(yaw.target, gimbal.command().yaw_rad) && Near(yaw.kp, 20) && Near(pitch.kd, 0.8f));
+  assert(Near(yaw.target, gimbal.command()[0]) && Near(yaw.kp, 20) && Near(pitch.kd, 0.8f));
   assert(gimbal.UpdateFeedback() == Status::kInvalidState); // Do not discard staged output.
   assert(gimbal.CommitOutput() == Status::kOk && yaw.commits == 1 && pitch.commits == 1);
   assert(gimbal.CommitOutput() == Status::kInvalidState);
   assert(gimbal.SetTargetDirection({0, 0, 1}) == Status::kKinematicsError);
-  assert(gimbal.SetTargetAngles({4.0f, 0.0f}) == Status::kInvalidArgument);
+  assert(gimbal.SetTargetAngles({4.0f, 0.0f, 0.0f}) == Status::kInvalidArgument);
   assert(gimbal.UpdateFeedback() == Status::kOk);
   assert(gimbal.Step(0.0f) == Status::kInvalidArgument);
   assert(gimbal.lifecycle() == Lifecycle::kFault && !yaw.pending && !pitch.pending);
@@ -102,4 +103,28 @@ int main() {
   duplicate.axes[1] = duplicate.axes[0];
   assert(invalid_config.Register(duplicate) == Status::kInvalidConfiguration);
   assert(x.registered == 0);
+
+  FakeActuator yaw3, pit1, pit2;
+  auto triple_config = MakeConfig(yaw3, pit1);
+  triple_config.kinematics.model = mr::robotics::gimbal::Model::kYawPitchPitch;
+  triple_config.kinematics.yaw_pitch_pitch.min_pitch1_rad = 0.0f;
+  triple_config.kinematics.yaw_pitch_pitch.max_pitch1_rad = 1.5707963f;
+  triple_config.kinematics.yaw_pitch_pitch.min_pitch2_rad = 0.0f;
+  triple_config.kinematics.yaw_pitch_pitch.max_pitch2_rad = 1.5707963f;
+  triple_config.axes = {&yaw3, &pit1, &pit2};
+  triple_config.gains[2] = {12.0f, 0.6f};
+  Gimbal triple;
+  assert(triple.Register(triple_config) == Status::kOk && triple.axis_count() == 3);
+  assert(yaw3.registered == 1 && pit1.registered == 1 && pit2.registered == 1);
+  assert(triple.UpdateFeedback() == Status::kOk && triple.Enable() == Status::kOk);
+  assert(triple.SetTargetDirection({1.0f, 0.0f, 1.0f}, 0.78539816f) == Status::kOk);
+  assert(Near(triple.command()[1], 0.78539816f));
+  assert(Near(triple.command()[2], 0.0f));
+  assert(triple.Step(0.002f) == Status::kOk && triple.CommitOutput() == Status::kOk);
+  assert(pit2.writes == 1 && Near(pit2.kp, 12.0f));
+
+  auto wrong_axis_count = triple_config;
+  wrong_axis_count.axes[2] = nullptr;
+  Gimbal invalid_triple;
+  assert(invalid_triple.Register(wrong_axis_count) == Status::kInvalidConfiguration);
 }
