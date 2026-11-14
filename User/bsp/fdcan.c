@@ -434,12 +434,16 @@ static void BSP_FDCAN_DrainRx(BSP_FDCAN_t fdcan, uint32_t fifo) {
     uint8_t data[BSP_FDCAN_MAX_DLC];
     if (HAL_FDCAN_GetRxMessage(handle, fifo, &header, data) != HAL_OK) break;
     ++handled;
+    ++g_bsp_fdcan_rx_debug.rx_frame_count[fdcan];
     const uint32_t original_id = header.Identifier &
         (header.IdType == FDCAN_STANDARD_ID ? 0x7ffu : 0x1fffffffu);
     const BSP_FDCAN_FrameType_t type = BSP_FDCAN_GetFrameType(&header);
     const uint32_t parsed = BSP_FDCAN_ParseId(original_id, type);
     BSP_FDCAN_QueueNode_t* node = BSP_FDCAN_FindNode(fdcan, parsed);
-    if (!node) continue;
+    if (!node) {
+      ++g_bsp_fdcan_rx_debug.rx_unmatched_frame_count[fdcan];
+      continue;
+    }
     BSP_FDCAN_Message_t msg = {0};
     msg.frame_type = type;
     msg.original_id = original_id;

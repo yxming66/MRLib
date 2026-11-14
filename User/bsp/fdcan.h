@@ -124,6 +124,8 @@ typedef struct {
   volatile uint32_t fifo1_last_us;
   volatile uint32_t fifo0_max_us;
   volatile uint32_t fifo1_max_us;
+  volatile uint32_t rx_frame_count[BSP_FDCAN_NUM];
+  volatile uint32_t rx_unmatched_frame_count[BSP_FDCAN_NUM];
   volatile uint32_t last_rx_sequence[BSP_FDCAN_NUM];
   volatile uint32_t last_rx_id[BSP_FDCAN_NUM];
   volatile uint32_t last_rx_timestamp_ms[BSP_FDCAN_NUM];
