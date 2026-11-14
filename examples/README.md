@@ -1,7 +1,7 @@
 # 使用示例
 
 - [项目接入文件](project_template/README.md)：可复制的 app、板级时基及 FDCAN/UART/GPIO/SPI/PWM 登记文件。
-- [云台周期任务](project_template/app/gimbal_task.md)：yaw-pit-pit 折叠云台的 `GimbalTask`、IMU/编码器职责划分和项目接入示例。
+- [云台周期任务](project_template/app/gimbal_task.md)：基础 yaw-pit 云台的 `GimbalTask`、IMU/编码器职责划分和项目接入示例。
 - `mrlink/`：MRLink 通信示例。
 - `music/`：音乐相关示例。
 

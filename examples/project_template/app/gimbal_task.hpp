@@ -1,6 +1,5 @@
 #pragma once
 
-#include <array>
 #include <cstdint>
 
 #include "module/gimbal/gimbal.hpp"
@@ -11,9 +10,8 @@
 namespace app {
 
 struct GimbalCommand {
-  bool folded = false;
   float target_world_yaw_rad = 0.0f;
-  float target_pitch2_rad = 0.0f;
+  float target_pitch_rad = 0.0f;
   uint32_t timestamp_ms = 0;
   bool valid = false;
 };
@@ -24,27 +22,17 @@ struct GimbalImuYaw {
   bool valid = false;
 };
 
-enum class GimbalTaskMode : uint8_t {
-  kUnknown,
-  kNormal,
-  kAligningForFold,
-  kFolding,
-  kFolded,
-  kUnfolding,
-  kFault,
-};
+enum class GimbalTaskMode : uint8_t { kUninitialized, kTracking, kFault };
 
 struct GimbalTaskStatus {
-  GimbalTaskMode mode = GimbalTaskMode::kUnknown;
+  GimbalTaskMode mode = GimbalTaskMode::kUninitialized;
   mr::robotics::gimbal::JointAngles encoder_angles{};
   float imu_base_yaw_rad = 0.0f;
   uint32_t heartbeat = 0;
-  bool imu_used_for_heading = false;
   bool valid = false;
 };
 
-// Project-owned adapters connect these callbacks to message queues, the IMU
-// task, and board time. read_command returns the latest snapshot each cycle.
+// Project-owned callbacks adapt command/IMU channels and the board clock.
 struct GimbalTaskIo {
   void* context = nullptr;
   uint32_t (*now_ms)(void*) = nullptr;
@@ -58,16 +46,11 @@ struct GimbalTaskConfig {
   uint32_t period_us = 2000;
   uint32_t command_timeout_ms = 100;
   uint32_t imu_timeout_ms = 20;
-  float folded_angle_rad = 0.0f;
-  float normal_pit1_angle_rad = 1.57079632679f;
   float yaw_zero_offset_rad = 0.0f;
-  float fold_rate_rad_s = 0.5f;
-  float normal_pit2_rate_rad_s = 0.8f;
-  float endpoint_tolerance_rad = 0.02f;
+  float pitch_rate_rad_s = 0.8f;
 };
 
-// Static-storage periodic app example. Build one instance in the board app and
-// call Start from Task_Init after the board endpoints and queues are ready.
+// Static-storage yaw-pit task. Start it from Task_Init after board IO is ready.
 class GimbalTask final {
  public:
   static constexpr uint32_t kStackBytes = 4096;
@@ -86,9 +69,6 @@ class GimbalTask final {
  private:
   bool ReadInputs(uint32_t now_ms);
   bool Publish();
-  void BeginFold();
-  void BeginUnfold();
-  bool Within(float lhs, float rhs) const;
 
   mr::module::gimbal::Gimbal* gimbal_ = nullptr;
   GimbalTaskIo io_{};
@@ -99,10 +79,7 @@ class GimbalTask final {
   GimbalCommand command_{};
   GimbalImuYaw imu_{};
   GimbalTaskStatus status_{};
-  GimbalTaskMode mode_ = GimbalTaskMode::kUnknown;
-  float transition_pit1_rad_ = 0.0f;
-  float align_pit2_rad_ = 0.0f;
-  float normal_pit2_rad_ = 0.0f;
+  float pitch_target_rad_ = 0.0f;
   bool started_ = false;
 };
 

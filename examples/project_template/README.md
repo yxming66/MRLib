@@ -16,6 +16,7 @@
 | app/robot_config.hpp | 几何、ID、周期、超时、方向等参数 | 按实际机器人填写；示例值不是通用默认值 |
 | app/chassis_assembly.hpp | 静态创建电机、轮组和底盘对象 | 电机型号、轮数、控制配置 |
 | app/chassis_task.cpp/.hpp | 通过 PeriodicTask 创建静态线程，提供 Init/Step/Fault | 任务周期、优先级和业务 |
+| app/gimbal_task.cpp/.hpp | yaw-pit 双轴云台周期任务示例 | yaw/pitch 电机、IMU/命令/状态适配 |
 | app/app_messages.hpp | 本板任务通信数据结构 | 命令和反馈内容 |
 | app/app_channels.cpp/.hpp | 静态单槽队列 | 增加消息通道，命令单消费者，状态可多读者 |
 | app/app_init.cpp/.h | 初始化线程入口与创建业务任务 | 本板要启动的任务 |
@@ -128,3 +129,7 @@ PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使
 ## PeriodicTask 底盘任务
 
 chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个无捕获 lambda 回调交给 PeriodicTask。Task_Init 仍先建立通道并启动 CAN，再创建周期线程。PeriodicTask 执行一次 Init，然后每周期 Step，使用 osDelayUntil 等待。周期超时、初始化/业务失败或等待失败时执行 Fault 后退出线程，不再采用旧示例的超时后继续运行策略。当前仍只读反馈，无电机发送；接入闭环前须在 Fault 实现明确的停止输出策略。
+
+## Yaw-pit 云台任务
+
+`app/gimbal_task.cpp` 是基础双轴 yaw-pit 示例，不含折叠等机构特有流程。复制到需要云台的板级 app 后，在本板 `Task_Init` 中创建静态 Gimbal/GimbalTask，配置两个执行器并实现 `GimbalTaskIo` 回调；该板 CMake 再加入 `app/gimbal_task.cpp`，并链接 `mr::module_gimbal` 和对应关节/电机目标。IMU 世界 yaw 用于底盘旋转补偿，pitch 目标使用速率限制。折叠等额外需求由具体项目 app 自行实现。
