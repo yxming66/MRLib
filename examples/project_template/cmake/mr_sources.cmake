@@ -8,6 +8,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     app/app_init.cpp
     app/app_channels.cpp
     app/chassis_task.cpp
+    # 启用 DR16 时同时取消下面两行，并在 Task_Init 中启动 RemoteControlTask。
+    # app/remote_control_task.cpp
+    # "${MR_LIBRARY_ROOT}/User/device/dr16.c"
 )
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 add_library(board_adapter OBJECT

@@ -4,6 +4,20 @@
 
 namespace app {
 // 本板内存消息，不能直接 memcpy 成 CAN/UART 报文；板间协议需要独立编解码。
+enum class RemoteSwitch : uint8_t { kUnknown, kUp, kMiddle, kDown };
+struct RemoteInput {
+  float left_x = 0.0f;
+  float left_y = 0.0f;
+  float right_x = 0.0f;
+  float right_y = 0.0f;
+  float channel5 = 0.0f;
+  RemoteSwitch left_switch = RemoteSwitch::kUnknown;
+  RemoteSwitch right_switch = RemoteSwitch::kUnknown;
+  uint32_t updated_ms = 0;
+  uint32_t sequence = 0;
+  bool online = false;
+};
+
 struct ChassisCommand {
   float vx_mps = 0;
   float vy_mps = 0;

@@ -5,6 +5,10 @@ namespace app {
 // Task_Init 创建一次；其他接口只在已启动的任务中调用，不供 ISR 使用。
 bool InitChannels();
 
+// 遥控器任务发布最新快照；业务任务读取但不移除，需自行检查 online/updated_ms。
+bool PublishRemoteInput(const RemoteInput& input);
+bool ReadRemoteInput(RemoteInput& input);
+
 // 单接收者（底盘任务），长度 1，最新有效指令覆盖旧值。
 // 发布者应在收到/产生真正的新指令时调用，不能反复刷新旧指令时间。
 bool PublishChassisCommand(const ChassisCommand& command);

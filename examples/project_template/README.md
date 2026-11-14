@@ -17,8 +17,9 @@
 | app/chassis_assembly.hpp | 静态创建电机、轮组和底盘对象 | 电机型号、轮数、控制配置 |
 | app/chassis_task.cpp/.hpp | 通过 PeriodicTask 创建静态线程，提供 Init/Step/Fault | 任务周期、优先级和业务 |
 | app/gimbal_task.cpp/.hpp | yaw-pit 双轴云台周期任务示例 | yaw/pitch 电机、IMU/命令/状态适配 |
+| app/remote_control_task.cpp/.hpp | DR16 接收任务及通用遥控快照 | UART/DMA、遥控端点、任务启动和输入映射 |
 | app/app_messages.hpp | 本板任务通信数据结构 | 命令和反馈内容 |
-| app/app_channels.cpp/.hpp | 静态单槽队列 | 增加消息通道，命令单消费者，状态可多读者 |
+| app/app_channels.cpp/.hpp | 静态单槽队列及遥控输入快照 | 增加消息通道，命令单消费者，状态/遥控快照可多读者 |
 | app/app_init.cpp/.h | 初始化线程入口与创建业务任务 | 本板要启动的任务 |
 | cmake/mr_sources.cmake | 显式源码和库 target 清单 | 相对库路径、选用的外设和功能 |
 
@@ -68,6 +69,8 @@ if (!Board_RegisterFdcanEndpoints()) Error_Handler();
 // if (!Board_RegisterPwmEndpoints()) Error_Handler();
 ```
 
+使用 DR16 时还要在此处登记 UART 端点，并在 Cube 初始化完成后安装已验证的 DMA 内存/Cache 策略；具体接入步骤见 [DR16 遥控器任务](app/remote_control_task.md)。
+
 在现有 HAL_TIM_PeriodElapsedCallback 的 USER CODE Callback 0 加入：
 
 ```c
@@ -113,6 +116,10 @@ SPI：本例只登记 SPI2，支持 8 位主机、双线、无 CRC。一个总�
 PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使用相同频率，本例全部禁止独立改频，避免影响其他通道；专用定时器才可在登记表允许 SetFreq。
 
 每次调用都检查 BSP_OK/错误返回值。UART/SPI 要同时编译 User/bsp/dma.c，即使先只用中断模式。H7 使用 DMA 前还必须由 board 安装 BSP_DMA_Configure 的校验/缓存同步钩子；没有钩子会拒绝 DMA。钩子须确认 DMA 可访问内存（不能直接使用 DTCM）、对齐和 D-cache 一致性，见 User/bsp/dma.h 的契约。本例未提供通用 DMA 内存策略，首次接入可先使用中断模式。
+
+## DR16 遥控器任务
+
+DR16 驱动等待 UART/DMA 完成事件，不能放进 1～2 ms 的 `PeriodicTask`。需要遥控器的板子按 [遥控器任务说明](app/remote_control_task.md) 选择性加入 `remote_control_task.cpp`、`User/device/dr16.c`、BSP UART/DMA 源码，并在 `Task_Init` 启动接收线程。接收任务发布通用 `RemoteInput` 快照；底盘、云台等业务任务自行检查在线和数据年龄，再映射成自己的命令。其他遥控器驱动可以复用同一消息结构，不需要修改底盘/云台任务的接口。
 
 ## 当前底盘示例的范围
 
