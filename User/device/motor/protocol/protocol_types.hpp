@@ -16,6 +16,19 @@ enum class DmModule : uint8_t {
 enum class LzModule : uint8_t { Rso0, Rso1, Rso2, Rso3, Rso4, Rso5, Rso6 };
 enum class LzControlMode : uint8_t { Motion = 1, Current = 2, Velocity = 3, Position = 4 };
 
+// DM feedback D[0]: low nibble is motor ID, high nibble is ERR status.
+enum class DmErrorStatus : uint8_t {
+    Disabled = 0x0,
+    Enabled = 0x1,
+    OverVoltage = 0x8,
+    UnderVoltage = 0x9,
+    OverCurrent = 0xA,
+    MosOverTemperature = 0xB,
+    RotorOverTemperature = 0xC,
+    CommunicationLost = 0xD,
+    Overload = 0xE
+};
+
 struct RmFeedback {
     uint16_t angle = 0U;
     int16_t speed = 0;

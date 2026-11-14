@@ -84,7 +84,7 @@ FeedbackRead MotorProtocol<MotorKind::DM, M>::Decode(DmFeedback& f) {
   f.position = Read16(x.data + 1);
   f.velocity = static_cast<uint16_t>((x.data[3] << 4) | (x.data[4] >> 4));
   f.torque = static_cast<uint16_t>(((x.data[4] & 15U) << 8) | x.data[5]);
-  f.status = x.data[0] >> 4;
+  f.status = (x.data[0] & 0xF0U) >> 4U;
   f.mos_temperature = x.data[6];
   f.rotor_temperature = x.data[7];
   return FeedbackRead::kNew;
@@ -108,7 +108,8 @@ void MotorProtocol<MotorKind::DM, M>::RefreshState(const DmFeedback& f) {
   state_.online = true;
   state_.protocol_status_code = f.status;
   state_.protocol_fault = (f.status >= 8U && f.status <= 14U) ? (1UL << (f.status - 8U)) : 0U;
-  enable_confirmed_by_feedback_ = f.status == 1U;
+  enable_confirmed_by_feedback_ =
+      f.status == static_cast<uint8_t>(DmErrorStatus::Enabled);
   state_.protocol_state = state_.protocol_fault ? MotorProtocolState::Fault
                                                 : (enable_confirmed_by_feedback_
                                                        ? MotorProtocolState::Enabled
