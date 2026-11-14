@@ -53,6 +53,7 @@ class MotorProtocol<MotorKind::DM, Model> {
   DmFeedback feedback_{};
   uint32_t last_sequence_ = 0U;
   uint32_t last_feedback_tick_ = 0U;
+  bool enable_confirmed_by_feedback_ = false;
   bool have_feedback_ = false;
   bool registered_ = false;
   PendingCommandType pending_ = PendingCommandType::None;

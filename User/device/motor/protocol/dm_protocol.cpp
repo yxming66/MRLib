@@ -108,9 +108,11 @@ void MotorProtocol<MotorKind::DM, M>::RefreshState(const DmFeedback& f) {
   state_.online = true;
   state_.protocol_status_code = f.status;
   state_.protocol_fault = (f.status >= 8U && f.status <= 14U) ? (1UL << (f.status - 8U)) : 0U;
+  enable_confirmed_by_feedback_ = f.status == 1U;
   state_.protocol_state = state_.protocol_fault ? MotorProtocolState::Fault
-                                                : (f.status == 1U ? MotorProtocolState::Enabled
-                                                                  : MotorProtocolState::Disabled);
+                                                : (enable_confirmed_by_feedback_
+                                                       ? MotorProtocolState::Enabled
+                                                       : MotorProtocolState::Disabled);
 }
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Update() {
@@ -133,6 +135,8 @@ int8_t MotorProtocol<MotorKind::DM, M>::Send(const CanFrame& f) const {
 }
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Enable() {
+  if (state_.feedback_valid && enable_confirmed_by_feedback_)
+    return DEVICE_OK;
   CanFrame frame{};
   frame.id = config_.can_id;
   frame.dlc = 8U;
@@ -140,16 +144,14 @@ int8_t MotorProtocol<MotorKind::DM, M>::Enable() {
     byte = 0xffU;
   }
   frame.data[7] = 0xfcU;
-  const int8_t result = Send(frame);
-  if (result == DEVICE_OK) {
-    state_.protocol_state = MotorProtocolState::Enabled;
-  }
-  return result;
+  return Send(frame);
 }
 
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Disable() {
   ClearPendingCommand();
+  enable_confirmed_by_feedback_ = false;
+  MarkFeedbackUnavailable(state_);
   CanFrame frame{};
   frame.id = config_.can_id;
   frame.dlc = 8U;
@@ -157,20 +159,12 @@ int8_t MotorProtocol<MotorKind::DM, M>::Disable() {
     byte = 0xffU;
   }
   frame.data[7] = 0xfdU;
-  const int8_t result = Send(frame);
-  if (result == DEVICE_OK) {
-    state_.protocol_state = MotorProtocolState::Disabled;
-  }
-  return result;
+  return Send(frame);
 }
 
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Relax() {
-  const int8_t result = Disable();
-  if (result == DEVICE_OK) {
-    state_.protocol_state = MotorProtocolState::Relaxed;
-  }
-  return result;
+  return Disable();
 }
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::SetZero() {
