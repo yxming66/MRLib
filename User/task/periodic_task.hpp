@@ -19,6 +19,7 @@ struct PeriodicTaskConfig {
   uint32_t period_us;
   uint32_t stack_bytes;  // CMSIS uses bytes, not FreeRTOS StackType_t words.
   osPriority_t priority;
+  bool retry_on_fault = false;
 };
 
 class PeriodicTask final {
@@ -46,6 +47,7 @@ class PeriodicTask final {
       return false;  // Reject sub-tick and rounded periods.
     period_ticks_ = static_cast<uint32_t>(scaled / 1000000u);
     dt_s_ = static_cast<float>(config.period_us) / 1000000.0f;
+    retry_on_fault_ = config.retry_on_fault;
     hooks_ = hooks;
     osThreadAttr_t attr{};
     attr.name = config.name;
@@ -64,19 +66,53 @@ class PeriodicTask final {
  private:
   static void Entry(void* context) { static_cast<PeriodicTask*>(context)->Run(); }
   [[noreturn]] void Fail(TaskFault reason) {
-    hooks_.fault(hooks_.context, reason);  // App relaxes outputs and latches fault.
+    hooks_.fault(hooks_.context, reason);  // Non-retrying tasks report, then exit.
     osThreadExit();  // No automatic restart or replay of missed control cycles.
     for (;;) (void)osDelay(1u);  // Defensive fallback if a nonconforming port returns.
   }
+  void WaitBeforeRetry() {
+    const uint32_t retry_tick = osKernelGetTickCount() + period_ticks_;
+    if (osDelayUntil(retry_tick) != osOK) {
+      hooks_.fault(hooks_.context, TaskFault::kDelayFailed);
+      (void)osDelay(1u);
+    }
+  }
   void Run() {
-    if (!hooks_.init(hooks_.context)) Fail(TaskFault::kInitFailed);
     uint32_t next = osKernelGetTickCount();
+    bool initialized = false;
     for (;;) {
+      if (!initialized) {
+        if (!hooks_.init(hooks_.context)) {
+          if (!retry_on_fault_) Fail(TaskFault::kInitFailed);
+          hooks_.fault(hooks_.context, TaskFault::kInitFailed);
+          WaitBeforeRetry();
+          continue;
+        }
+        initialized = true;
+        next = osKernelGetTickCount();
+      }
       next += period_ticks_;
-      if (!hooks_.step(hooks_.context, dt_s_)) Fail(TaskFault::kStepFailed);
+      if (!hooks_.step(hooks_.context, dt_s_)) {
+        if (!retry_on_fault_) Fail(TaskFault::kStepFailed);
+        hooks_.fault(hooks_.context, TaskFault::kStepFailed);
+        WaitBeforeRetry();
+        next = osKernelGetTickCount();
+        continue;
+      }
       const uint32_t remaining = next - osKernelGetTickCount();
-      if (!remaining || remaining >= 0x80000000u) Fail(TaskFault::kDeadlineMissed);
-      if (osDelayUntil(next) != osOK) Fail(TaskFault::kDelayFailed);
+      if (!remaining || remaining >= 0x80000000u) {
+        if (!retry_on_fault_) Fail(TaskFault::kDeadlineMissed);
+        hooks_.fault(hooks_.context, TaskFault::kDeadlineMissed);
+        WaitBeforeRetry();
+        next = osKernelGetTickCount();
+        continue;
+      }
+      if (osDelayUntil(next) != osOK) {
+        if (!retry_on_fault_) Fail(TaskFault::kDelayFailed);
+        hooks_.fault(hooks_.context, TaskFault::kDelayFailed);
+        (void)osDelay(1u);
+        next = osKernelGetTickCount();
+      }
     }
   }
   TaskHooks hooks_{};
@@ -84,5 +120,6 @@ class PeriodicTask final {
   uint32_t period_ticks_ = 0;
   float dt_s_ = 0;
   bool created_ = false;
+  bool retry_on_fault_ = false;
 };
 }  // namespace mr::task

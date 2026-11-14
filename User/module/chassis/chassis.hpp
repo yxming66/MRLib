@@ -79,6 +79,11 @@ class Chassis final {
   ChassisStatus Register(
       const ChassisConfig& config,
       const std::array<mr::wheel::WheelDevice*, kWheelCount>& wheels) {
+    if (state_ == ChassisState::kFault ||
+        (state_ == ChassisState::kRegistered && registered_wheels_ < kWheelCount)) {
+      ResetControlState();
+      state_ = ChassisState::kUnregistered;
+    }
     if (state_ != ChassisState::kUnregistered) {
       return ChassisStatus::kInvalidState;
     }
@@ -294,6 +299,7 @@ class Chassis final {
   }
 
   ChassisState state() const { return state_; }
+  bool registration_complete() const { return registered_wheels_ == kWheelCount; }
   mr::robotics::chassis::ChassisModel model() const {
     return kinematics_.model();
   }
