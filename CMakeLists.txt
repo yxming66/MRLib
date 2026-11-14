@@ -75,6 +75,13 @@ if(MRLIB_BUILD_HOST_TESTS)
     target_link_libraries(mr_gimbal_module_host_tests PRIVATE mr_module_gimbal)
     target_compile_options(mr_gimbal_module_host_tests PRIVATE
         -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+
+    add_executable(mr_stair_assist_module_host_tests
+        tests/module/stair_assist_module_host_tests.cpp)
+    target_link_libraries(mr_stair_assist_module_host_tests PRIVATE mr_module_stair_assist)
+    target_compile_options(mr_stair_assist_module_host_tests PRIVATE
+        -Wall -Wextra -Wpedantic -pedantic-errors -fno-exceptions -fno-rtti -UNDEBUG)
+    add_test(NAME mr_stair_assist_module_host_tests COMMAND mr_stair_assist_module_host_tests)
     add_test(NAME mr_gimbal_module_host_tests COMMAND mr_gimbal_module_host_tests)
 
     add_executable(mr_execution_host_tests tests/device/execution_host_tests.cpp)
