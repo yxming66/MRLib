@@ -44,7 +44,11 @@ static osThreadId_t thread_alert;
 static bool inited = false;
 static BSP_UART_t s_uart = BSP_UART_ERR;
 _Static_assert(sizeof(DR16_RawData_t) <= 32u, "DR16 frame exceeds DMA staging buffer");
+#if defined(__GNUC__)
+__attribute__((section(".dma_buffer"), aligned(32))) static uint8_t rx_buf[32];
+#else
 _Alignas(32) static uint8_t rx_buf[32];
+#endif
 static volatile uint16_t rx_size = 0;
 static volatile bool rx_error = false;
 
