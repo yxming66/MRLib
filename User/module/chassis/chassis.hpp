@@ -46,6 +46,9 @@ struct ChassisConfig {
   float wheel_acceleration_limit_mps2 = 0.0f;
   WheelPositionHoldConfig wheel_position_hold{};
   uint32_t feedback_timeout_ms = 20U;
+  // Keep control running through a missing wheel sample using its last valid speed.
+  // Wheels without any valid sample are treated as stationary until one arrives.
+  bool continue_on_wheel_feedback_loss = false;
 };
 
 struct ChassisFeedback {
@@ -165,11 +168,22 @@ class Chassis final {
               wheel_feedback.position_rad) ||
           !mr::component::math::is_finite_scalar(
               wheel_feedback.output_torque_nm)) {
+        if (config_.continue_on_wheel_feedback_loss) {
+          wheel_feedback = has_valid_wheel_feedback_[index]
+              ? last_valid_wheel_feedback_[index] : mr::wheel::WheelFeedback{};
+          wheel_feedback.online = false;
+          if (!has_valid_wheel_feedback_[index])
+            wheel_feedback.timestamp_ms = now_ms;
+          wheel_speeds[index] = wheel_feedback.linear_velocity_mps;
+          continue;
+        }
         feedback_ = {};
         feedback_updated_ = false;
         EnterFault();
         return ChassisStatus::kInvalidFeedback;
       }
+      last_valid_wheel_feedback_[index] = wheel_feedback;
+      has_valid_wheel_feedback_[index] = true;
       wheel_speeds[index] = wheel_feedback.linear_velocity_mps;
     }
 
@@ -392,6 +406,8 @@ class Chassis final {
   ChassisConfig config_{};
   mr::robotics::chassis::ChassisKinematics kinematics_{};
   std::array<mr::wheel::WheelDevice*, kWheelCount> wheels_{};
+  std::array<mr::wheel::WheelFeedback, kWheelCount> last_valid_wheel_feedback_{};
+  std::array<bool, kWheelCount> has_valid_wheel_feedback_{};
   std::array<mr::comp::cntlr::pid, kWheelCount> wheel_velocity_pid_{};
   WheelSpeedPlanner<kWheelCount> wheel_speed_planner_{};
   WheelPositionHold<kWheelCount> wheel_position_hold_{};

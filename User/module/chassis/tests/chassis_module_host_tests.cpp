@@ -218,6 +218,43 @@ void TestFeedbackTimestampWraparound() {
          "unsigned elapsed-time comparison should handle clock wraparound");
 }
 
+void TestContinueWhenOneWheelFeedbackIsLost() {
+  std::array<FakeWheel, Chassis::kWheelCount> storage{};
+  std::array<WheelDevice*, Chassis::kWheelCount> devices{};
+  for (std::size_t index = 0; index < devices.size(); ++index)
+    devices[index] = &storage[index];
+
+  Chassis chassis;
+  auto config = MakeConfig(ChassisModel::kMecanum);
+  config.continue_on_wheel_feedback_loss = true;
+  Expect(chassis.Register(config, devices) == ChassisStatus::kOk,
+         "partial-feedback configuration should register");
+  Expect(chassis.Enable() == ChassisStatus::kOk,
+         "partial-feedback chassis should enable");
+  Expect(chassis.UpdateFeedback() == ChassisStatus::kOk,
+         "initial wheel samples should be accepted");
+  Expect(chassis.SetCommand({0.5f, 0.2f, 0.1f}) == ChassisStatus::kOk,
+         "initial chassis command should be accepted");
+  Expect(chassis.Step(0.002f) == ChassisStatus::kOk &&
+             chassis.CommitOutput() == ChassisStatus::kOk,
+         "initial wheel output should commit");
+
+  storage[1].feedback_ok = false;
+  Expect(chassis.UpdateFeedback() == ChassisStatus::kOk,
+         "one missing wheel sample should not fault configured partial mode");
+  Expect(!chassis.feedback().wheels[1].online,
+         "the missing wheel should remain visible as offline");
+  Expect(chassis.SetCommand({0.5f, 0.2f, 0.1f}) == ChassisStatus::kOk &&
+             chassis.Step(0.002f) == ChassisStatus::kOk,
+         "chassis control should continue using the last valid wheel speed");
+  Expect(chassis.output().valid,
+         "partial feedback should still produce wheel commands");
+  Expect(chassis.CommitOutput() == ChassisStatus::kOk,
+         "partial-feedback wheel commands should commit");
+  Expect(chassis.state() == ChassisState::kEnabled,
+         "one missing wheel sample should leave the chassis enabled");
+}
+
 void TestInvalidFeedbackTimeoutRejected() {
   std::array<FakeWheel, Chassis::kWheelCount> storage{};
   std::array<WheelDevice*, Chassis::kWheelCount> devices{};
@@ -322,6 +359,7 @@ int main() {
   TestInvalidPidRejectedBeforeDeviceRegistration();
   TestFeedbackTimestampFreshness();
   TestFeedbackTimestampWraparound();
+  TestContinueWhenOneWheelFeedbackIsLost();
   TestInvalidFeedbackTimeoutRejected();
   TestWheelSpeedPlanner();
   TestWheelPositionHoldStrategy();

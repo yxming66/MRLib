@@ -20,6 +20,8 @@ UpdateFeedback -> SetCommand -> Step(dt_s) -> CommitOutput
 
 `MotorWheel<Drive>` 绑定项目持有的电机和轮半径，不限定电机型号，也不额外创建速度 PID。底盘模块负责轮速闭环，轮子负责反馈单位换算和转矩暂存；RM 输出仍需共享总线统一 Flush。
 
+默认情况下任一轮反馈无效都会让底盘模块进入故障并 Relax 全部轮子。若应用显式设置 `ChassisConfig::continue_on_wheel_feedback_loss`，模块会用该轮最后一次有效速度继续闭环；从未收到有效反馈时将速度视为零。此选项用于允许单轮掉线时继续观察其他轮子的响应，单轮在线状态仍通过 `ChassisFeedback::wheels[i].online` 报告。
+
 ## 可选控制策略
 
 `ChassisConfig` 中的 `wheel_acceleration_limit_mps2` 和
