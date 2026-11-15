@@ -136,7 +136,7 @@ int8_t MotorProtocol<MotorKind::DM, M>::Send(const CanFrame& f) const {
 }
 template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Enable() {
-  if (state_.feedback_valid && enable_confirmed_by_feedback_)
+  if (enable_confirmed_by_feedback_)
     return DEVICE_OK;
   CanFrame frame{};
   frame.id = config_.can_id;
@@ -152,6 +152,7 @@ template <MotorModel M>
 int8_t MotorProtocol<MotorKind::DM, M>::Disable() {
   ClearPendingCommand();
   enable_confirmed_by_feedback_ = false;
+  state_.protocol_state = MotorProtocolState::Disabled;
   MarkFeedbackUnavailable(state_);
   CanFrame frame{};
   frame.id = config_.can_id;
