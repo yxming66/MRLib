@@ -49,6 +49,16 @@ int main() {
   assert(bus.Flush()==0);
   for(auto byte:port.sent[port.sent.size()-2].data) assert(byte==0);
   assert(first.SetTorque(std::numeric_limits<float>::quiet_NaN())!=0);
+  bus.BeginCycle();
+  assert(first.SetTorque(2.0f)==0 && first.CommitCommand()==0);
+  assert(other.SetTorque(3.0f)==0 && other.CommitCommand()==0);
+  assert(bus.EmergencyStop(RmCommandGroup::k200)==0);
+  assert(port.sent.back().id==0x200);
+  for(auto byte:port.sent.back().data) assert(byte==0);
+  const auto sent_after_chassis_stop=port.sent.size();
+  assert(bus.Flush()==0 && port.sent.size()==sent_after_chassis_stop+1);
+  assert(port.sent.back().id==0x1ff);
+  assert(port.sent.back().data[0]!=0 || port.sent.back().data[1]!=0);
   assert(bus.EmergencyStop()==0);
   // Feedback age, duplicate sample and uint32 wrap.
   port.now=UINT32_MAX-5; port.Push(Feedback(7000,port.now,1));

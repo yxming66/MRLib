@@ -78,41 +78,67 @@ class RmCommandBus final {
     int8_t result = DEVICE_OK;
     for (size_t group = 0; group < 3; ++group) {
       if (sent_[group]) continue;
-      bool used = false;
-      CanFrame frame{};
-      frame.id = GroupId(group);
-      frame.dlc = 8;
-      for (size_t i = 0; i < 4; ++i) {
-        const auto& slot = slots_[group * 4 + i];
-        used = used || slot.owner;
-        frame.data[2 * i] = slot.raw >> 8;
-        frame.data[2 * i + 1] = slot.raw;
-      }
-      if (!used) {
-        sent_[group] = true;
-        continue;
-      }
-      const auto next = transport_.SendStandard(frame);
+      const auto next = FlushGroup(group);
       if (result == DEVICE_OK) result = next;
-      sent_[group] = next == DEVICE_OK;
-      for (size_t i = 0; i < 4; ++i) {
-        auto& slot = slots_[group * 4 + i];
-        if (!slot.state) continue;
-        slot.state->last_commit_ok = next == DEVICE_OK;
-        slot.state->command_pending = next != DEVICE_OK;
-        if (next == DEVICE_OK && slot.relax)
-          slot.state->protocol_state = MotorProtocolState::Relaxed;
-      }
     }
     if (result == DEVICE_OK) open_ = false;
     return result;
   }
+
+  // Clears and sends one command group without disturbing other staged groups.
+  // Call after BeginCycle; Flush can then send the remaining groups.
+  int8_t EmergencyStop(RmCommandGroup group) {
+    if (!open_) return DEVICE_ERR;
+    const size_t index = static_cast<size_t>(group);
+    if (index >= 3U) return DEVICE_ERR;
+    for (size_t i = 0; i < 4U; ++i) {
+      auto& slot = slots_[index * 4U + i];
+      slot.raw = 0U;
+      slot.staged = false;
+      slot.relax = true;
+      if (slot.state) {
+        slot.state->command_pending = true;
+        slot.state->last_commit_ok = false;
+      }
+    }
+    sent_[index] = false;
+    return FlushGroup(index);
+  }
+
   int8_t EmergencyStop() {
     BeginCycle();
     return Flush();
   }
 
  private:
+  int8_t FlushGroup(size_t group) {
+    bool used = false;
+    CanFrame frame{};
+    frame.id = GroupId(group);
+    frame.dlc = 8;
+    for (size_t i = 0; i < 4U; ++i) {
+      const auto& slot = slots_[group * 4U + i];
+      used = used || slot.owner;
+      frame.data[2U * i] = slot.raw >> 8U;
+      frame.data[2U * i + 1U] = slot.raw;
+    }
+    if (!used) {
+      sent_[group] = true;
+      return DEVICE_OK;
+    }
+    const int8_t result = transport_.SendStandard(frame);
+    sent_[group] = result == DEVICE_OK;
+    for (size_t i = 0; i < 4U; ++i) {
+      auto& slot = slots_[group * 4U + i];
+      if (!slot.state) continue;
+      slot.state->last_commit_ok = result == DEVICE_OK;
+      slot.state->command_pending = result != DEVICE_OK;
+      if (result == DEVICE_OK && slot.relax)
+        slot.state->protocol_state = MotorProtocolState::Relaxed;
+    }
+    return result;
+  }
+
   static uint32_t GroupId(size_t group) {
     return group == 0 ? 0x200 : (group == 1 ? 0x1ff : 0x2ff);
   }

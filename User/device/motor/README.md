@@ -27,7 +27,7 @@ const auto result = rm_bus.Flush(); // 即使上层计算失败也必须走此�
 
 每个使用的组每周期只发送一次，未提交/已取消槽位为零，不保持上周期的非零输出。Flush 失败只保留失败组，重复 Flush 重试；成功组不会重发。新 BeginCycle 放弃旧失败组的命令，重新以全零准备下一周期。Flush 后不允许追加命令，必须开始新周期。
 
-`Relax/Disable` 对 RM 同样是准备零电流，项目必须 Flush 才真正提交。`HasPendingCommand/last_commit_ok` 直到 Flush 返回后才反映发送结果；模块 CommitOutput 成功只表示组帧接受。紧急时调用 `rm_bus.EmergencyStop()` 对已注册的所有组提交全零，并检查失败重试。析构仅移除软件槽位，不访问硬件；停止调度/销毁设备前必须显式停止并发送。
+`Relax/Disable` 对 RM 同样是准备零电流，项目必须 Flush 才真正提交。`HasPendingCommand/last_commit_ok` 直到 Flush 返回后才反映发送结果；模块 CommitOutput 成功只表示组帧接受。`EmergencyStop()` 对所有已注册组提交全零；`EmergencyStop(group)` 只清零指定组并立即发送，不影响同周期暂存的其他组，随后仍需调用 `Flush()` 发送其他组。析构仅移除软件槽位，不访问硬件；停止调度/销毁设备前必须显式停止并发送。
 
 RM 多圈软件设零使用累计角，方向统一使用 `config.reverse`，旧 `install.reverse_output` 已删除；外部传动比必须有限且大于零。
 
