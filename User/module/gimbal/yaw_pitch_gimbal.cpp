@@ -23,9 +23,11 @@ Status YawPitchGimbal::SetMode(Mode mode) {
 
 Status YawPitchGimbal::SetTarget(const Target& target) {
   if (lifecycle() != Lifecycle::kEnabled) return Status::kInvalidState;
-  if (!joints_.IsWithinLimits({target.yaw_rad, target.pitch_rad}))
+  const std::array<float, 2> angles{target.yaw_rad, target.pitch_rad};
+  if (!joints_.AreFinite(angles))
     return Status::kInvalidArgument;
-  target_ = target;
+  const auto bounded = joints_.ClampAngles(angles);
+  target_ = {bounded[0], bounded[1]};
   return Status::kOk;
 }
 

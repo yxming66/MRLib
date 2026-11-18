@@ -2,6 +2,7 @@
 
 #include "device/device.h"
 #include "module/gimbal/types.hpp"
+#include <algorithm>
 
 namespace mr::module::gimbal::detail {
 
@@ -40,12 +41,11 @@ class JointGroup final {
     if (lifecycle_ != Lifecycle::kReady) return Status::kInvalidState;
     const Status result = ReadFeedback();
     if (result != Status::kOk) return result;
-    if (!IsWithinLimits(feedback_.angles)) return Status::kInvalidFeedback;
     for (auto* axis : config_.axes) {
       const int8_t next = axis->Enable();
       if (next != DEVICE_OK) return Fault(Status::kDeviceError, next);
     }
-    command_ = feedback_.angles;
+    command_ = ClampAngles(feedback_.angles);
     lifecycle_ = Lifecycle::kEnabled;
     return Status::kOk;
   }
@@ -71,6 +71,17 @@ class JointGroup final {
     return true;
   }
 
+  bool AreFinite(const Angles& angles) const {
+    for (float angle : angles) if (!Finite(angle)) return false;
+    return true;
+  }
+
+  Angles ClampAngles(Angles angles) const {
+    for (std::size_t i = 0; i < AxisCount; ++i)
+      angles[i] = std::clamp(angles[i], config_.limits[i].min_rad, config_.limits[i].max_rad);
+    return angles;
+  }
+
   Status BeginUpdate(float dt_s) {
     if (lifecycle_ != Lifecycle::kEnabled) return Status::kInvalidState;
     if (!Finite(dt_s) || dt_s < 1.0e-6f || dt_s > 0.1f)
@@ -80,17 +91,19 @@ class JointGroup final {
 
   Status WriteOutput(const Angles& target) {
     if (lifecycle_ != Lifecycle::kEnabled || !feedback_.valid) return Status::kInvalidState;
-    if (!IsWithinLimits(target)) return Fault(Status::kInvalidArgument, DEVICE_ERR);
+    if (!AreFinite(target)) return Fault(Status::kInvalidArgument, DEVICE_ERR);
+    // Software limits constrain commands; crossing a limit does not relax motors.
+    const auto bounded = ClampAngles(target);
     for (std::size_t i = 0; i < AxisCount; ++i) {
       const auto& gains = config_.gains[i];
-      const int8_t result = config_.axes[i]->SetMIT(target[i], 0.0f, gains.kp, gains.kd, 0.0f);
+      const int8_t result = config_.axes[i]->SetMIT(bounded[i], 0.0f, gains.kp, gains.kd, 0.0f);
       if (result != DEVICE_OK) return Fault(Status::kDeviceError, result);
     }
     for (auto* axis : config_.axes) {
       const int8_t result = axis->CommitControl();
       if (result != DEVICE_OK) return Fault(Status::kDeviceError, result);
     }
-    command_ = target;
+    command_ = bounded;
     feedback_.valid = false;
     return Status::kOk;
   }
@@ -100,6 +113,9 @@ class JointGroup final {
   const Angles& command() const { return command_; }
   int8_t last_device_error() const { return last_device_error_; }
   int8_t last_relax_error() const { return last_relax_error_; }
+
+  // A concrete mechanism can reject a transition or a geometric constraint.
+  Status StopOnError(Status status) { return Fault(status, DEVICE_ERR); }
 
  private:
   static bool Finite(float value) { return component::math::is_finite_scalar(value); }
