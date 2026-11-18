@@ -150,7 +150,7 @@ struct MotorTraits<MotorKind::RM, MotorModel::M3508> : MotorTraitsBase<MotorKind
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasNativeZeroSet = true;
-    static constexpr float kMaxTorque = 4.5f;
+    static constexpr float kMaxTorque = 6.0f;
     static constexpr float kMaxVelocity = 49.11f;
     static constexpr float kRecommendedCurrent = 10.0f;
     static constexpr float kRatedCurrent = 10.0f;
@@ -161,7 +161,7 @@ struct MotorTraits<MotorKind::RM, MotorModel::M3508> : MotorTraitsBase<MotorKind
     static constexpr float kRatedVelocity = 49.11f;
     static constexpr float kNoLoadVelocity = 50.47f;
     static constexpr float kRatedTorque = 3.0f;
-    static constexpr float kPeakTorque = 4.5f;
+    static constexpr float kPeakTorque = 6.0f;
     static constexpr float kTorqueConstant = 0.015622389f;
     static constexpr uint16_t kEncoderCpr = 8192;
     static constexpr MotorCapability kCapabilities = MotorCapability::Current;

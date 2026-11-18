@@ -114,7 +114,7 @@ class StairAssist final {
     if (state_ != State::kEnabled || output_pending_) return Status::kInvalidState;
     const auto axes = Axes();
     AxisFeedback* values[] = {&feedback_.front_pivot, &feedback_.rear_support,
-                              &feedback_.left_track, &feedback_.right_track};
+                              &feedback_. left_track, &feedback_.right_track};
     for (size_t i = 0; i < axes.size(); ++i) {
       if (axes[i]->UpdateFeedback(*values[i]) != 0 || !values[i]->online ||
           uint32_t(now_ms - values[i]->timestamp_ms) > config_.feedback_timeout_ms ||

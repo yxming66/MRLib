@@ -85,4 +85,15 @@ int main() {
   assert(motor.Update()==0 && reversed.velocity_rad_s<0);
   reversed_bus.BeginCycle(); assert(motor.SetTorque(1)==0 && motor.CommitCommand()==0);
   assert(reversed_bus.Flush()==0 && (reversed_port.sent[0].data[0]&0x80));
+
+  // The 20 A protocol full scale maps to 6 N.m at the output shaft.
+  FakeCanPort max_port; RmCommandBus max_bus(max_port); MotorState max_state{};
+  Protocol max_motor(Config(max_port,max_bus,0x201),kDirectDriveInstall,max_state,RmModule::M3508);
+  assert(max_motor.Register()==0);
+  max_bus.BeginCycle();
+  assert(max_motor.SetTorque(6.0f)==0 && max_motor.CommitCommand()==0);
+  assert(max_bus.Flush()==0 && max_port.sent[0].data[0]==0x40 && max_port.sent[0].data[1]==0x00);
+  max_bus.BeginCycle();
+  assert(max_motor.SetTorque(-7.0f)==0 && max_motor.CommitCommand()==0);
+  assert(max_bus.Flush()==0 && max_port.sent[1].data[0]==0xC0 && max_port.sent[1].data[1]==0x00);
 }
