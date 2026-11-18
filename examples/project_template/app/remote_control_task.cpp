@@ -1,10 +1,16 @@
 #include "app/remote_control_task.hpp"
 
-#include "app/app_channels.hpp"
 #include "bsp/time.h"
 #include "device/device.h"
+#include "task.h"
 
 namespace app {
+
+// ==================== 1. 生命周期与线程启动 ====================
+RemoteControlTask& RemoteControlTask::Instance() {
+  static RemoteControlTask task;
+  return task;
+}
 
 bool RemoteControlTask::Start(BSP_UART_t uart) {
   if (started_ || uart == BSP_UART_ERR || !BSP_UART_GetHandle(uart) ||
@@ -22,6 +28,24 @@ bool RemoteControlTask::Start(BSP_UART_t uart) {
   return started_;
 }
 
+// ==================== 2. 最新快照：任务间短临界区复制 ====================
+// 只能在任务上下文调用；接收任务独占写入，多个读者不会消费掉快照。
+bool RemoteControlTask::ReadLatest(RemoteInput& input) const {
+  taskENTER_CRITICAL();
+  const bool available = have_latest_input_;
+  input = latest_input_;
+  taskEXIT_CRITICAL();
+  return available;
+}
+
+void RemoteControlTask::StoreLatest(const RemoteInput& input) {
+  taskENTER_CRITICAL();
+  latest_input_ = input;
+  have_latest_input_ = true;
+  taskEXIT_CRITICAL();
+}
+
+// ==================== 3. 阻塞接收与解析 ====================
 void RemoteControlTask::Entry(void* context) {
   static_cast<RemoteControlTask*>(context)->Run();
 }
@@ -43,7 +67,7 @@ void RemoteControlTask::Entry(void* context) {
           data.ch_l_x, data.ch_l_y, data.ch_r_x, data.ch_r_y, data.ch_res,
           ConvertSwitch(data.sw_l), ConvertSwitch(data.sw_r),
           BSP_TIME_Get_ms(), ++sequence_, true};
-      (void)PublishRemoteInput(input);
+      StoreLatest(input);
       continue;
     }
 
@@ -53,12 +77,13 @@ void RemoteControlTask::Entry(void* context) {
   }
 }
 
+// ==================== 4. 离线快照与驱动枚举适配 ====================
 void RemoteControlTask::PublishOffline() {
   RemoteInput input{};
   input.updated_ms = BSP_TIME_Get_ms();
   input.sequence = ++sequence_;
   input.online = false;
-  (void)PublishRemoteInput(input);
+  StoreLatest(input);
 }
 
 RemoteSwitch RemoteControlTask::ConvertSwitch(DR16_SwitchPos_t position) const {

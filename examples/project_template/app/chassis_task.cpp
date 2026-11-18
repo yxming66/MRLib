@@ -1,5 +1,8 @@
 #include "app/chassis_task.hpp"
-#include "app/app_channels.hpp"
+#include "app/cmd_center.hpp"
+#if APP_EXAMPLE_ENABLE_DR16
+#include "app/remote_control_task.hpp"
+#endif
 #include "app/app_init.h"
 #include "app/chassis_assembly.hpp"
 #include "app/robot_config.hpp"
@@ -11,10 +14,38 @@
 #include "task.h"
 
 namespace {
+// ==================== 1. 对外状态快照 ====================
+app::ChassisStatus latest_status{};
+bool have_status = false;
+
+void StoreStatus(const app::ChassisStatus& status) {
+  taskENTER_CRITICAL();
+  latest_status = status;
+  have_status = true;
+  taskEXIT_CRITICAL();
+}
+
+bool ReadRemote(void*, app::RemoteInput& input) {
+#if APP_EXAMPLE_ENABLE_DR16
+  return app::RemoteControlTask::Instance().ReadLatest(input);
+#else
+  input = {};
+  return false;  // 默认未接收遥控器，命令中心保持安全输出。
+#endif
+}
+
+// ==================== 2. 命令中心与底盘反馈的所有者任务 ====================
 // 业务只负责初始化、单周期处理和故障处理；PeriodicTask 负责循环与等待。
 class ChassisApplication final {
  public:
   bool Init() {
+    const app::CommandCenterBindings bindings{
+        nullptr, ReadRemote, nullptr, app::SelectChassisMode};
+    // read_nuc 暂不绑定；接入 NUC 后改为其线程安全快照读取回调。
+    if (!app::InitCommandCenter(bindings)) {
+      g_app.state = APP_CMD_CENTER_INIT_FAILED;
+      return false;
+    }
     g_app.chassis_registration_result = drive.RegisterFeedback();
     if (g_app.chassis_registration_result != DEVICE_OK) {
       g_app.state = APP_CHASSIS_FEEDBACK_REGISTER_FAILED;
@@ -28,19 +59,15 @@ class ChassisApplication final {
   bool Step(float dt_s) {
     // 当前仅采集反馈；接入控制器后使用此固定配置周期（秒）。
     (void)dt_s;
-    // 1. 收本板其他任务发布的最新指令，不阻塞。
-    app::ChassisCommand incoming;
-    if (app::TryReceiveChassisCommand(incoming)) {
-      latest_command = incoming;
-      have_command = true;
-    }
+    // 1. 读取输入快照、执行模式回调和仲裁，按值取得唯一最终命令。
     const uint32_t now_ms = BSP_TIME_Get_ms();
     const uint64_t now_us = BSP_TIME_Get_us();
-    status.command_received = have_command;
-    status.last_command_ms = latest_command.received_ms;
-    status.command_fresh = have_command &&
-        uint32_t(now_ms - latest_command.received_ms) <= app::params::kCommandTimeoutMs;
-    status.command_enabled = status.command_fresh && latest_command.enabled;
+    status.command = app::UpdateCommandCenter(now_ms);
+    status.command_center = app::GetCommandCenterStatus();
+    status.command_received = status.command_center.publish_ok;
+    status.last_command_ms = status.command.received_ms;
+    status.command_fresh = status.command.input_fresh;
+    status.command_enabled = status.command.enabled;
 
     // 2. 读四轮反馈；无反馈/超时只标记离线，继续观察后续恢复。
     status.online_mask = drive.PollFeedback();
@@ -61,7 +88,7 @@ class ChassisApplication final {
       out.temperature_c = state.temperature_c;
     }
 
-    // 3. 当前只完成任务/通道/反馈接入。
+    // 3. 当前只完成任务/命令映射/反馈接入。
     // 待方向、PID、速度/力矩限幅确认后，在这里接底盘控制周期。
     // 不调用 Enable/SetCommand/Step/CommitOutput/Flush；收到 enabled 也不会运动。
     status.control_enabled = false;
@@ -71,10 +98,7 @@ class ChassisApplication final {
     status.clock_advanced = now_us > previous_us;
     previous_us = now_us;
     ++status.heartbeat;
-    if (!app::PublishChassisStatus(status)) {
-      g_app.state = APP_CHASSIS_STATUS_PUBLISH_FAILED;
-      return false;
-    }
+    StoreStatus(status);
 
     return true;
   }
@@ -91,8 +115,10 @@ class ChassisApplication final {
     }
     // Init/Step 的具体错误状态已由业务填写。
     status.updated_ms = BSP_TIME_Get_ms();
-    if (!app::PublishChassisStatus(status))
-      g_app.state = APP_CHASSIS_STATUS_PUBLISH_FAILED;
+    status.command = {};
+    status.command_enabled = false;
+    status.command_fresh = false;
+    StoreStatus(status);
   }
 
  private:
@@ -100,16 +126,23 @@ class ChassisApplication final {
       BSP_CAN_FindEndpoint(board::bindings::kChassisCan), BSP_TIME_Get_ms};
   app::ChassisAssembly drive{port};
   app::ChassisStatus status{};
-  app::ChassisCommand latest_command{};
-  bool have_command = false;
   uint64_t previous_us = 0;
 };
 
 }  // namespace
 
 namespace app {
+// ==================== 3. 状态读取与静态线程创建 ====================
+bool ReadChassisStatus(ChassisStatus& status) {
+  taskENTER_CRITICAL();
+  const bool available = have_status;
+  status = latest_status;
+  taskEXIT_CRITICAL();
+  return available;
+}
+
 bool CreateChassisTask() {
-  // 仍由运行中的 Task_Init 调用，通道及 CAN 已准备好。
+  // 由运行中的 Task_Init 调用，CAN 已准备好。
   if (osKernelGetState() != osKernelRunning) return false;
   static ChassisApplication application;
   static mr::task::PeriodicTask task;

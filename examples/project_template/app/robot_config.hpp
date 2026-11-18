@@ -1,14 +1,31 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include "app/app_messages.hpp"
 #include "robotics/chassis/chassis_kinematics.hpp"
 
 // 本工程手写参数，不由生成器管理。长度统一使用米。
 namespace app::params {
 inline constexpr uint32_t kChassisPeriodMs = 1;
 inline constexpr uint32_t kMotorFeedbackTimeoutMs = 20;
-inline constexpr uint32_t kCommandTimeoutMs = 100;
 inline constexpr uint32_t kChassisStackBytes = 4096;
+
+// 命令中心示例参数；拨杆映射策略在 SelectChassisMode 回调中。
+inline constexpr uint32_t kRemoteTimeoutMs = 100;
+inline constexpr uint32_t kNucTimeoutMs = 100;
+inline constexpr float kRemoteDeadzone = 0.05f;
+inline constexpr float kRemoteMaxVxMps = 1.5f;
+inline constexpr float kRemoteMaxVyMps = 1.5f;
+inline constexpr float kRemoteMaxWzRadS = 4.0f;
+inline constexpr float kMaxChassisVxMps = 2.0f;
+inline constexpr float kMaxChassisVyMps = 2.0f;
+inline constexpr float kMaxChassisWzRadS = 6.0f;
+// 展示同一输入在不同手动模式下映射到不同字段；模板未装配台阶机构。
+inline constexpr float kStairTargetRateMaxRadS = 8.0f;
+inline constexpr float kTrackMaxSpeedRadS = 15.0f;
+inline constexpr RemoteSwitch kRemoteArmPosition = RemoteSwitch::kUp;
+inline constexpr RemoteSwitch kRemoteEnablePositionA = RemoteSwitch::kMiddle;
+inline constexpr RemoteSwitch kRemoteEnablePositionB = RemoteSwitch::kDown;
 
 // 固定顺序：右前、左前、左后、右后。
 inline constexpr std::array<uint16_t, 4> kWheelFeedbackIds{0x201, 0x202, 0x203, 0x204};
