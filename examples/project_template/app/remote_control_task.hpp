@@ -15,16 +15,19 @@ namespace app {
 class RemoteControlTask final {
  public:
   static constexpr uint32_t kStackBytes = 2048;
-  RemoteControlTask() = default;
+  static RemoteControlTask& Instance();
   RemoteControlTask(const RemoteControlTask&) = delete;
   RemoteControlTask& operator=(const RemoteControlTask&) = delete;
 
   bool Start(BSP_UART_t uart);
+  bool ReadLatest(RemoteInput& input) const;
 
  private:
+  RemoteControlTask() = default;
   static void Entry(void* context);
   [[noreturn]] void Run();
   void PublishOffline();
+  void StoreLatest(const RemoteInput& input);
   RemoteSwitch ConvertSwitch(DR16_SwitchPos_t position) const;
 
   BSP_UART_t uart_ = BSP_UART_ERR;
@@ -32,6 +35,8 @@ class RemoteControlTask final {
   StaticTask_t control_{};
   alignas(8) StackType_t stack_[kStackBytes / sizeof(StackType_t)]{};
   uint32_t sequence_ = 0;
+  RemoteInput latest_input_{};
+  bool have_latest_input_ = false;
   bool started_ = false;
 };
 

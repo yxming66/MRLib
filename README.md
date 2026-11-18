@@ -86,7 +86,7 @@ ctest --test-dir build/cmake-host --output-on-failure
 
 先准备可构建的 Cube 工程，引入完整库，在 CMake 链接所用 target；board 连接硬件，app 参数文件填写标定值，普通 C++ 创建并连接对象，任务显式调度。新增功能可以立即由 app 调用，不受自动配置工具支持范围限制。
 
-可阅读或复制[项目接入文件](examples/project_template/README.md)：底盘任务、静态通信、参数、板级时基以及 FDCAN/UART/GPIO/SPI/PWM 登记。
+可阅读或复制[项目接入文件](examples/project_template/README.md)：底盘任务、参数、板级时基及外设登记；[CmdCenter 示例](examples/project_template/app/cmd_center.md)演示独立 cpp 的 DR16/NUC 输入映射、模式回调、仲裁和安全输出，附可独立运行的主机测试。
 
 示例复制后归项目维护，不存在再次生成覆盖。板级前提和接入步骤见 [板级集成](docs/BOARD_INTEGRATION.md)。
 

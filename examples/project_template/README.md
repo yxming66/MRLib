@@ -17,9 +17,9 @@
 | app/chassis_assembly.hpp | 静态创建电机、轮组和底盘对象 | 电机型号、轮数、控制配置 |
 | app/chassis_task.cpp/.hpp | 通过 PeriodicTask 创建静态线程，提供 Init/Step/Fault | 任务周期、优先级和业务 |
 | app/gimbal_task.cpp/.hpp | yaw-pit 双轴云台周期任务示例 | yaw/pitch 电机、IMU/命令/状态适配 |
-| app/remote_control_task.cpp/.hpp | DR16 接收任务及通用遥控快照 | UART/DMA、遥控端点、任务启动和输入映射 |
+| app/remote_control_task.cpp/.hpp | DR16 阻塞接收及受保护的最新快照 | UART/DMA、遥控端点和任务启动 |
+| app/cmd_center.cpp/.hpp | 输入有效性、模式回调、多来源路由及仲裁 | 选源策略、命令映射、NUC 快照绑定和模块输出 |
 | app/app_messages.hpp | 本板任务通信数据结构 | 命令和反馈内容 |
-| app/app_channels.cpp/.hpp | 静态单槽队列及遥控输入快照 | 增加消息通道，命令单消费者，状态/遥控快照可多读者 |
 | app/app_init.cpp/.h | 初始化线程入口与创建业务任务 | 本板要启动的任务 |
 | cmake/mr_sources.cmake | 显式源码和库 target 清单 | 相对库路径、选用的外设和功能 |
 
@@ -87,7 +87,7 @@ Board_TimeOnUpdate(htim);
 if (!App_CreateInitTask()) Error_Handler();
 ```
 
-执行顺序：main 完成 HAL/时基/端点登记 → osKernelInitialize → MX_FREERTOS_Init 创建 Task_Init → osKernelStart → Task_Init 建消息通道 → BSP_FDCAN_Init 启动已登记 CAN → 创建 Task_Chassis → 初始化线程退出 → 底盘任务每 1 ms 读取反馈和命令、发布状态。
+执行顺序：main 完成 HAL/时基/端点登记 → osKernelInitialize → MX_FREERTOS_Init 创建 Task_Init → osKernelStart → BSP_FDCAN_Init → 可选启动 DR16 接收任务 → 创建 Task_Chassis → 初始化线程退出 → 底盘任务初始化 CmdCenter，每 1 ms 仲裁输入、读取反馈和保存状态快照。
 
 App_CreateInitTask 只调用一次；BSP_FDCAN_Init 必须等 RTOS 正在运行后调用。其他设备的回调和收发启动放在初始化线程或其所属任务中，启动后不要重新登记端点。
 
@@ -119,23 +119,33 @@ PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使
 
 ## DR16 遥控器任务
 
-DR16 驱动等待 UART/DMA 完成事件，不能放进 1～2 ms 的 `PeriodicTask`。需要遥控器的板子按 [遥控器任务说明](app/remote_control_task.md) 选择性加入 `remote_control_task.cpp`、`User/device/dr16.c`、BSP UART/DMA 源码，并在 `Task_Init` 启动接收线程。接收任务发布通用 `RemoteInput` 快照；底盘、云台等业务任务自行检查在线和数据年龄，再映射成自己的命令。其他遥控器驱动可以复用同一消息结构，不需要修改底盘/云台任务的接口。
+DR16 驱动等待 UART/DMA 完成事件，不能放进 1～2 ms 的 `PeriodicTask`。按 [遥控器任务说明](app/remote_control_task.md) 完成 UART、DMA 内存/Cache 接入后，配置 `-DMR_EXAMPLE_ENABLE_DR16=ON`，CMake 会添加接收源码并启动任务。默认 OFF 时无遥控输入，命令保持禁用。
+
+接收任务保存 `RemoteInput` 最新快照，CmdCenter 统一检查有效性、调用模式选择回调、生成候选并仲裁。右拨杆中档选遥控，下档选 NUC，上档/未知停止；左拨杆先上档布防，再中/下档使能。NUC 接收协议留给项目，通过 read_nuc 回调接入，未绑定/超时不会退回手动。逐块阅读和扩展方式见 [CmdCenter 示例](app/cmd_center.md)。
 
 ## 当前底盘示例的范围
 
 麦克纳姆、4 个 M3508、0x201～0x204 顺序为右前/左前/左后/右后；轮径 0.18 m、前后中心距 0.60 m、左右中心距 0.50 m，额外减速比 1。M3508 自带减速比已在库中处理。
 
-示例只采集反馈、处理命令通道和发布状态，control_enabled 保持 false，不发送电机控制帧。方向确认、PID/限幅、命令来源、故障处理和控制输出仍须由项目完成；不能复制后直接视为可行驶底盘。CAN 表基于当前 .ioc：Cube 初始化 FDCAN1/2/3（均参与 RAM 检查），库登记 FDCAN1 与 FDCAN3。换板或仅开一路时须同步精简句柄、检查和过滤器。
+示例完成命令映射/切源并采集反馈，control_enabled 保持 false，不发送电机控制帧。其他任务通过 `ReadChassisStatus` 读取同周期命令、命令中心诊断和反馈。方向确认、PID/执行器限幅、故障停机和控制输出仍须由项目完成。台阶字段仅演示多模式映射，没有对应机构装配。CAN 表基于当前 .ioc：Cube 初始化 FDCAN1/2/3（均参与 RAM 检查），库登记 FDCAN1 与 FDCAN3；换板须同步修改。
 
 新增模块时，增加该模块的装配/任务/消息和 CMake 依赖即可，不必新增模板生成器。维护者仅在公共接口变化时同步更新这些示例；复制出去的项目按自己的版本维护，不自动覆盖。
 
 ## 本次验证
 
-使用 engineering_hero 的 H723 HAL/FreeRTOS 头文件和 ARM GCC，对本例全部 9 个 C/C++ 实现及 UART/GPIO/SPI/PWM/DMA 共 5 个 BSP 实现进行了严格编译（-Wall -Wextra -Wpedantic -Werror），全部通过。现有底盘固件 Debug 编译与链接通过。未执行烧录或板上验证；可选外设的运行行为仍需在实际板上验收。
+CmdCenter 提供独立主机测试入口，直接编译本例 cmd_center.cpp：
+
+```sh
+cmake -S examples/project_template/tests -B build/cmd-center-example -G Ninja
+cmake --build build/cmd-center-example
+ctest --test-dir build/cmd-center-example --output-on-failure
+```
+
+2026-11-18：四组主机测试通过；使用 engineering_hero 的 H723 HAL/FreeRTOS 头文件和 ARM GCC 对 5 个 app C++、6 个 board C 实现进行严格语法编译检查（-Wall -Wextra -Wpedantic -Werror）。模板 CMake 在独立临时消费工程中以 DR16 OFF/ON 两种配置编译为静态库，验证源码清单和依赖。未执行完整固件链接、烧录或板上验证；复制到新板仍需完成这些验收。
 
 ## PeriodicTask 底盘任务
 
-chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个无捕获 lambda 回调交给 PeriodicTask。Task_Init 仍先建立通道并启动 CAN，再创建周期线程。PeriodicTask 执行一次 Init，然后每周期 Step，使用 osDelayUntil 等待。周期超时、初始化/业务失败或等待失败时执行 Fault 后退出线程，不再采用旧示例的超时后继续运行策略。当前仍只读反馈，无电机发送；接入闭环前须在 Fault 实现明确的停止输出策略。
+chassis_task.cpp 使用 ChassisApplication::Init/Step/Fault；CreateChassisTask 将对象和三个无捕获 lambda 交给 PeriodicTask。Init 注册反馈和 CmdCenter，Step 每周期更新命令和反馈，使用 osDelayUntil 等待。超时、初始化/业务失败或等待失败时执行 Fault 后退出线程。当前无电机发送；接入闭环前须在 Fault 实现停止输出策略。
 
 ## Yaw-pit 云台任务
 

@@ -1,6 +1,9 @@
 #include "app/app_init.h"
-#include "app/app_channels.hpp"
 #include "app/chassis_task.hpp"
+#if APP_EXAMPLE_ENABLE_DR16
+#include "app/remote_control_task.hpp"
+#include "board/bindings.hpp"
+#endif
 #include "bsp/fdcan.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -13,23 +16,26 @@ namespace {
 void Task_Init(void* argument) {
   (void)argument;
   g_app.state = APP_INITIALIZING;
-  if (!app::InitChannels()) {
-    g_app.state = APP_CHANNEL_INIT_FAILED;
-    osThreadExit();
-    return;
-  }
   g_app.can_init_result = BSP_FDCAN_Init();  // 调度器已运行；全板只调用这里一次。
   if (g_app.can_init_result != BSP_OK) {
     g_app.state = APP_CAN_INIT_FAILED;
     osThreadExit();
     return;
   }
+#if APP_EXAMPLE_ENABLE_DR16
+  if (!app::RemoteControlTask::Instance().Start(
+          BSP_UART_FindEndpoint(board::bindings::kRemoteUart))) {
+    g_app.state = APP_REMOTE_TASK_CREATE_FAILED;
+    osThreadExit();
+    return;
+  }
+#endif
   if (!app::CreateChassisTask()) {
     g_app.state = APP_CHASSIS_TASK_CREATE_FAILED;
     osThreadExit();
     return;
   }
-  // 将来通道和协议确定后，在这里创建本板通信任务。
+  // 接入 NUC 时在这里创建接收任务，并向 CmdCenter 绑定快照读取回调。
   // Task_Init 优先级高于底盘任务，下面的状态先写好，再退出。
   g_app.state = APP_TASKS_CREATED;
   osThreadExit();
