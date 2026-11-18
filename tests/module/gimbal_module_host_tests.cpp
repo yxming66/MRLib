@@ -1,13 +1,13 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 #include "module/gimbal/gimbal.hpp"
 
 namespace {
-bool Near(float lhs, float rhs, float tolerance = 1.0e-5f) {
-  return std::fabs(lhs - rhs) <= tolerance;
-}
+using namespace mr::module::gimbal;
+bool Near(float a, float b) { return std::fabs(a - b) < 1.0e-5f; }
 
 struct FakeActuator final : mr::IActuator {
   int8_t register_result = DEVICE_OK, enable_result = DEVICE_OK;
@@ -31,100 +31,162 @@ struct FakeActuator final : mr::IActuator {
   mr::ActuatorState GetState() const override { return state; }
 };
 
-mr::module::gimbal::GimbalConfig MakeConfig(FakeActuator& yaw, FakeActuator& pitch) {
-  mr::module::gimbal::GimbalConfig config;
-  config.axes = {&yaw, &pitch, nullptr};
+YawPitchGimbal::Config TwoConfig(FakeActuator& yaw, FakeActuator& pitch) {
+  YawPitchGimbal::Config config{};
+  config.axes = {&yaw, &pitch};
   config.gains = {{{20.0f, 1.0f}, {16.0f, 0.8f}}};
-  config.kinematics.yaw_pitch.min_yaw_rad = -3.14159265f;
-  config.kinematics.yaw_pitch.max_yaw_rad = 3.14159265f;
-  config.kinematics.yaw_pitch.min_pitch_rad = -0.5f;
-  config.kinematics.yaw_pitch.max_pitch_rad = 0.75f;
+  config.limits[1] = {-0.5f, 0.75f};
   return config;
+}
+
+YawPitchPitchGimbal::Config ThreeConfig(FakeActuator& yaw, FakeActuator& p1,
+                                       FakeActuator& p2) {
+  YawPitchPitchGimbal::Config config{};
+  config.axes = {&yaw, &p1, &p2};
+  config.gains = {{{20.0f, 1.0f}, {16.0f, 0.8f}, {12.0f, 0.6f}}};
+  config.limits[1] = {0.0f, 1.5707963f};
+  config.limits[2] = {-0.8f, 0.8f};
+  config.low_fire_pitch1_rad = 0.4f;
+  config.high_fire_pitch1_rad = 1.1f;
+  return config;
+}
+
+void TestTwoAxis() {
+  FakeActuator yaw, pitch;
+  yaw.state.position = 0.2f;
+  pitch.state.position = 0.3f;
+  YawPitchGimbal gimbal;
+  assert(gimbal.SetTarget({0, 0}) == Status::kInvalidState);
+  assert(gimbal.SetMode(YawPitchGimbal::Mode::kNormal) == Status::kInvalidState);
+  assert(gimbal.Update(0.002f) == Status::kInvalidState);
+  const auto config = TwoConfig(yaw, pitch);
+  assert(gimbal.Register(config) == Status::kOk);
+  assert(gimbal.Register(config) == Status::kInvalidState);
+  assert(yaw.enabled == 0 && yaw.commits == 0);
+  assert(gimbal.Enable() == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(yaw.target, 0.2f) && Near(pitch.target, 0.3f));
+  assert(gimbal.SetTarget({1.0f, 0.5f}) == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(yaw.target, 1.0f) && Near(pitch.target, 0.5f));
+  assert(Near(yaw.kp, 20.0f) && Near(pitch.kd, 0.8f));
+  assert(yaw.commits == 2 && pitch.commits == 2 && !yaw.pending && !pitch.pending);
+  assert(gimbal.SetTarget({4.0f, 0.0f}) == Status::kInvalidArgument);
+  assert(gimbal.SetTarget({0.0f, std::numeric_limits<float>::quiet_NaN()}) ==
+         Status::kInvalidArgument);
+  assert(gimbal.SetMode(static_cast<YawPitchGimbal::Mode>(99)) == Status::kInvalidArgument);
+  assert(Near(gimbal.target().yaw_rad, 1.0f));
+  assert(gimbal.Disable() == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kInvalidState);
+  assert(yaw.relaxed > 0 && pitch.relaxed > 0);
+  assert(gimbal.Enable() == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(yaw.target, yaw.state.position));  // Re-enable captures measured hold target.
+  assert(gimbal.Update(0.0f) == Status::kInvalidArgument);
+  assert(gimbal.lifecycle() == Lifecycle::kFault);
+}
+
+void TestThreeAxisModes() {
+  FakeActuator yaw, p1, p2;
+  YawPitchPitchGimbal gimbal;
+  const auto config = ThreeConfig(yaw, p1, p2);
+  assert(gimbal.Register(config) == Status::kOk);
+  assert(gimbal.Enable() == Status::kOk);
+  assert(gimbal.SetTarget({0.3f, 0.7f, -0.2f}) == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(yaw.target, 0.3f) && Near(p1.target, 0.7f) && Near(p2.target, -0.2f));
+  assert(gimbal.SetMode(YawPitchPitchGimbal::Mode::kLowFire) == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(p1.target, config.low_fire_pitch1_rad));
+  assert(Near(yaw.target, 0.3f) && Near(p2.target, -0.2f));
+  assert(Near(gimbal.target().pitch1_rad, 0.7f));  // Requested and applied angles differ.
+  assert(gimbal.SetMode(YawPitchPitchGimbal::Mode::kHighFire) == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(p1.target, config.high_fire_pitch1_rad));
+  assert(gimbal.SetMode(YawPitchPitchGimbal::Mode::kNormal) == Status::kOk);
+  assert(gimbal.Update(0.002f) == Status::kOk);
+  assert(Near(p1.target, 0.7f));
+  assert(Near(gimbal.command()[1], 0.7f) && Near(p2.kp, 12.0f));
+  assert(yaw.commits == 4 && p1.commits == 4 && p2.commits == 4);
+  assert(gimbal.SetTarget({0, 0, -0.9f}) == Status::kInvalidArgument);
+  assert(gimbal.SetMode(static_cast<YawPitchPitchGimbal::Mode>(99)) == Status::kInvalidArgument);
+  assert(gimbal.mode() == YawPitchPitchGimbal::Mode::kNormal);
+}
+
+void TestConfiguration() {
+  FakeActuator yaw, pitch, p2;
+  YawPitchGimbal gimbal;
+  auto config = TwoConfig(yaw, pitch);
+  config.axes[1] = &yaw;
+  assert(gimbal.Register(config) == Status::kInvalidConfiguration);
+  assert(yaw.registered == 0);
+  config = TwoConfig(yaw, pitch);
+  config.limits[1] = {1, 0};
+  assert(gimbal.Register(config) == Status::kInvalidConfiguration);
+  config.limits[1] = {0, std::numeric_limits<float>::infinity()};
+  assert(gimbal.Register(config) == Status::kInvalidConfiguration);
+  config.axes[1] = nullptr;
+  assert(gimbal.Register(config) == Status::kInvalidConfiguration);
+
+  YawPitchPitchGimbal triple;
+  auto three = ThreeConfig(yaw, pitch, p2);
+  three.high_fire_pitch1_rad = 2.0f;
+  assert(triple.Register(three) == Status::kInvalidConfiguration);
+  three.high_fire_pitch1_rad = std::numeric_limits<float>::quiet_NaN();
+  assert(triple.Register(three) == Status::kInvalidConfiguration);
+  assert(yaw.registered == 0);
+}
+
+void TestFaults() {
+  FakeActuator a, b;
+  b.register_result = -7;
+  YawPitchGimbal partial;
+  assert(partial.Register(TwoConfig(a, b)) == Status::kDeviceError);
+  assert(a.relaxed == 1 && b.relaxed == 1);
+  assert(partial.Disable() == Status::kInvalidState);
+  assert(partial.Enable() == Status::kInvalidState);
+
+  FakeActuator p0, p1, p2;
+  p0.register_result = -8;
+  YawPitchPitchGimbal incomplete;
+  assert(incomplete.Register(ThreeConfig(p0, p1, p2)) == Status::kDeviceError);
+  assert(incomplete.Disable() == Status::kInvalidState);
+  assert(incomplete.Enable() == Status::kInvalidState);
+  assert(incomplete.lifecycle() == Lifecycle::kFault && p1.enabled == 0);
+
+  FakeActuator c, d;
+  YawPitchGimbal offline;
+  assert(offline.Register(TwoConfig(c, d)) == Status::kOk);
+  d.state.online = false;
+  assert(offline.Enable() == Status::kInvalidFeedback);
+  assert(c.enabled == 0 && offline.lifecycle() == Lifecycle::kFault);
+
+  FakeActuator x, y;
+  YawPitchGimbal output;
+  assert(output.Register(TwoConfig(x, y)) == Status::kOk);
+  assert(output.Enable() == Status::kOk);
+  y.set_result = -9;
+  assert(output.Update(0.002f) == Status::kDeviceError);
+  assert(output.lifecycle() == Lifecycle::kFault && !x.pending && !y.pending);
+  assert(x.commits == 0 && y.commits == 0);
+  assert(output.last_device_error() == -9 && output.last_relax_error() == DEVICE_OK);
+
+  FakeActuator u, v;
+  YawPitchGimbal commit;
+  assert(commit.Register(TwoConfig(u, v)) == Status::kOk);
+  assert(commit.Enable() == Status::kOk);
+  v.commit_result = -10;
+  assert(commit.Update(0.002f) == Status::kDeviceError);
+  assert(commit.lifecycle() == Lifecycle::kFault && !u.pending && !v.pending);
+  assert(u.relaxed > 0 && v.relaxed > 0 && commit.last_device_error() == -10);
 }
 }
 
 int main() {
-  using mr::module::gimbal::Gimbal;
-  using mr::module::gimbal::Lifecycle;
-  using mr::module::gimbal::Status;
-
-  FakeActuator yaw, pitch;
-  Gimbal gimbal;
-  auto config = MakeConfig(yaw, pitch);
-  assert(gimbal.SetTargetAngles({0, 0}) == Status::kInvalidState);
-  assert(gimbal.Register(config) == Status::kOk);
-  assert(yaw.registered == 1 && pitch.registered == 1 && yaw.enabled == 0);
-  assert(gimbal.Enable() == Status::kInvalidFeedback);
-  assert(gimbal.UpdateFeedback() == Status::kOk);
-  assert(gimbal.Enable() == Status::kOk && gimbal.lifecycle() == Lifecycle::kEnabled);
-  assert(gimbal.axis_count() == 2);
-  assert(Near(gimbal.command()[0], 0) && Near(gimbal.command()[1], 0));
-  assert(gimbal.SetTargetDirection({0, 1, 0.5f}) == Status::kOk);
-  assert(Near(gimbal.command()[0], 1.5707963f));
-  assert(Near(gimbal.command()[1], 0.4636476f));
-  assert(gimbal.Step(0.002f) == Status::kOk);
-  assert(yaw.writes == 1 && pitch.writes == 1 && yaw.pending && pitch.pending);
-  assert(Near(yaw.target, gimbal.command()[0]) && Near(yaw.kp, 20) && Near(pitch.kd, 0.8f));
-  assert(gimbal.UpdateFeedback() == Status::kInvalidState); // Do not discard staged output.
-  assert(gimbal.CommitOutput() == Status::kOk && yaw.commits == 1 && pitch.commits == 1);
-  assert(gimbal.CommitOutput() == Status::kInvalidState);
-  assert(gimbal.SetTargetDirection({0, 0, 1}) == Status::kKinematicsError);
-  assert(gimbal.SetTargetAngles({4.0f, 0.0f, 0.0f}) == Status::kInvalidArgument);
-  assert(gimbal.UpdateFeedback() == Status::kOk);
-  assert(gimbal.Step(0.0f) == Status::kInvalidArgument);
-  assert(gimbal.lifecycle() == Lifecycle::kFault && !yaw.pending && !pitch.pending);
-  assert(yaw.relaxed > 0 && pitch.relaxed > 0);
-
-  FakeActuator a, b;
-  b.register_result = -7;
-  Gimbal failed_registration;
-  assert(failed_registration.Register(MakeConfig(a, b)) == Status::kDeviceError);
-  assert(failed_registration.lifecycle() == Lifecycle::kFault && a.relaxed == 1);
-
-  FakeActuator c, d;
-  Gimbal bad_feedback;
-  assert(bad_feedback.Register(MakeConfig(c, d)) == Status::kOk);
-  d.state.online = false;
-  assert(bad_feedback.UpdateFeedback() == Status::kInvalidFeedback);
-  assert(bad_feedback.lifecycle() == Lifecycle::kFault);
-
-  FakeActuator e, f;
-  Gimbal failed_output;
-  assert(failed_output.Register(MakeConfig(e, f)) == Status::kOk);
-  assert(failed_output.UpdateFeedback() == Status::kOk && failed_output.Enable() == Status::kOk);
-  f.set_result = -9;
-  assert(failed_output.Step(0.002f) == Status::kDeviceError);
-  assert(failed_output.lifecycle() == Lifecycle::kFault && !e.pending && !f.pending);
-  assert(failed_output.last_device_error() == -9 && failed_output.last_relax_error() == DEVICE_OK);
-
-  FakeActuator x, z;
-  Gimbal invalid_config;
-  auto duplicate = MakeConfig(x, z);
-  duplicate.axes[1] = duplicate.axes[0];
-  assert(invalid_config.Register(duplicate) == Status::kInvalidConfiguration);
-  assert(x.registered == 0);
-
-  FakeActuator yaw3, pit1, pit2;
-  auto triple_config = MakeConfig(yaw3, pit1);
-  triple_config.kinematics.model = mr::robotics::gimbal::Model::kYawPitchPitch;
-  triple_config.kinematics.yaw_pitch_pitch.min_pitch1_rad = 0.0f;
-  triple_config.kinematics.yaw_pitch_pitch.max_pitch1_rad = 1.5707963f;
-  triple_config.kinematics.yaw_pitch_pitch.min_pitch2_rad = 0.0f;
-  triple_config.kinematics.yaw_pitch_pitch.max_pitch2_rad = 1.5707963f;
-  triple_config.axes = {&yaw3, &pit1, &pit2};
-  triple_config.gains[2] = {12.0f, 0.6f};
-  Gimbal triple;
-  assert(triple.Register(triple_config) == Status::kOk && triple.axis_count() == 3);
-  assert(yaw3.registered == 1 && pit1.registered == 1 && pit2.registered == 1);
-  assert(triple.UpdateFeedback() == Status::kOk && triple.Enable() == Status::kOk);
-  assert(triple.SetTargetDirection({1.0f, 0.0f, 1.0f}, 0.78539816f) == Status::kOk);
-  assert(Near(triple.command()[1], 0.78539816f));
-  assert(Near(triple.command()[2], 0.0f));
-  assert(triple.Step(0.002f) == Status::kOk && triple.CommitOutput() == Status::kOk);
-  assert(pit2.writes == 1 && Near(pit2.kp, 12.0f));
-
-  auto wrong_axis_count = triple_config;
-  wrong_axis_count.axes[2] = nullptr;
-  Gimbal invalid_triple;
-  assert(invalid_triple.Register(wrong_axis_count) == Status::kInvalidConfiguration);
+  static_assert(!std::is_copy_constructible_v<mr::module::gimbal::YawPitchGimbal>);
+  static_assert(!std::is_copy_constructible_v<mr::module::gimbal::YawPitchPitchGimbal>);
+  TestTwoAxis();
+  TestThreeAxisModes();
+  TestConfiguration();
+  TestFaults();
 }

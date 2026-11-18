@@ -42,10 +42,6 @@ add_library(mr::robotics_chassis ALIAS mr_robotics_chassis)
 target_include_directories(mr_robotics_chassis INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
 target_compile_features(mr_robotics_chassis INTERFACE cxx_std_17)
 
-add_library(mr_robotics_gimbal INTERFACE)
-add_library(mr::robotics_gimbal ALIAS mr_robotics_gimbal)
-target_include_directories(mr_robotics_gimbal INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
-target_compile_features(mr_robotics_gimbal INTERFACE cxx_std_17)
 
 add_library(mr_device_wheel_interface INTERFACE)
 add_library(mr::device_wheel_interface ALIAS mr_device_wheel_interface)
@@ -57,10 +53,13 @@ add_library(mr::module_chassis ALIAS mr_module_chassis)
 target_include_directories(mr_module_chassis INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
 target_compile_features(mr_module_chassis INTERFACE cxx_std_17)
 
-add_library(mr_module_gimbal INTERFACE)
+add_library(mr_module_gimbal STATIC EXCLUDE_FROM_ALL
+    "${CMAKE_CURRENT_LIST_DIR}/../User/module/gimbal/yaw_pitch_gimbal.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/../User/module/gimbal/yaw_pitch_pitch_gimbal.cpp"
+)
 add_library(mr::module_gimbal ALIAS mr_module_gimbal)
-target_include_directories(mr_module_gimbal INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
-target_compile_features(mr_module_gimbal INTERFACE cxx_std_17)
+target_include_directories(mr_module_gimbal PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../User")
+target_compile_features(mr_module_gimbal PUBLIC cxx_std_17)
 
 add_library(mr_module_stair_assist INTERFACE)
 add_library(mr::module_stair_assist ALIAS mr_module_stair_assist)
@@ -165,8 +164,8 @@ target_link_libraries(mr_module_chassis INTERFACE
     mr_device_wheel_interface
 )
 
-target_link_libraries(mr_module_gimbal INTERFACE
-    mr_robotics_gimbal
+target_link_libraries(mr_module_gimbal PUBLIC
+    mr_component_math
     mr_device_joint_interface
 )
 

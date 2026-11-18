@@ -26,7 +26,7 @@ enum class GimbalTaskMode : uint8_t { kUninitialized, kTracking, kFault };
 
 struct GimbalTaskStatus {
   GimbalTaskMode mode = GimbalTaskMode::kUninitialized;
-  mr::robotics::gimbal::JointAngles encoder_angles{};
+  std::array<float, 2> encoder_angles{};
   float imu_base_yaw_rad = 0.0f;
   uint32_t heartbeat = 0;
   bool valid = false;
@@ -42,7 +42,7 @@ struct GimbalTaskIo {
 };
 
 struct GimbalTaskConfig {
-  mr::module::gimbal::Gimbal::Config module{};
+  mr::module::gimbal::YawPitchGimbal::Config module{};
   uint32_t period_us = 2000;
   uint32_t command_timeout_ms = 100;
   uint32_t imu_timeout_ms = 20;
@@ -58,7 +58,7 @@ class GimbalTask final {
   GimbalTask(const GimbalTask&) = delete;
   GimbalTask& operator=(const GimbalTask&) = delete;
 
-  bool Start(mr::module::gimbal::Gimbal& gimbal,
+  bool Start(mr::module::gimbal::YawPitchGimbal& gimbal,
              const GimbalTaskIo& io,
              const GimbalTaskConfig& config);
   bool Init();
@@ -70,7 +70,7 @@ class GimbalTask final {
   bool ReadInputs(uint32_t now_ms);
   bool Publish();
 
-  mr::module::gimbal::Gimbal* gimbal_ = nullptr;
+  mr::module::gimbal::YawPitchGimbal* gimbal_ = nullptr;
   GimbalTaskIo io_{};
   GimbalTaskConfig config_{};
   mr::task::PeriodicTask periodic_{};

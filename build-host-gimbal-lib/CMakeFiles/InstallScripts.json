@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/STM32Projects_HAL/general_infantry/libraries/MRLib/build-host-gimbal-lib/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

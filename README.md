@@ -80,7 +80,7 @@ ctest --test-dir build/cmake-host --output-on-failure
 
 库的分层、统一底盘接口和迁移边界见 [架构说明](docs/ARCHITECTURE.md) 与 [统一底盘模块](User/module/chassis/README.md)。
 
-双轴云台接口和 yaw/pitch 几何约定见 [云台模块](User/module/gimbal/README.md) 与 [云台运动学](User/robotics/gimbal/README.md)；目前没有云台板级 preset 或实机验收。
+两轴和三轴云台的关节角接口、限位配置见 [云台模块](User/module/gimbal/README.md)；目前没有云台板级 preset 或实机验收。
 
 ### 新建项目
 
