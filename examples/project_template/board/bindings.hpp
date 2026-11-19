@@ -7,5 +7,7 @@ inline constexpr const char* kRemoteUart = "uart5";
 inline constexpr const char* kImuSpi = "spi2";
 inline constexpr const char* kAccelCs = "accel_cs";
 inline constexpr const char* kGyroCs = "gyro_cs";
+inline constexpr const char* kAccelInt = "accel_int";
+inline constexpr const char* kGyroInt = "gyro_int";
 inline constexpr const char* kBuzzerPwm = "buzzer";
 }

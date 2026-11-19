@@ -1,5 +1,8 @@
 #include "app/app_init.h"
 #include "app/chassis_task.hpp"
+#if APP_EXAMPLE_ENABLE_IMU
+#include "app/imu_task.hpp"
+#endif
 #if APP_EXAMPLE_ENABLE_DR16
 #include "app/remote_control_task.hpp"
 #include "board/bindings.hpp"
@@ -26,6 +29,13 @@ void Task_Init(void* argument) {
   if (!app::RemoteControlTask::Instance().Start(
           BSP_UART_FindEndpoint(board::bindings::kRemoteUart))) {
     g_app.state = APP_REMOTE_TASK_CREATE_FAILED;
+    osThreadExit();
+    return;
+  }
+#endif
+#if APP_EXAMPLE_ENABLE_IMU
+  if (!app::CreateImuTask()) {
+    g_app.state = APP_IMU_TASK_CREATE_FAILED;
     osThreadExit();
     return;
   }

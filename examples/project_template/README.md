@@ -19,6 +19,7 @@
 | app/gimbal_task.cpp/.hpp | yaw-pit 双轴云台周期任务示例 | yaw/pitch 电机、IMU/命令/状态适配 |
 | app/remote_control_task.cpp/.hpp | DR16 阻塞接收及受保护的最新快照 | UART/DMA、遥控端点和任务启动 |
 | app/cmd_center.cpp/.hpp | 输入有效性、模式回调、多来源路由及仲裁 | 选源策略、命令映射、NUC 快照绑定和模块输出 |
+| app/imu_task.cpp/.hpp | 可选的 BMI088 六轴采样任务 | SPI/GPIO 端点、安装坐标、陀螺仪偏置，见 [IMU 接入](app/imu_task.md) |
 | app/app_messages.hpp | 本板任务通信数据结构 | 命令和反馈内容 |
 | app/app_init.cpp/.h | 初始化线程入口与创建业务任务 | 本板要启动的任务 |
 | cmake/mr_sources.cmake | 显式源码和库 target 清单 | 相对库路径、选用的外设和功能 |
@@ -87,7 +88,7 @@ Board_TimeOnUpdate(htim);
 if (!App_CreateInitTask()) Error_Handler();
 ```
 
-执行顺序：main 完成 HAL/时基/端点登记 → osKernelInitialize → MX_FREERTOS_Init 创建 Task_Init → osKernelStart → BSP_FDCAN_Init → 可选启动 DR16 接收任务 → 创建 Task_Chassis → 初始化线程退出 → 底盘任务初始化 CmdCenter，每 1 ms 仲裁输入、读取反馈和保存状态快照。
+执行顺序：main 完成 HAL/时基/端点登记 → osKernelInitialize → MX_FREERTOS_Init 创建 Task_Init → osKernelStart → BSP_FDCAN_Init → 可选启动 DR16 和 IMU 任务 → 创建 Task_Chassis → 初始化线程退出 → 底盘任务初始化 CmdCenter，每 1 ms 仲裁输入、读取反馈和保存状态快照。
 
 App_CreateInitTask 只调用一次；BSP_FDCAN_Init 必须等 RTOS 正在运行后调用。其他设备的回调和收发启动放在初始化线程或其所属任务中，启动后不要重新登记端点。
 
@@ -122,6 +123,10 @@ PWM：显式 SetComp/SetPulseUs 后才 Start。共享定时器的多个通道使
 DR16 驱动等待 UART/DMA 完成事件，不能放进 1～2 ms 的 `PeriodicTask`。按 [遥控器任务说明](app/remote_control_task.md) 完成 UART、DMA 内存/Cache 接入后，配置 `-DMR_EXAMPLE_ENABLE_DR16=ON`，CMake 会添加接收源码并启动任务。默认 OFF 时无遥控输入，命令保持禁用。
 
 接收任务保存 `RemoteInput` 最新快照，CmdCenter 统一检查有效性、调用模式选择回调、生成候选并仲裁。右拨杆中档选遥控，下档选 NUC，上档/未知停止；左拨杆先上档布防，再中/下档使能。NUC 接收协议留给项目，通过 read_nuc 回调接入，未绑定/超时不会退回手动。逐块阅读和扩展方式见 [CmdCenter 示例](app/cmd_center.md)。
+
+## 板载 IMU
+
+板载 BMI088 使用独立采集任务。配置 `-DMR_EXAMPLE_ENABLE_IMU=ON` 前，按 [IMU 接入说明](app/imu_task.md) 配置 SPI2、数据就绪中断和 DMA。
 
 ## 当前底盘示例的范围
 
