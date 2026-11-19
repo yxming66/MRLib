@@ -78,7 +78,12 @@ typedef enum {
 
 static uint8_t buffer[2];
 static uint8_t bmi088_rxbuf[BMI088_LEN_RX_BUFF];
+/* Give H7 linker scripts a DMA-accessible, cache-line-owned staging buffer. */
+#if defined(__GNUC__)
+__attribute__((section(".dma_buffer"), aligned(32))) static uint8_t bmi088_dma_rx[32];
+#else
 _Alignas(32) static uint8_t bmi088_dma_rx[32];
+#endif
 static uint8_t* dma_destination;
 static uint8_t dma_length;
 static volatile bool dma_busy;
@@ -223,6 +228,10 @@ int8_t BMI088_Init(BMI088_t *bmi088, const BMI088_Cali_t *cali,
   if (id != BMI088_CHIP_ID_ACCL) { result = DEVICE_ERR_NO_DEV; goto fail; }
   if (!BMI_ReadSingle(BMI_GYRO, BMI088_REG_GYRO_CHIP_ID, &id)) goto fail;
   if (id != BMI088_CHIP_ID_GYRO) { result = DEVICE_ERR_NO_DEV; goto fail; }
+
+  // Select active power mode before enabling the accelerometer.
+  if (!BMI_WriteSingle(BMI_ACCL, BMI088_REG_ACCL_PWR_CONF, 0x00) ||
+      BSP_TIME_Delay(5) != BSP_OK) goto fail;
 
   // Accelerometer: 400 Hz, +/-6 g; INT1 push-pull, active low.
   if (!BMI_WriteSingle(BMI_ACCL, BMI088_REG_ACCL_CONF, 0xAA) ||
