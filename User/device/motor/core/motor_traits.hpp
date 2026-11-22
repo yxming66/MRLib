@@ -150,6 +150,9 @@ struct MotorTraits<MotorKind::RM, MotorModel::M3508> : MotorTraitsBase<MotorKind
     static constexpr bool kSupportsTorque = true;
     static constexpr bool kIsMultiTurn = true;
     static constexpr bool kHasNativeZeroSet = true;
+    // Linear current model: 0.3 N.m/A at the output and a 20 A protocol
+    // full scale produce a 6 N.m software limit. C620's documented stall
+    // torque is 4.5 N.m, so this theoretical limit requires hardware validation.
     static constexpr float kMaxTorque = 6.0f;
     static constexpr float kMaxVelocity = 49.11f;
     static constexpr float kRecommendedCurrent = 10.0f;
