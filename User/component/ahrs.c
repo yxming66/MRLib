@@ -377,15 +377,15 @@ int8_t AHRS_GetEulr(AHRS_Eulr_t *eulr, const AHRS_t *ahrs) {
   const float cosr_cosp =
       1.0f - 2.0f * (ahrs->quat.q1 * ahrs->quat.q1 +
                      ahrs->quat.q2 * ahrs->quat.q2);
-  eulr->pit = atan2f(sinr_cosp, cosr_cosp);
+  eulr->rol = atan2f(sinr_cosp, cosr_cosp);
 
   const float sinp = 2.0f * (ahrs->quat.q0 * ahrs->quat.q2 -
                              ahrs->quat.q3 * ahrs->quat.q1);
 
   if (fabsf(sinp) >= 1.0f)
-    eulr->rol = copysignf(MR_MATH_PI / 2.0f, sinp);
+    eulr->pit = copysignf(MR_MATH_PI / 2.0f, sinp);
   else
-    eulr->rol = asinf(sinp);
+    eulr->pit = asinf(sinp);
 
   const float siny_cosp = 2.0f * (ahrs->quat.q0 * ahrs->quat.q3 +
                                   ahrs->quat.q1 * ahrs->quat.q2);
