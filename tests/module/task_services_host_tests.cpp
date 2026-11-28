@@ -30,11 +30,39 @@ static bool Calibration() {
 static MrImuSample Sample(uint32_t sequence, uint64_t timestamp, float gyro_z = 0) {
   return {{0, 0, 9.81f}, {0, 0, gyro_z}, timestamp, sequence, true};
 }
+static bool QuaternionEkfSelection() {
+  using namespace mr::module::attitude;
+  Estimator estimator;
+  Config config{};
+  CHECK(estimator.Configure(config) == Status::kInvalidConfig);
+  config.algorithm = Algorithm::kQuaternionEkf;
+  CHECK(estimator.Configure(config) == Status::kOk);
+  CHECK(!estimator.StartCalibration());
+  CHECK(estimator.Step(Sample(0, 0), 0, true) == Status::kOk);
+  CHECK(estimator.feedback().valid);
+  CHECK(Near(estimator.feedback().euler_rad.rol, 0));
+  CHECK(Near(estimator.feedback().euler_rad.pit, 0));
+  CHECK(Near(estimator.feedback().euler_rad.yaw, 0));
+  Estimator second;
+  CHECK(second.Configure(config) == Status::kOk);
+  CHECK(estimator.Step(Sample(1, 1000, 0.5f), 1000, false) == Status::kOk);
+  CHECK(second.Step(Sample(0, 0), 0, true) == Status::kOk);
+  CHECK(Near(second.feedback().euler_rad.yaw, 0));
+  Estimator rotating;
+  CHECK(rotating.Configure(config) == Status::kOk);
+  for (uint32_t i = 0; i <= 1000; ++i)
+    CHECK(rotating.Step(Sample(i, i * 1000, 1.0f), i * 1000, false) == Status::kOk);
+  CHECK(Near(rotating.feedback().euler_rad.yaw, 1.0f, 0.01f));
+  CHECK(Near(rotating.feedback().yaw_total_rad, 1.0f, 0.01f));
+  config.qekf.chi_square_threshold = -1.0f;
+  CHECK(estimator.Configure(config) == Status::kInvalidConfig);
+  return true;
+}
 static bool Attitude() {
   using namespace mr::module::attitude;
   Estimator estimator;
   CHECK(estimator.Step(Sample(0, 0), 0, true) == Status::kNotConfigured);
-  Config config{}; config.calibration_samples = 3; config.gyro_bias_rad_s = {0, 0, 0.1f};
+  Config config{}; config.algorithm = Algorithm::kMadgwick; config.calibration_samples = 3; config.gyro_bias_rad_s = {0, 0, 0.1f};
   CHECK(estimator.Configure(config) == Status::kOk);
   CHECK(estimator.Step(Sample(0, 0, 0.1f), 0, true) == Status::kOk);
   CHECK(estimator.feedback().valid && Near(estimator.feedback().euler_rad.yaw, 0));
@@ -99,6 +127,6 @@ static bool AlarmTiming() {
   return true;
 }
 int main() {
-  if (!Calibration() || !Attitude() || !AlarmTiming()) return 1;
+  if (!Calibration() || !QuaternionEkfSelection() || !Attitude() || !AlarmTiming()) return 1;
   std::puts("Task service tests passed (calibration, attitude freshness/dt, alarm timing)");
 }
