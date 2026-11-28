@@ -66,6 +66,11 @@ add_library(mr::module_stair_assist ALIAS mr_module_stair_assist)
 target_include_directories(mr_module_stair_assist INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
 target_compile_features(mr_module_stair_assist INTERFACE cxx_std_17)
 
+add_library(mr_module_shoot INTERFACE)
+add_library(mr::module_shoot ALIAS mr_module_shoot)
+target_include_directories(mr_module_shoot INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
+target_compile_features(mr_module_shoot INTERFACE cxx_std_17)
+
 add_library(mr_device_joint_interface INTERFACE)
 add_library(mr::device_joint_interface ALIAS mr_device_joint_interface)
 target_include_directories(mr_device_joint_interface INTERFACE "${CMAKE_CURRENT_LIST_DIR}/../User")
@@ -162,6 +167,11 @@ target_link_libraries(mr_module_chassis INTERFACE
     mr_robotics_chassis
     mr_component_controller
     mr_device_wheel_interface
+)
+
+target_link_libraries(mr_module_shoot INTERFACE
+    mr_device_motor
+    mr_component_math
 )
 
 target_link_libraries(mr_module_gimbal PUBLIC
